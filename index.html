@@ -200,9 +200,15 @@
   .newunit{ background:var(--surface); border:1px solid var(--line-2); border-radius:12px; padding:14px; margin-top:2px; display:flex; flex-direction:column; gap:9px; }
   .newunit input,.newunit select{ font-family:inherit; font-size:.88rem; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); width:100%; }
 
-  .camera{ margin-top:12px; border:1.6px dashed var(--line); border-radius:12px; padding:16px; text-align:center; background:var(--surface); font-family:"Heebo",sans-serif; font-size:.8rem; color:var(--ink-2); width:100%; }
-  .thumbs{ display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; align-items:center; }
-  .thumb{ width:46px; height:46px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:.58rem; color:var(--ink-3); font-family:"Heebo",sans-serif; }
+  .camera{ margin-top:12px; border:1.6px dashed var(--line); border-radius:12px; padding:16px; text-align:center; background:var(--surface); font-family:"Heebo",sans-serif; font-size:.85rem; font-weight:700; color:var(--accent-ink); width:100%; }
+  .camera:disabled{ color:var(--ink-3); border-color:var(--line-2); }
+  .thumbs{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+  .thumb{ position:relative; width:60px; height:60px; border-radius:9px; overflow:hidden; border:1px solid var(--line); background:var(--surface-2); flex:none; padding:0; }
+  .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb .del{ position:absolute; top:2px; inset-inline-end:2px; width:18px; height:18px; border-radius:50%; border:0; background:rgba(15,18,22,.72); color:#fff; font-size:.62rem; line-height:1; display:flex; align-items:center; justify-content:center; }
+  .lightbox{ position:fixed; inset:0; z-index:90; background:rgba(10,12,16,.9); display:flex; align-items:center; justify-content:center; padding:16px; }
+  .lightbox img{ max-width:100%; max-height:100%; border-radius:10px; }
+  .lightbox .x{ position:absolute; top:14px; inset-inline-end:16px; width:38px; height:38px; border-radius:50%; border:0; background:rgba(255,255,255,.15); color:#fff; font-size:1.1rem; }
 
   .gate{ margin-top:12px; background:var(--warn-wash); border:1px solid var(--warn); color:var(--warn); border-radius:11px; padding:12px 13px; font-family:"Heebo",sans-serif; font-size:.8rem; font-weight:500; display:flex; gap:9px; }
 
@@ -263,7 +269,7 @@
 <script src="vendor/htm.umd.js"></script>
 <script>
 (function(){
-  const {useState, useEffect, useMemo, useCallback} = React;
+  const {useState, useEffect, useMemo, useCallback, useRef} = React;
   const html = htm.bind(React.createElement);
   document.documentElement.dir = "rtl";
   document.documentElement.lang = "he";
@@ -344,14 +350,14 @@
   };
 
   const UNITS = {
-    1:[ {id:"u1",floor:"קומה 3",title:"פריסת קווי מים",stage:"black",photos:2,checklist:[{t:"פריסת קו ראשי + מפולים",done:true},{t:"נקודות מים קרים",done:true},{t:"נקודות מים חמים",done:false},{t:"עיגון וקיבוע לתקן",done:false}]},
-        {id:"u1b",floor:"כל הבניין",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:0,checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד מד־לחץ",done:false}]},
-        {id:"u1c",floor:"קומה 1-2",title:"התקנת כלים סניטריים",stage:"white",photos:0,checklist:[{t:"הרכבת אסלות ומיכלי הדחה",done:false},{t:"התקנת כיורים וברזים",done:false},{t:"בדיקת אטימות סופית",done:false}]} ],
-    11:[ {id:"u11",floor:"קומה 5",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:1,checklist:[{t:"איתור נזילה בקו ראשי",done:true},{t:"תיקון והחלפת מחבר",done:false},{t:"בדיקה חוזרת + תיעוד",done:false}]},
-        {id:"u11b",floor:"קומה 6",title:"פריסת קווי ביוב",stage:"black",photos:4,checklist:[{t:"פריסת קו אנכי",done:true},{t:"חיבור לנקודות",done:true},{t:"בדיקת שיפועים",done:true},{t:"אטימה וסימון",done:true}]} ],
-    24:[ {id:"u24",floor:"קומה 1",title:"התקנת כלים סניטריים",stage:"white",photos:1,checklist:[{t:"סימון מיקומי אינטרפוץ",done:true},{t:"התקנת סוללות אינטרפוץ",done:false},{t:"הרכבת כיורים",done:false},{t:"בדיקת אטימות",done:false}]} ],
-    13:[ {id:"u13",floor:"קומה 4",title:"פריסת קווי מים",stage:"black",photos:3,checklist:[{t:"פריסת קו ראשי",done:true},{t:"נקודות מים",done:true},{t:"בדיקת שיפועים",done:false},{t:"עיגון וקיבוע",done:false}]} ],
-    6:[ {id:"u6",floor:"כל הבניין",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:0,checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד",done:false}]} ]
+    1:[ {id:"u1",floor:"קומה 3",title:"פריסת קווי מים",stage:"black",photos:[],checklist:[{t:"פריסת קו ראשי + מפולים",done:true},{t:"נקודות מים קרים",done:true},{t:"נקודות מים חמים",done:false},{t:"עיגון וקיבוע לתקן",done:false}]},
+        {id:"u1b",floor:"כל הבניין",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:[],checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד מד־לחץ",done:false}]},
+        {id:"u1c",floor:"קומה 1-2",title:"התקנת כלים סניטריים",stage:"white",photos:[],checklist:[{t:"הרכבת אסלות ומיכלי הדחה",done:false},{t:"התקנת כיורים וברזים",done:false},{t:"בדיקת אטימות סופית",done:false}]} ],
+    11:[ {id:"u11",floor:"קומה 5",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:[],checklist:[{t:"איתור נזילה בקו ראשי",done:true},{t:"תיקון והחלפת מחבר",done:false},{t:"בדיקה חוזרת + תיעוד",done:false}]},
+        {id:"u11b",floor:"קומה 6",title:"פריסת קווי ביוב",stage:"black",photos:[],checklist:[{t:"פריסת קו אנכי",done:true},{t:"חיבור לנקודות",done:true},{t:"בדיקת שיפועים",done:true},{t:"אטימה וסימון",done:true}]} ],
+    24:[ {id:"u24",floor:"קומה 1",title:"התקנת כלים סניטריים",stage:"white",photos:[],checklist:[{t:"סימון מיקומי אינטרפוץ",done:true},{t:"התקנת סוללות אינטרפוץ",done:false},{t:"הרכבת כיורים",done:false},{t:"בדיקת אטימות",done:false}]} ],
+    13:[ {id:"u13",floor:"קומה 4",title:"פריסת קווי מים",stage:"black",photos:[],checklist:[{t:"פריסת קו ראשי",done:true},{t:"נקודות מים",done:true},{t:"בדיקת שיפועים",done:false},{t:"עיגון וקיבוע",done:false}]} ],
+    6:[ {id:"u6",floor:"כל הבניין",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:[],checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד",done:false}]} ]
   };
 
   function defStages(n){
@@ -361,9 +367,9 @@
     return { black:"done", pressure:"pending", white:"locked" };
   }
   function genUnit(id, stages){
-    if(stages.white === "active") return {id, floor:"קומה 1", title:"התקנת כלים סניטריים", stage:"white", photos:2, checklist:[{t:"הרכבת אסלות ומיכלי הדחה",done:true},{t:"התקנת כיורים וברזים",done:false},{t:"בדיקת אטימות סופית",done:false}]};
-    if(stages.pressure === "pending") return {id, floor:"כל הבניין", title:"בדיקת לחץ — פאזה א׳", stage:"pressure", photos:0, checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד",done:false}]};
-    return {id, floor:"קומה 2", title:"פריסת קווי מים", stage:"black", photos:3, checklist:[{t:"פריסת קו ראשי",done:true},{t:"נקודות מים קרים",done:true},{t:"נקודות מים חמים",done:false},{t:"עיגון וקיבוע",done:false}]};
+    if(stages.white === "active") return {id, floor:"קומה 1", title:"התקנת כלים סניטריים", stage:"white", photos:[], checklist:[{t:"הרכבת אסלות ומיכלי הדחה",done:true},{t:"התקנת כיורים וברזים",done:false},{t:"בדיקת אטימות סופית",done:false}]};
+    if(stages.pressure === "pending") return {id, floor:"כל הבניין", title:"בדיקת לחץ — פאזה א׳", stage:"pressure", photos:[], checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד",done:false}]};
+    return {id, floor:"קומה 2", title:"פריסת קווי מים", stage:"black", photos:[], checklist:[{t:"פריסת קו ראשי",done:true},{t:"נקודות מים קרים",done:true},{t:"נקודות מים חמים",done:false},{t:"עיגון וקיבוע",done:false}]};
   }
 
   function seed(){
@@ -397,8 +403,50 @@
   }
 
   const KEY = "pls_state_v4";
-  function load(){ try{ const s = localStorage.getItem(KEY); if(s) return JSON.parse(s); }catch(e){} return seed(); }
-  function persist(st){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){} }
+  function load(){
+    try{
+      const s = localStorage.getItem(KEY);
+      if(s){
+        const st = JSON.parse(s);
+        (st.sites || []).forEach(site => (site.units || []).forEach(u => {
+          if(!Array.isArray(u.photos)) u.photos = [];
+        }));
+        return st;
+      }
+    }catch(e){}
+    return seed();
+  }
+  function persist(st){
+    try{ localStorage.setItem(KEY, JSON.stringify(st)); return true; }
+    catch(e){ return false; }
+  }
+
+  // Read a picked image file, downscale, return a compressed JPEG data URL.
+  function fileToScaledDataURL(file, maxDim, quality){
+    return new Promise((resolve, reject)=>{
+      if(!file || !/^image\//.test(file.type)) { reject(new Error("not an image")); return; }
+      const reader = new FileReader();
+      reader.onerror = ()=> reject(new Error("read failed"));
+      reader.onload = ()=>{
+        const img = new Image();
+        img.onerror = ()=> reject(new Error("decode failed"));
+        img.onload = ()=>{
+          let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          const scale = Math.min(1, maxDim / Math.max(w, h));
+          w = Math.round(w * scale); h = Math.round(h * scale);
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          try{ resolve(canvas.toDataURL("image/jpeg", quality)); }
+          catch(err){ reject(err); }
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
   function siteStatus(s){
     if(!s.active) return "inactive";
@@ -447,7 +495,7 @@
     const [nav, setNav] = useState({ screen:"vp.dash" });
     const [toast, setToast] = useState(null);
 
-    useEffect(()=>{ persist(st); }, [st]);
+    useEffect(()=>{ if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
     const update = useCallback((fn)=> setSt(prev => fn(structuredClone(prev))), []);
 
@@ -520,13 +568,25 @@
         return d;
       });
     }
-    function addPhoto(siteId, unitId){
-      update(d=>{ d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId).photos++; return d; });
+    function addPhoto(siteId, unitId, dataUrl){
+      update(d=>{
+        const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
+        if(!Array.isArray(u.photos)) u.photos = [];
+        u.photos.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), url: dataUrl, ts: Date.now() });
+        return d;
+      });
+    }
+    function removePhoto(siteId, unitId, photoId){
+      update(d=>{
+        const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
+        u.photos = (u.photos || []).filter(p => p.id !== photoId);
+        return d;
+      });
     }
     function addUnit(siteId, data){
       update(d=>{
         const s = d.sites.find(x=>x.id===siteId);
-        s.units.push({ id:"u"+siteId+"_"+Date.now(), floor:data.floor.trim()||"—", title:data.title.trim(), stage:data.stage, photos:0, checklist:[] });
+        s.units.push({ id:"u"+siteId+"_"+Date.now(), floor:data.floor.trim()||"—", title:data.title.trim(), stage:data.stage, photos:[], checklist:[] });
         return d;
       });
       notify("סעיף עבודה חדש נוסף לאתר");
@@ -536,7 +596,7 @@
         const s = d.sites.find(x=>x.id===siteId);
         const u = s.units.find(x=>x.id===unitId);
         if(pass){
-          u.checklist = u.checklist.map(c=>({...c,done:true})); u.photos = Math.max(u.photos,2);
+          u.checklist = u.checklist.map(c=>({...c,done:true}));
           s.stages.pressure = "done";
           if(s.stages.white === "locked") s.stages.white = "active";
         } else {
@@ -567,7 +627,8 @@
       const runit = rsite && rsite.units.find(u=>u.id===nav.uid);
       body = runit
         ? html`<${Report} site=${rsite} unit=${runit} onBack=${()=>setNav({screen:"field.home"})}
-            onToggle=${toggleTask} onAddTask=${addTask} onRemoveTask=${removeTask} onAddPhoto=${addPhoto}
+            onToggle=${toggleTask} onAddTask=${addTask} onRemoveTask=${removeTask}
+            onAddPhoto=${addPhoto} onRemovePhoto=${removePhoto}
             onPressure=${runPressure} notify=${notify} />`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
@@ -749,7 +810,7 @@
             return html`
               <button key=${u.id} class="wu" onClick=${()=>onOpen(site.id, u.id)}>
                 <span class="ic">${u.stage==="pressure" ? "🧪" : locked ? "🔒" : done ? "✓" : "🛠"}</span>
-                <span class="m"><b>${u.title}</b><span>${u.floor} · ${u.checklist.filter(c=>c.done).length}/${u.checklist.length} משימות · ${u.photos} תמונות</span></span>
+                <span class="m"><b>${u.title}</b><span>${u.floor} · ${u.checklist.filter(c=>c.done).length}/${u.checklist.length} משימות · ${(u.photos||[]).length} תמונות</span></span>
                 <span class=${"stgbadge "+u.stage}>${u.stage==="black"?"שחור":u.stage==="pressure"?"לחץ":"לבן"}</span>
               </button>`;
           })}
@@ -775,14 +836,18 @@
       </div>`;
   }
 
-  function Report({ site, unit, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onPressure, notify }){
+  function Report({ site, unit, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onRemovePhoto, onPressure, notify }){
     const [newTask, setNewTask] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [view, setView] = useState(null);
+    const fileRef = useRef(null);
     const isPressure = unit.stage === "pressure";
     const locked = unit.stage === "white" && site.stages.white === "locked";
     const cl = unit.checklist;
-    const photos = unit.photos;
+    const photos = Array.isArray(unit.photos) ? unit.photos : [];
+    const nPhotos = photos.length;
     const allDone = cl.length > 0 && cl.every(c=>c.done);
-    const canSave = photos > 0 && !locked;
+    const canSave = nPhotos > 0 && !locked;
 
     function submitTask(e){
       e.preventDefault();
@@ -790,6 +855,25 @@
       if(!v || locked) return;
       onAddTask(site.id, unit.id, v);
       setNewTask("");
+    }
+
+    async function onPick(e){
+      const files = Array.from(e.target.files || []);
+      e.target.value = "";
+      if(!files.length) return;
+      setBusy(true);
+      let added = 0;
+      for(const f of files){
+        try{
+          const url = await fileToScaledDataURL(f, 1024, 0.6);
+          onAddPhoto(site.id, unit.id, url);
+          added++;
+        }catch(err){
+          notify("תמונה אחת לא נקלטה — נסה שוב");
+        }
+      }
+      setBusy(false);
+      if(added) notify(added === 1 ? "תמונה נוספה" : added + " תמונות נוספו");
     }
 
     return html`
@@ -824,24 +908,37 @@
         </div>
 
         <div class="card">
-          <div class="lbl">תיעוד מצולם</div>
-          <button class="camera" disabled=${locked} onClick=${()=>onAddPhoto(site.id, unit.id)}>📷 צלם והעלה תמונה</button>
+          <div class="lbl">תיעוד מצולם · ${nPhotos}</div>
+          <input ref=${fileRef} type="file" accept="image/*" multiple hidden onChange=${onPick} />
+          <button class="camera" disabled=${locked || busy} onClick=${()=>fileRef.current && fileRef.current.click()}>
+            ${busy ? "מעבד תמונה…" : "📷 צלם או בחר תמונה"}
+          </button>
           <div class="thumbs">
-            ${Array.from({length:photos}).map((_,i)=> html`<span key=${i} class="thumb">תמונה ${i+1}</span>`)}
-            ${photos===0 && html`<span style=${{fontFamily:"Heebo,sans-serif", fontSize:".76rem", color:"var(--ink-3)"}}>טרם צורפו תמונות</span>`}
+            ${photos.map(p => html`
+              <button key=${p.id} class="thumb" onClick=${()=>setView(p.url)}>
+                <img src=${p.url} alt="תמונת דיווח" />
+                ${!locked && html`<span class="del" role="button" title="מחק" onClick=${(e)=>{ e.stopPropagation(); onRemovePhoto(site.id, unit.id, p.id); }}>✕</span>`}
+              </button>`)}
+            ${nPhotos===0 && html`<span style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-3)"}}>טרם צורפו תמונות</span>`}
           </div>
         </div>
 
         ${isPressure ? html`
           <div class="btnrow">
-            <button class="btn danger" disabled=${photos===0} onClick=${()=>{ onPressure(site.id, unit.id, false); onBack(); }}>רשום: נכשלה</button>
-            <button class="btn ok" disabled=${!allDone || photos===0} onClick=${()=>{ onPressure(site.id, unit.id, true); onBack(); }}>רשום: עברה</button>
+            <button class="btn danger" disabled=${nPhotos===0} onClick=${()=>{ onPressure(site.id, unit.id, false); onBack(); }}>רשום: נכשלה</button>
+            <button class="btn ok" disabled=${!allDone || nPhotos===0} onClick=${()=>{ onPressure(site.id, unit.id, true); onBack(); }}>רשום: עברה</button>
           </div>
-          ${photos===0 && html`<div class="hint">נדרשת תמונה של מד־הלחץ כדי לרשום תוצאה.</div>`}
+          ${nPhotos===0 && html`<div class="hint">נדרשת תמונה של מד־הלחץ כדי לרשום תוצאה.</div>`}
         ` : html`
           <button class="btn pri wide" disabled=${!canSave} onClick=${()=>{ notify(allDone ? "הדיווח נשמר · השלב הושלם" : "הדיווח נשמר"); onBack(); }}>
-            ${locked ? "שמירה חסומה" : photos===0 ? "צרף תמונה כדי לשמור" : allDone ? "שמור וסיים שלב" : "שמור דיווח"}
+            ${locked ? "שמירה חסומה" : nPhotos===0 ? "צרף תמונה כדי לשמור" : allDone ? "שמור וסיים שלב" : "שמור דיווח"}
           </button>`}
+
+        ${view && html`
+          <div class="lightbox" onClick=${()=>setView(null)}>
+            <button class="x" aria-label="סגור">✕</button>
+            <img src=${view} alt="תמונת דיווח מוגדלת" onClick=${(e)=>e.stopPropagation()} />
+          </div>`}
       </div>`;
   }
 
