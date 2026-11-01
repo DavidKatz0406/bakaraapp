@@ -349,14 +349,25 @@
     ["דניה סיבוס","קיים",31,"עיר עולם"]
   ];
 
-  const OWNERS = [
-    {name:"דוד ל׳", role:"מנהל רכש", status:"מעקב הזמנות שוטף"},
-    {name:"סאמר ע׳", role:"מנהל עבודה", status:"בעבודה שוטפת באתר"},
-    {name:"רון מ׳", role:"מנהל עבודה ראשי", status:"תיאום צוותים לשבוע הקרוב"},
-    {name:"מירי כ׳", role:"מנהלת פרויקט", status:"מעקב לו״ז מול הקבלן הראשי"},
-    {name:"אבי ט׳", role:"מנהל עבודה", status:"פיקוח על שלב השחור"},
-    {name:"נדיה ר׳", role:"רכזת לוגיסטיקה", status:"תיאום ניפוקים ומשלוחים"}
-  ];
+  /* ---- מנהלי פרויקט אמיתיים — נלקחו מאפליקציית הרכש (שמות פרטיים בלבד, בלי טלפונים).
+     מפתח = מספר אתר בתיק. co = מנהל בכיר/מורשה נוסף על הפרויקט (דרג 2). ---- */
+  const MGR = {
+    1:{ name:"יזיד", co:["מג׳ד"] },  2:{ name:"אייל" },  3:{ name:"סאמר" },  4:{ name:"סאמר" },
+    5:{ name:"גיא" },  6:{ name:"יער", co:["ליאור"] },  7:{ name:"אלכס" },  8:{ name:"ראובן" },
+    9:{ name:"סאמר" },  10:{ name:"באהה" },  11:{ name:"מוראר", co:["מג׳ד"] },  12:{ name:"אבו לאבן" },
+    13:{ name:"אבו לאבן" },  14:{ name:"יער", co:["ליאור"] },  15:{ name:"וואהל" },  16:{ name:"וואהל" },
+    17:{ name:"באהה" },  18:{ name:"סאמר" },  19:{ name:"צביקה" },  20:{ name:"מג׳ד" },  21:{ name:"מג׳ד" },
+    23:{ name:"משה" },  25:{ name:"אולג" },  26:{ name:"באהה", co:["איתי"] },  27:{ name:"וואהל" },
+    28:{ name:"אולג" },  29:{ name:"אולג" },  30:{ name:"יניב" },  31:{ name:"כרובי" }
+  };
+  function applyRoster(site){
+    const m = MGR[site.num];
+    const prev = site.owner || {};
+    site.owner = m
+      ? { name:m.name, role:"מנהל פרויקט", status: prev.status || "אחראי ביצוע על הפרויקט" }
+      : { name:"לא משויך", role:"דרוש שיוך מנהל", status:"אין מנהל משויך לאתר" };
+    site.senior = (m && m.co) ? m.co.join(", ") : "";
+  }
 
   /* scripted scenarios for a handful of projects — the rest get plausible defaults */
   const SCEN = {
@@ -411,13 +422,14 @@
         schedule: sc.schedule || (n % 6 === 0 ? "behind" : "on"),
         materials: sc.materials || [{ item:"צנרת ראשית 6״", need:100, onSite: active ? 100 : 0, unit:"מ׳", blocksTomorrow:false }],
         surplus: sc.surplus || null,
-        owner: sc.owner || OWNERS[n % OWNERS.length],
+        owner: sc.owner ? { status: sc.owner.status } : null,
         units: UNITS[n] || [ genUnit("u"+n, stages) ]
       };
     });
+    sites.forEach(applyRoster);
     const T = Date.now();
     return {
-      sites,
+      sites, rosterV: 2,
       log: [], nudges: {}, trackStart: T,
       since: { "s1:material": T-26*3600e3, "s24:material": T-5*3600e3, "s11:pressure": T-52*3600e3, "s13:consultant": T-30*3600e3 },
       requests:[
@@ -442,6 +454,7 @@
           site.checkinLog = site.checkinLog || [];
           (site.units || []).forEach(u => { if(!Array.isArray(u.photos)) u.photos = []; });
         });
+        if(st.rosterV !== 2){ (st.sites || []).forEach(applyRoster); st.rosterV = 2; }
         st.log = st.log || []; st.nudges = st.nudges || {}; st.since = st.since || {};
         st.trackStart = st.trackStart || Date.now();
         return st;
@@ -572,7 +585,12 @@
       if(!s.active) return;
       const ow = (s.owner && s.owner.name) || "—";
       const role = (s.owner && s.owner.role) || "";
-      const base = { siteId: s.id, siteName: s.name, owner: ow, ownerRole: role };
+      const base = { siteId: s.id, siteName: s.name, owner: ow, ownerRole: role, senior: s.senior || "" };
+      if(ow === "לא משויך"){
+        add({ ...base, key: s.id + ":noowner", kind: "noowner", sev: "crit",
+          title: "אתר פעיל בלי מנהל משויך", detail: "אין אחראי על הדיווח, החומרים והבקרה באתר",
+          waitingOn: "הנהלה — לשייך מנהל פרויקט" });
+      }
       const pendingReq = st.requests.find(r => r.siteId === s.id && r.status === "pending");
       const blockedReq = st.requests.find(r => r.siteId === s.id && r.status === "blocked");
 
@@ -723,7 +741,7 @@
     const [now, setNow] = useState(Date.now());
     const [ctl, setCtl] = useState({ tab:"ex", mgr:"all" });
     const [idSheet, setIdSheet] = useState(false);
-    const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"בעלים" }; });
+    const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"דוד" }; });
     const who = me.name;
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
 
@@ -957,7 +975,7 @@
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
               <h3>מי אתה?</h3>
               <div class="who">השם נרשם ביומן הפעולות ליד כל פעולה שתבצע. התחברות מאובטחת אישית תיכנס עם חיבור המסד המשותף.</div>
-              ${[{name:"בעלים"}, ...cards.map(c=>({name:c.name, role:c.role})), {name:"מחסנאי"}, {name:"איש שטח"}].map(m => html`
+              ${[{name:"דוד", role:"הנהלה"}, {name:"טל", role:"מאשר הזמנות"}, {name:"שרון", role:"רכש"}, ...cards.filter(c=>c.name!=="לא משויך").map(c=>({name:c.name, role:c.role})), {name:"מחסנאי"}, {name:"איש שטח"}].map(m => html`
                 <button key=${m.name} class="opt" onClick=${()=>pickMe(m)}>
                   <span class="e">${me.name===m.name ? "✓" : "👤"}</span>${m.name}${m.role ? " · " + m.role : ""}
                 </button>`)}
@@ -1024,7 +1042,7 @@
                   </div>
                   ${e.siteName && html`<div class="ds">${e.siteName}</div>`}
                   <div class="ds">${e.detail}</div>
-                  <div class="meta">אחראי: <b>${e.owner}</b>${e.ownerRole ? " · " + e.ownerRole : ""}<br/>ממתין ל: ${e.waitingOn} · פתוח <b>${ageText(e.ageMs)}</b> · ${LEVEL_TEXT[e.level]}</div>
+                  <div class="meta">אחראי: <b>${e.owner}</b>${e.ownerRole ? " · " + e.ownerRole : ""}${e.senior ? " · מנהל בכיר: " + e.senior : ""}<br/>ממתין ל: ${e.waitingOn} · פתוח <b>${ageText(e.ageMs)}</b> · ${LEVEL_TEXT[e.level]}</div>
                   ${n && html`<div class="meta">נדחף ע״י ${n.by} לפני ${ageText(now - n.at)}</div>`}
                   <div class="btnrow">
                     <button class="btn" onClick=${()=>onOpen(e.siteId)}>פתח אתר</button>
