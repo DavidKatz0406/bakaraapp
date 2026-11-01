@@ -287,6 +287,69 @@
   .hint{ font-family:"Heebo",sans-serif; font-size:.75rem; color:var(--ink-3); margin-top:16px; text-align:center; }
   .disc{ font-family:"Heebo",sans-serif; font-size:.72rem; color:var(--ink-3); margin-top:20px; padding:11px 13px; background:var(--surface-2); border-radius:10px; line-height:1.5; }
 
+
+  /* תוכנית שבועית · מלאי */
+  .sub2{ font-family:"Heebo",sans-serif; font-size:.74rem; color:var(--ink-3); margin:2px 0 8px; line-height:1.5; }
+  .meta2{ font-family:"Heebo",sans-serif; font-size:.72rem; color:var(--ink-3); margin:4px 0 6px; }
+  .pm{ overflow-x:auto; border:1px solid var(--line-2); border-radius:12px; background:var(--surface); }
+  table.plan{ border-collapse:collapse; width:100%; table-layout:fixed; font-family:"Heebo",sans-serif; font-size:.78rem; }
+  table.plan th{ background:var(--surface-2); font-weight:700; font-size:.62rem; color:var(--ink-2); padding:8px 1px; overflow:hidden; text-align:center; position:sticky; top:0; }
+  table.plan th.nm,table.plan td.nm{ text-align:start; padding-inline-start:8px; width:29%; }
+  table.plan td{ border-top:1px solid var(--line-2); padding:7px 4px; text-align:center; vertical-align:middle; }
+  table.plan td.nm{ font-weight:600; font-size:.74rem; line-height:1.25; word-break:break-word; }
+  table.plan td.nm small{ display:block; font-weight:400; font-size:.66rem; color:var(--ink-3); }
+  table.plan tr.grp td{ background:var(--accent-wash); color:var(--accent-ink); font-weight:700; font-size:.74rem; text-align:start; padding:6px 10px; border-top:0; }
+  table.plan tr.srow{ cursor:pointer; }
+  table.plan tr.srow:hover td{ background:var(--surface-2); }
+  td.pc b{ font-weight:800; font-size:.8rem; }
+  td.pc i{ font-style:normal; font-size:.56rem; color:var(--ink-3); display:block; }
+  td.pc small{ display:block; font-size:.56rem; color:var(--ink-3); }
+  td.pc.na,td.pc.nr{ color:var(--ink-3); }
+  td.pc.done b{ color:var(--ok); }
+  td.pc.bad{ background:var(--crit-wash); } td.pc.bad b{ color:var(--crit); }
+  td.pc.warn{ background:var(--warn-wash); } td.pc.warn b{ color:var(--warn); }
+  .legend{ font-family:"Heebo",sans-serif; font-size:.68rem; color:var(--ink-3); margin-top:8px; line-height:1.9; }
+  .lg{ display:inline-block; width:10px; height:10px; border-radius:3px; vertical-align:middle; margin-inline-end:3px; background:var(--surface-3); }
+  .lg.bad{ background:var(--crit); } .lg.warn{ background:var(--warn); } .lg.done{ background:var(--ok); }
+  .trow{ display:flex; align-items:center; gap:10px; padding:5px 0; font-family:"Heebo",sans-serif; font-size:.82rem; }
+  .trow .tn{ width:84px; flex:none; font-weight:600; }
+  .trow .tb{ flex:1; height:7px; border-radius:4px; background:var(--surface-3); overflow:hidden; }
+  .trow .tb i{ display:block; height:100%; background:var(--accent); border-radius:4px; }
+  .trow .tb i.d{ background:var(--ok); } .trow .tb i.b{ background:var(--crit); } .trow .tb i.w{ background:var(--warn); }
+  .trow .tv{ min-width:74px; text-align:end; font-weight:700; }
+  .trow .tv small{ font-weight:400; color:var(--ink-3); font-size:.68rem; }
+  .trow .tv.nr{ font-weight:400; color:var(--ink-3); font-size:.74rem; }
+  .card.trk{ margin-top:10px; display:flex; flex-direction:column; gap:10px; }
+  .card.trk.off{ opacity:.7; }
+  .tgl{ display:flex; align-items:center; gap:7px; font-family:"Heebo",sans-serif; font-size:.78rem; color:var(--ink-2); }
+  .tgl input{ width:18px; height:18px; accent-color:var(--accent); }
+  .prow{ display:flex; align-items:center; gap:12px; }
+  .rng{ flex:1; accent-color:var(--accent); height:28px; }
+  .pv{ font-size:1.25rem; font-weight:800; min-width:50px; text-align:end; font-variant-numeric:tabular-nums; }
+  .grow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-family:"Heebo",sans-serif; font-size:.78rem; color:var(--ink-2); }
+  .grow select{ font-size:.84rem; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+  .prevv{ font-family:"Heebo",sans-serif; font-size:.72rem; color:var(--ink-3); }
+  .card.fl{ margin-top:10px; display:flex; flex-direction:column; gap:12px; }
+  .fl label{ display:flex; flex-direction:column; gap:5px; font-family:"Heebo",sans-serif; font-size:.78rem; font-weight:600; color:var(--ink-2); }
+  .fl label.tgl{ flex-direction:row; font-weight:400; }
+  .fl input[type=text],.fl input[type=number],.fl textarea{ font-family:inherit; font-size:.92rem; padding:10px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); width:100%; }
+  .fl input:focus-visible,.fl textarea:focus-visible,.newunit input:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  form.screen > .btn.wide{ margin-top:14px; }
+  .sr{ display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line-2); font-family:"Heebo",sans-serif; font-size:.82rem; }
+  .sr .n{ flex:1; min-width:0; }
+  .sr .q{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .sr .q small{ color:var(--ink-3); font-size:.68rem; }
+  .sr.bad .n,.sr.bad .q b{ color:var(--crit); font-weight:700; }
+  .tg{ font-size:.62rem; background:var(--surface-2); color:var(--ink-3); border-radius:999px; padding:2px 7px; white-space:nowrap; }
+  .card.stk.short{ border-color:var(--crit); }
+  .qty{ display:flex; align-items:center; gap:6px; }
+  .qty button{ width:42px; height:42px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:1.25rem; font-weight:700; line-height:1; }
+  .qty input{ width:84px; text-align:center; font-family:"Frank Ruhl Libre",serif; font-size:1.3rem; font-weight:700; padding:7px 4px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); font-variant-numeric:tabular-nums; }
+  .qty input:focus-visible,.qty button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .unit{ font-family:"Heebo",sans-serif; font-size:.82rem; color:var(--ink-3); }
+  .newunit .two{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .newunit .btnrow{ flex-wrap:wrap; }
+
   @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }
   @media (max-width:560px){
     .topbar{ gap:10px; padding:10px 14px; }
@@ -504,59 +567,31 @@
     });
   }
 
-  function siteStatus(s){
-    if(!s.active) return "inactive";
-    if((s.materials||[]).some(m => m.onSite < m.need && m.blocksTomorrow)) return "crit";
-    if(s.stages.pressure === "failed") return "crit";
-    if(s.schedule === "behind") return "warn";
-    if(s.stages.pressure === "pending" && s.stages.black === "done") return "warn";
-    if(s.stages.black === "active" && !s.blackConsultant) return "warn";
-    return "ok";
-  }
-  const STATUS_TEXT = { ok:"בקצב", warn:"דורש מעקב", crit:"בסיכון", inactive:"לא פעיל" };
-
-  function siteLine(s){
-    if(!s.active) return "אין התקשרות פעילה — לא בביצוע";
-    const short = (s.materials||[]).find(m => m.onSite < m.need && m.blocksTomorrow);
-    if(short) return `חוסר ${short.need - short.onSite} ${short.unit} ${short.item} — יעכב עבודה מחר`;
-    if(s.stages.pressure === "failed") return "בדיקת לחץ פאזה א׳ נכשלה — דרוש תיקון וצילום חוזר";
-    if(s.stages.pressure === "pending" && s.stages.black === "done") return "מוכן לבדיקת לחץ — טרם בוצעה";
-    if(s.stages.black === "active" && !s.blackConsultant) return "שלב שחור בעבודה — ממתין לאישור יועץ";
-    if(s.stages.white === "active") return "בשלב לבן — התקנת כלים סניטריים";
-    if(s.stages.black === "active") return "שלב שחור בעבודה — פריסת תשתיות";
-    return "בקצב · חומרי מפתח באתר";
-  }
-  function stageFill(s){
-    return ["black","pressure","white"].map(k=>{
-      const v = s.stages[k];
-      if(v === "done") return "f";
-      if(v === "active" || v === "pending" || v === "failed") return "p";
-      return "";
-    });
-  }
-  function alertsFor(sites){
-    const out = [];
-    sites.forEach(s=>{
-      if(!s.active) return;
-      const short = (s.materials||[]).find(m => m.onSite < m.need && m.blocksTomorrow);
-      if(short) out.push({ id:s.id+"-m", level:"crit", text:`חוסר של ${short.need-short.onSite} ${short.unit} ${short.item} באתר ${s.name} — יעכב עבודה מחר` });
-      if(s.stages.pressure === "failed") out.push({ id:s.id+"-p", level:"warn", text:`בדיקת לחץ פאזה א׳ נכשלה — ${s.name} (${s.contractor})` });
-    });
-    return out;
-  }
-
-  /* ───────── בקרה וניטור: חריגים, הסלמה, כרטיסי מנהל, דוח ─────────
-     כל הספים במקום אחד (CFG) כדי שיהיה קל לשפר תוך כדי תנועה. */
+  /* ───────── בקרה וניטור: נושאי הבקרה = עמודות תוכנית העבודה השבועית ─────────
+     ליווי שלד · קומפלטים · השלמות · ספרינקלרים · חניונים · כ"א בשטח · הערות/חריגים · בטיחות
+     (+ מלאי באתר שמנהל הפרויקט מזין). כל הספים במקום אחד (CFG). */
   const CFG = {
     checkinBy: 10,         // שעה: מכאן אתר בלי דיווח יומי מסומן
     checkinEsc: 12,        // שעה: מכאן החריגה עוברת לדרג בעלים
+    weeklyBy: 12,          // שעה ביום א׳: עד אז צריך להגיש את הדוח השבועי
+    stockDays: 7,          // ימים: מלאי שלא עודכן מעבר לזה נחשב לא מעודכן
+    workerDrop: 0.6,       // ירידת כ"א: ביחס לשבוע שעבר מתחת ל-60% = חריג
     escL2h: 4,             // שעות פתוחה → דרג 2
     escL3h: 24,            // שעות פתוחה → דרג 3 (בעלים)
     workDays: [0,1,2,3,4]  // א׳–ה׳
   };
   const LEVEL_SHORT = { 1:"דרג 1", 2:"דרג 2", 3:"דרג 3" };
   const LEVEL_TEXT = { 1:"דרג 1 · מנהל אחראי", 2:"דרג 2 · מנהל בכיר", 3:"דרג 3 · בעלים" };
-  const HOUR = 3600e3;
+  const HOUR = 3600e3, DAY = 24 * HOUR;
+
+  /* עמודות הטופס "דוח תוכנית עבודה שבועית" */
+  const TRACKS = [
+    { k:"skeleton",   label:"ליווי שלד", short:"שלד" },
+    { k:"complets",   label:"קומפלטים" },
+    { k:"finishing",  label:"השלמות" },
+    { k:"sprinklers", label:"ספרינקלרים", short:"ספרינק׳" },
+    { k:"parking",    label:"חניונים" }
+  ];
 
   const pad2 = n => String(n).padStart(2, "0");
   function dstr(ts){ const d = new Date(ts); return d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()); }
@@ -576,10 +611,53 @@
     if(d.log.length > 400) d.log.length = 400;
   }
 
+  /* ---- שבוע עבודה: מתחיל ביום א׳ ---- */
+  function weekStart(ts){ const d = new Date(ts); d.setHours(0,0,0,0); d.setDate(d.getDate() - d.getDay()); return d.getTime(); }
+  const weekKey = ts => dstr(weekStart(ts));
+  const weekLabel = ts => dmy(weekStart(ts)) + "–" + dmy(weekStart(ts) + 4 * DAY);
+  const curWeekly = (s, now) => (s.weekly && s.weekly.week === weekKey(now)) ? s.weekly : null;
+  const pctOf = (r, k) => { const v = r && r.tracks ? r.tracks[k] : null; return v == null ? null : (typeof v === "object" ? v.pct : v); };
+  /* דוחות של שבועות קודמים, מהישן לחדש */
+  function weekHistory(s, now){
+    const h = (s.weeklyHist || []).slice();
+    if(s.weekly && s.weekly.week !== weekKey(now)) h.push(s.weekly);
+    return h;
+  }
+  function compactWeekly(w){
+    const tracks = {};
+    TRACKS.forEach(t => { tracks[t.k] = pctOf(w, t.k); });
+    return { week: w.week, tracks, workers: w.workers == null ? null : w.workers };
+  }
+  const trackOpen = w => TRACKS.some(t => { const v = w.tracks && w.tracks[t.k]; return v && v.pct < 100; });
+  const hasText = v => !!(v && String(v).trim());
+
+  /* מצב מסלול אחד באתר: האם עומד, האם יש פער ליעד השבועי */
+  function trackState(s, k, now){
+    const cur = curWeekly(s, now);
+    const v = cur && cur.tracks ? cur.tracks[k] : null;
+    if(!v) return null;
+    const hist = weekHistory(s, now);
+    const prev = hist.length ? pctOf(hist[hist.length - 1], k) : null;
+    let streak = 1;
+    for(let i = hist.length - 1; i >= 0 && pctOf(hist[i], k) === v.pct; i--) streak++;
+    const d = new Date(now), late = d.getDay() > 4 || (d.getDay() === 4 && d.getHours() >= 12);
+    return {
+      pct: v.pct, goal: v.goal == null ? null : v.goal, prev,
+      delta: prev == null ? null : v.pct - prev,
+      stalled: v.pct < 100 && prev != null && v.pct <= prev,
+      streak: prev != null && v.pct === prev ? streak : 1,
+      gap: (v.goal != null && v.pct < v.goal && late) ? v.goal - v.pct : 0
+    };
+  }
+
+  /* מלאי: מתי עודכן לאחרונה (לא פחות מתחילת המעקב) */
+  const stockRef = (s, floor) => Math.max(s.stockAt || 0, ...(s.materials || []).map(m => m.at || 0), floor || 0);
+  const stockLast = s => Math.max(s.stockAt || 0, ...(s.materials || []).map(m => m.at || 0));
+
   /* חריגים מחושבים מהמצב עצמו (לא נשמרים), ו"מאז מתי" נשמר ב-st.since */
   function deriveExceptions(st, now){
     const out = [];
-    const today = dstr(now), hour = new Date(now).getHours();
+    const today = dstr(now), hour = new Date(now).getHours(), wk = weekKey(now);
     const since = st.since || {};
     const add = (e)=>{
       e.sinceTs = e.fixedTs || since[e.key] || now;
@@ -588,50 +666,77 @@
       e.level = e.kind === "checkin"
         ? (hour >= CFG.checkinEsc ? 3 : 1)
         : (ageH >= CFG.escL3h ? 3 : ageH >= CFG.escL2h ? 2 : 1);
+      if(e.minLevel) e.level = Math.max(e.level, e.minLevel);
       out.push(e);
     };
+    const ownerOf = s => (s.owner && s.owner.name) || "—";
 
     st.sites.forEach(s=>{
       if(!s.active) return;
-      const ow = (s.owner && s.owner.name) || "—";
+      const ow = ownerOf(s);
       const role = (s.owner && s.owner.role) || "";
       const base = { siteId: s.id, siteName: s.name, owner: ow, ownerRole: role, senior: s.senior || "" };
       if(ow === "לא משויך"){
         add({ ...base, key: s.id + ":noowner", kind: "noowner", sev: "crit",
-          title: "אתר פעיל בלי מנהל משויך", detail: "אין אחראי על הדיווח, החומרים והבקרה באתר",
+          title: "אתר פעיל בלי מנהל משויך", detail: "אין אחראי על הדוח השבועי, החומרים והבקרה באתר",
           waitingOn: "הנהלה — לשייך מנהל פרויקט" });
       }
-      const pendingReq = st.requests.find(r => r.siteId === s.id && r.status === "pending");
-      const blockedReq = st.requests.find(r => r.siteId === s.id && r.status === "blocked");
+      const w = s.weekly, cur = curWeekly(s, now);
 
-      const short = (s.materials || []).find(m => m.onSite < m.need);
-      if(short){
-        add({ ...base, key: s.id + ":material", kind: "material",
-          sev: short.blocksTomorrow ? "crit" : "warn",
-          title: "חוסר " + (short.need - short.onSite) + " " + short.unit + " " + short.item,
-          detail: short.blocksTomorrow ? "יעכב את העבודה מחר בבוקר" : "אין השפעה מיידית על הלו״ז",
-          waitingOn: pendingReq ? "מחסן — ממתין לאישור ניפוק" : blockedReq ? "יועץ — אישור על השחור" : "רכש — אין בקשה פתוחה" });
+      /* עמודות: ליווי שלד / קומפלטים / השלמות / ספרינקלרים / חניונים */
+      TRACKS.forEach(t=>{
+        const ts = trackState(s, t.k, now);
+        if(!ts || ts.pct >= 100 || !(ts.stalled || ts.gap)) return;
+        const parts = [];
+        if(ts.stalled) parts.push(ts.streak >= 2 ? "ללא שינוי " + ts.streak + " דוחות רצופים" : "כמו בשבוע שעבר (" + ts.prev + "%)");
+        if(ts.gap) parts.push("פער של " + ts.gap + " נק׳ מיעד השבוע (" + ts.goal + "%)");
+        add({ ...base, key: s.id + ":track:" + t.k, kind: "track", sub: ts.stalled ? "stalled" : "gap",
+          sev: (ts.streak >= 3 || ts.gap >= 30) ? "crit" : "warn",
+          title: t.label + (ts.stalled ? " לא התקדם" : " מתחת ליעד") + " — " + ts.pct + "%",
+          detail: parts.join(" · "),
+          waitingOn: "מנהל הפרויקט — הסבר ותוכנית החזרה", fixedTs: cur.at });
+      });
+
+      /* כ"א בשטח */
+      if(cur && cur.workers != null){
+        const hist = weekHistory(s, now), pw = hist.length ? hist[hist.length - 1].workers : null;
+        if(cur.workers === 0 && trackOpen(cur)){
+          add({ ...base, key: s.id + ":workers", kind: "workers", sev: "crit",
+            title: "אין כוח אדם בשטח", detail: "יש מסלולים פתוחים בדוח השבועי, וכ״א מדווח 0",
+            waitingOn: "מנהל הפרויקט — איוש הצוות", fixedTs: cur.at });
+        } else if(pw != null && pw >= 5 && cur.workers <= pw * CFG.workerDrop){
+          add({ ...base, key: s.id + ":workers", kind: "workers", sev: "warn",
+            title: "ירידה בכוח אדם: " + pw + " ← " + cur.workers, detail: "ירידה חדה ביחס לדוח הקודם",
+            waitingOn: "מנהל הפרויקט — הסבר ותוספת כ״א", fixedTs: cur.at });
+        }
       }
-      if(s.stages.pressure === "failed"){
-        add({ ...base, key: s.id + ":pressure", kind: "pressure", sev: "crit",
-          title: "בדיקת לחץ נכשלה", detail: "שלב הלבן חסום עד לתיקון וצילום בדיקה תקינה",
-          waitingOn: "מנהל עבודה — תיקון וצילום חוזר" });
+
+      /* הערות / חריגים מהדוח השבועי */
+      if(w && w.issue && hasText(w.note) && !w.issueResolvedAt){
+        add({ ...base, key: s.id + ":wissue", kind: "wissue", sev: "warn",
+          title: "חריג בדוח השבועי: " + w.note.trim(),
+          detail: "דווח ע״י " + (w.by || "—") + " ב-" + dmy(w.at) + " " + hhmm(w.at),
+          waitingOn: "מנהל אחראי — טיפול וסימון 'טופל'", fixedTs: w.at });
       }
-      if(s.stages.black === "active" && !s.blackConsultant){
-        add({ ...base, key: s.id + ":consultant", kind: "consultant", sev: "warn",
-          title: "ממתין לאישור יועץ אינסטלציה", detail: "שלב שחור בעבודה — בקשות ניפוק חסומות עד האישור",
-          waitingOn: "יועץ אינסטלציה" });
+      /* בטיחות — עולה מיד לדרג 2 */
+      if(w && hasText(w.safety) && !w.safetyResolvedAt){
+        add({ ...base, key: s.id + ":safety", kind: "safety", sev: "crit", minLevel: 2,
+          title: "בטיחות: " + w.safety.trim(),
+          detail: "דווח ע״י " + (w.by || "—") + " ב-" + dmy(w.at) + " " + hhmm(w.at),
+          waitingOn: "מנהל הפרויקט — טיפול ותיעוד", fixedTs: w.at });
       }
-      if(s.stages.pressure === "pending" && s.stages.black === "done"){
-        add({ ...base, key: s.id + ":presready", kind: "presready", sev: "warn",
-          title: "מוכן לבדיקת לחץ — טרם בוצעה", detail: "השחור הושלם; בדיקת הלחץ מעכבת את מעבר ללבן",
-          waitingOn: "מנהל עבודה — לבצע בדיקת לחץ" });
-      }
-      if(s.schedule === "behind"){
-        add({ ...base, key: s.id + ":schedule", kind: "schedule", sev: "warn",
-          title: "איחור מול לו״ז", detail: "הקצב בפועל נמוך מהתכנון",
-          waitingOn: "מנהל הפרויקט — תוכנית החזרה לקצב" });
-      }
+
+      /* מלאי באתר מול המינימום שהמנהל הגדיר */
+      (s.materials || []).forEach(m=>{
+        if(!(m.onSite < m.need)) return;
+        const pendingReq = st.requests.find(r => r.siteId === s.id && r.item === m.item && r.status === "pending");
+        add({ ...base, key: s.id + ":material:" + m.item, kind: "material",
+          sev: m.blocksTomorrow ? "crit" : "warn",
+          title: "חוסר " + (m.need - m.onSite) + " " + m.unit + " " + m.item,
+          detail: "במלאי " + m.onSite + " מתוך מינימום " + m.need + (m.blocksTomorrow ? " · יעכב את העבודה" : ""),
+          waitingOn: pendingReq ? "מחסן — ממתין לאישור ניפוק" : "רכש — אין בקשה פתוחה" });
+      });
+
       if(s.checkin && s.checkin.status === "issue" && !s.checkin.resolvedAt){
         add({ ...base, key: s.id + ":reported", kind: "reported", sev: "warn",
           title: "חריגה מהשטח: " + s.checkin.note,
@@ -640,26 +745,43 @@
       }
     });
 
-    // דיווח יומי חסר — מקובץ לפי מנהל כדי לא להציף
+    /* חריגים מקובצים לפי מנהל (כדי לא להציף) */
+    const grouped = (pick, mk)=>{
+      const g = {};
+      st.sites.forEach(s=>{ if(s.active && pick(s)) (g[(s.owner && s.owner.name) || "—"] = g[(s.owner && s.owner.name) || "—"] || []).push(s); });
+      Object.keys(g).forEach(name => mk(name, g[name]));
+    };
+    const names = arr => arr.slice(0, 4).map(x => x.name).join(" · ") + (arr.length > 4 ? " · ועוד " + (arr.length - 4) : "");
+    const roleOf = arr => (arr[0].owner && arr[0].owner.role) || "";
+
     if(isWorkday(now) && hour >= CFG.checkinBy){
-      const missing = {};
-      st.sites.forEach(s=>{
-        if(!s.active) return;
-        if(!(s.checkin && s.checkin.date === today)){
-          const n = (s.owner && s.owner.name) || "—";
-          (missing[n] = missing[n] || []).push(s);
-        }
-      });
       const deadline = new Date(now); deadline.setHours(CFG.checkinBy, 0, 0, 0);
-      Object.keys(missing).forEach(name=>{
-        const arr = missing[name];
+      grouped(s => !(s.checkin && s.checkin.date === today), (name, arr)=>
         add({ key: "mgr:" + name + ":checkin:" + today, kind: "checkin",
           sev: hour >= CFG.checkinEsc ? "crit" : "warn",
-          siteId: arr[0].id, siteName: null, owner: name, ownerRole: (arr[0].owner && arr[0].owner.role) || "",
+          siteId: arr[0].id, siteIds: arr.map(x => x.id), siteName: null, owner: name, ownerRole: roleOf(arr),
           title: arr.length + (arr.length === 1 ? " אתר בלי דיווח יומי" : " אתרים בלי דיווח יומי"),
-          detail: arr.slice(0, 4).map(x => x.name).join(" · ") + (arr.length > 4 ? " · ועוד " + (arr.length - 4) : ""),
-          waitingOn: "דיווח יומי מהשטח", fixedTs: deadline.getTime() });
-      });
+          detail: names(arr), waitingOn: "דיווח יומי מהשטח", fixedTs: deadline.getTime() }));
+    }
+
+    /* דוח שבועי חסר: מיום א׳ 12:00 ועד ההגשה */
+    const weeklyDue = new Date(weekStart(now)); weeklyDue.setHours(CFG.weeklyBy, 0, 0, 0);
+    if(isWorkday(now) && now >= weeklyDue.getTime()){
+      grouped(s => !curWeekly(s, now), (name, arr)=>
+        add({ key: "mgr:" + name + ":weekly:" + wk, kind: "weekly", sev: "warn",
+          siteId: arr[0].id, siteIds: arr.map(x => x.id), siteName: null, owner: name, ownerRole: roleOf(arr),
+          title: arr.length + (arr.length === 1 ? " אתר בלי דוח שבועי" : " אתרים בלי דוח שבועי"),
+          detail: names(arr), waitingOn: "דוח תוכנית עבודה שבועית — שטח ← הגש דוח שבועי", fixedTs: weeklyDue.getTime() }));
+    }
+
+    /* מלאי שלא עודכן */
+    if(isWorkday(now)){
+      grouped(s => now - stockRef(s, st.trackStart) >= CFG.stockDays * DAY, (name, arr)=>
+        add({ key: "mgr:" + name + ":stock", kind: "stock", sev: "warn",
+          siteId: arr[0].id, siteIds: arr.map(x => x.id), siteName: null, owner: name, ownerRole: roleOf(arr),
+          title: arr.length + (arr.length === 1 ? " אתר בלי עדכון מלאי" : " אתרים בלי עדכון מלאי"),
+          detail: names(arr) + " · מעל " + CFG.stockDays + " ימים", waitingOn: "עדכון מלאי בלשונית מחסן",
+          fixedTs: Math.min(...arr.map(x => stockRef(x, st.trackStart) + CFG.stockDays * DAY)) }));
     }
 
     const sevRank = { crit: 0, warn: 1 };
@@ -667,12 +789,24 @@
     return out;
   }
 
+  const exOfSite = (exceptions, id) => exceptions.filter(e => e.siteIds ? e.siteIds.includes(id) : e.siteId === id);
+
+  /* סטטוס אתר לפי החריגים שלו */
+  function siteStatus(s, exs, now){
+    if(!s.active) return "inactive";
+    const mine = exOfSite(exs, s.id);
+    if(mine.some(e => e.sev === "crit")) return "crit";
+    if(mine.length) return "warn";
+    return curWeekly(s, now) ? "ok" : "nodata";
+  }
+  const STATUS_TEXT = { ok:"בקצב", warn:"דורש מעקב", crit:"בסיכון", inactive:"לא פעיל", nodata:"אין דוח השבוע" };
+
   function scorecards(st, exceptions, now){
     const hour = new Date(now).getHours();
     const startDs = dstr(st.trackStart || now);
     const days = [];
     for(let i = 0; i < 7; i++){
-      const ts = now - i * 24 * HOUR;
+      const ts = now - i * DAY;
       if(!isWorkday(ts)) continue;
       const ds = dstr(ts);
       if(ds < startDs) continue;
@@ -684,10 +818,8 @@
     return names.map(name=>{
       const sites = st.sites.filter(s => s.active && ((s.owner && s.owner.name) || "—") === name);
       const ex = exceptions.filter(e => e.owner === name);
-      const units = sites.flatMap(s => s.units || []);
-      const items = units.flatMap(u => u.checklist || []);
-      const done = items.filter(c => c.done).length;
-      const withPhoto = units.filter(u => (u.photos || []).length > 0).length;
+      const reps = sites.map(s => curWeekly(s, now)).filter(Boolean);
+      const pcts = reps.flatMap(w => TRACKS.map(t => w.tracks && w.tracks[t.k]).filter(Boolean).map(v => v.pct));
       let checkin = null;
       if(days.length){
         let hit = 0;
@@ -700,10 +832,14 @@
         name, role: (sites[0].owner && sites[0].owner.role) || "", sites: sites.length,
         open: ex.length, crit, l3,
         avgAgeH: ex.length ? Math.round(ex.reduce((a, e) => a + e.ageMs, 0) / ex.length / HOUR) : 0,
-        checklist: items.length ? Math.round(100 * done / items.length) : null,
-        photos: units.length ? Math.round(100 * withPhoto / units.length) : null,
+        weekly: reps.length,
+        progress: pcts.length ? Math.round(pcts.reduce((a, v) => a + v, 0) / pcts.length) : null,
+        stalled: ex.filter(e => e.kind === "track").length,
+        workers: reps.length ? reps.reduce((a, w) => a + (w.workers || 0), 0) : null,
+        safety: ex.filter(e => e.kind === "safety").length,
+        stockFresh: sites.filter(s => { const l = stockLast(s); return l > 0 && now - l < CFG.stockDays * DAY; }).length,
+        shortages: ex.filter(e => e.kind === "material").length,
         checkin,
-        pressureFail: sites.filter(s => s.stages.pressure === "failed").length,
         health: (l3 > 0 || crit >= 2) ? "crit" : ex.length ? "warn" : "ok"
       };
     }).sort((a, b) => rank[a.health] - rank[b.health] || b.l3 - a.l3 || b.open - a.open);
@@ -712,21 +848,23 @@
   function tone(kind, v){
     if(v == null) return "";
     if(kind === "age") return v >= 24 ? "crit" : v >= 4 ? "warn" : "";
-    if(kind === "pct") return v < 40 ? "crit" : v < 70 ? "warn" : "";
     if(kind === "ci")  return v < 50 ? "crit" : v < 80 ? "warn" : "";
     if(kind === "cnt") return v > 0 ? "crit" : "";
+    if(kind === "cntw") return v > 0 ? "warn" : "";
     return "";
   }
 
   function buildReport(st, exceptions, cards, now){
     const lines = [];
-    const active = st.sites.filter(s => s.active).length;
+    const active = st.sites.filter(s => s.active);
     const crit = exceptions.filter(e => e.sev === "crit").length;
     const l3 = exceptions.filter(e => e.level === 3).length;
+    const subm = active.filter(s => curWeekly(s, now)).length;
     lines.push("📋 דוח בקרה — ט.ש. מי רון");
-    lines.push(dmy(now) + "/" + new Date(now).getFullYear() + " · " + hhmm(now));
+    lines.push(dmy(now) + "/" + new Date(now).getFullYear() + " · " + hhmm(now) + " · שבוע " + weekLabel(now));
     lines.push("");
-    lines.push("אתרים פעילים: " + active + " · חריגים פתוחים: " + exceptions.length + " (אדומים: " + crit + ") · בדרג בעלים: " + l3);
+    lines.push("אתרים פעילים: " + active.length + " · דוח שבועי הוגש: " + subm + "/" + active.length);
+    lines.push("חריגים פתוחים: " + exceptions.length + " (אדומים: " + crit + ") · בדרג בעלים: " + l3);
     if(exceptions.length){
       lines.push("");
       lines.push("— חריגים בולטים —");
@@ -737,9 +875,11 @@
     lines.push("— כרטיסי מנהלים —");
     cards.forEach(c =>
       lines.push(c.name + " (" + c.sites + " אתרים): חריגים " + c.open + (c.open ? " (גיל ממוצע " + c.avgAgeH + " שע׳)" : "") +
-        " · צ׳קליסט " + (c.checklist == null ? "—" : c.checklist + "%") +
-        " · תמונות " + (c.photos == null ? "—" : c.photos + "%") +
-        " · דיווח יומי " + (c.checkin == null ? "—" : c.checkin + "%")));
+        " · דוח שבועי " + c.weekly + "/" + c.sites +
+        " · התקדמות " + (c.progress == null ? "—" : c.progress + "%") +
+        " · מסלולים בעייתיים " + c.stalled +
+        " · כ״א " + (c.workers == null ? "—" : c.workers) +
+        " · מלאי עודכן " + c.stockFresh + "/" + c.sites));
     return lines.join("\n");
   }
 
@@ -851,6 +991,7 @@
     const [toast, setToast] = useState(null);
     const [now, setNow] = useState(Date.now());
     const [ctl, setCtl] = useState({ tab:"ex", mgr:"all" });
+    const [whView, setWhView] = useState("stock");
     const [idSheet, setIdSheet] = useState(false);
     const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"דוד" }; });
     const who = me.name;
@@ -941,8 +1082,8 @@
     const sites = st.sites;
     const bySite = useCallback((id)=> sites.find(s=>s.id===id), [sites]);
 
-    const exceptions = useMemo(()=> deriveExceptions(st, now), [st.sites, st.requests, st.since, now]);
-    const cards = useMemo(()=> scorecards(st, exceptions, now), [st.sites, exceptions, now]);
+    const exceptions = useMemo(()=> deriveExceptions(st, now), [st.sites, st.requests, st.since, st.trackStart, now]);
+    const cards = useMemo(()=> scorecards(st, exceptions, now), [st.sites, st.trackStart, exceptions, now]);
     // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
     useEffect(()=>{
       if(cloudCode && !(cloud.loaded.sites && cloud.loaded.since)) return;
@@ -1085,14 +1226,76 @@
       });
       notify(status === "issue" ? "החריגה נשלחה לאחראי ולמרכז הבקרה" : "הדיווח היומי נרשם");
     }
-    function resolveReported(siteId){
+    function resolveException(e){
       update(d=>{
-        const s = d.sites.find(x=>x.id===siteId);
-        if(s.checkin) s.checkin.resolvedAt = Date.now();
-        pushLog(d, who, "סימן חריגה מהשטח כטופלה", siteId);
+        const s = d.sites.find(x=>x.id===e.siteId); if(!s) return d;
+        const ts = Date.now();
+        if(e.kind === "reported" && s.checkin) s.checkin.resolvedAt = ts;
+        else if(e.kind === "wissue" && s.weekly) s.weekly.issueResolvedAt = ts;
+        else if(e.kind === "safety" && s.weekly) s.weekly.safetyResolvedAt = ts;
+        pushLog(d, who, "סימן כטופל: " + e.title, e.siteId);
         return d;
       });
-      notify("החריגה סומנה כטופלה");
+      notify("סומן כטופל");
+    }
+    function submitWeekly(siteId, data){
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId); if(!s) return d;
+        const ts = Date.now(), wk = weekKey(ts), same = s.weekly && s.weekly.week === wk;
+        if(s.weekly && !same){
+          s.weeklyHist = s.weeklyHist || [];
+          s.weeklyHist.push(compactWeekly(s.weekly));
+          if(s.weeklyHist.length > 8) s.weeklyHist.shift();
+        }
+        const o = same ? s.weekly : null;
+        s.weekly = {
+          week: wk, at: ts, by: who, foreman: data.foreman, lead: data.lead, tracks: data.tracks, workers: data.workers,
+          note: data.note, issue: data.issue, issueResolvedAt: (o && o.note === data.note) ? (o.issueResolvedAt || null) : null,
+          safety: data.safety, safetyResolvedAt: (o && o.safety === data.safety) ? (o.safetyResolvedAt || null) : null
+        };
+        const ps = TRACKS.filter(t => data.tracks[t.k]).map(t => t.label + " " + data.tracks[t.k].pct + "%").join(", ");
+        pushLog(d, who, (same ? "עדכן" : "הגיש") + " דוח שבועי · " + (ps || "ללא מסלולים") + " · כ״א " + data.workers, siteId);
+        return d;
+      });
+      setNav({ screen:"field.home" });
+      notify("הדוח השבועי נשלח למרכז הבקרה");
+    }
+    function stockSave(siteId, orig, patch){
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId); if(!s) return d;
+        s.materials = s.materials || [];
+        let m = orig != null ? s.materials.find(x=>x.item===orig) : null;
+        if(!m){
+          m = s.materials.find(x=>x.item===patch.item);
+          if(!m){ m = { item:patch.item, need:0, onSite:0, unit:"יח׳", blocksTomorrow:false }; s.materials.push(m); }
+        }
+        const before = m.at ? m.onSite : null;
+        if(patch.item && patch.item !== m.item && !s.materials.some(x=>x!==m && x.item===patch.item)) m.item = patch.item;
+        ["onSite","unit","need","blocksTomorrow"].forEach(k => { if(patch[k] !== undefined) m[k] = patch[k]; });
+        m.at = Date.now(); m.by = who;
+        s.stockAt = m.at; s.stockBy = who;
+        pushLog(d, who, "עדכן מלאי: " + m.item + " · " + m.onSite + " " + m.unit + (before != null && before !== m.onSite ? " (היה " + before + ")" : ""), siteId);
+        return d;
+      });
+    }
+    function stockDelete(siteId, item){
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId); if(!s) return d;
+        s.materials = (s.materials || []).filter(m => m.item !== item);
+        s.stockAt = Date.now(); s.stockBy = who;
+        pushLog(d, who, "הסיר פריט מהמלאי: " + item, siteId);
+        return d;
+      });
+      notify("הפריט הוסר מהמלאי");
+    }
+    function stockConfirm(siteId){
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId); if(!s) return d;
+        s.stockAt = Date.now(); s.stockBy = who;
+        pushLog(d, who, "אישר שהמלאי מעודכן (" + (s.materials || []).length + " פריטים)", siteId);
+        return d;
+      });
+      notify("המלאי סומן כמעודכן להיום");
     }
     function nudge(e){
       update(d=>{
@@ -1103,16 +1306,6 @@
       });
       notify("נרשמה דחיפה ל" + e.owner + " · Push אמיתי יופעל עם חיבור המסד המשותף");
     }
-    function approveConsultant(siteId){
-      update(d=>{
-        const s = d.sites.find(x=>x.id===siteId); s.blackConsultant = true;
-        pushLog(d, who, "רשם אישור יועץ אינסטלציה על השחור", siteId);
-        const r = d.requests.find(x=>x.siteId===siteId && x.status==="blocked"); if(r) r.status = "pending";
-        return d;
-      });
-      notify("אישור יועץ נרשם · בקשת הניפוק שוחררה");
-    }
-
     let body;
     const blocked = cloudCode && (!cloud.ready || cloud.empty);
     if(blocked)
@@ -1129,13 +1322,19 @@
           </div></div>`;
     else if(nav.screen === "ctl.home")
       body = html`<${Control} st=${st} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctl} setCtl=${setCtl}
-        onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveReported} notify=${notify} />`;
+        onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} />`;
     else if(nav.screen === "ctl.site")
-      body = html`<${SiteDetail} site=${bySite(nav.id)} ex=${exceptions.filter(e=>e.siteId===nav.id && e.kind!=="checkin")}
+      body = html`<${SiteDetail} site=${bySite(nav.id)} st=${st} now=${now} ex=${exOfSite(exceptions, nav.id)}
         log=${(st.log||[]).filter(l=>l.siteId===nav.id).slice(0,8)}
-        onBack=${()=>setNav({screen:"ctl.home"})} onApproveConsultant=${approveConsultant} notify=${notify} />`;
+        onBack=${()=>setNav({screen:"ctl.home"})} notify=${notify} />`;
     else if(nav.screen === "field.home")
-      body = html`<${FieldHome} sites=${sites} now=${now} onCheckin=${checkin} onOpen=${(sid,uid)=>setNav({screen:"field.report", sid, uid})} onAddUnit=${addUnit} />`;
+      body = html`<${FieldHome} sites=${sites} now=${now} onCheckin=${checkin} onOpen=${(sid,uid)=>setNav({screen:"field.report", sid, uid})} onAddUnit=${addUnit} onWeekly=${sid=>setNav({screen:"field.weekly", sid})} />`;
+    else if(nav.screen === "field.weekly"){
+      const wsite = bySite(nav.sid);
+      body = wsite
+        ? html`<${WeeklyForm} key=${wsite.id} site=${wsite} now=${now} onSubmit=${submitWeekly} onBack=${()=>setNav({screen:"field.home"})} />`
+        : html`<div class="screen narrow"><div class="empty">האתר לא נמצא</div></div>`;
+    }
     else if(nav.screen === "field.report"){
       const rsite = bySite(nav.sid);
       const runit = rsite && rsite.units.find(u=>u.id===nav.uid);
@@ -1147,7 +1346,9 @@
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
     else if(nav.screen === "wh.home")
-      body = html`<${WarehouseHome} st=${st} onApprove=${approveRequest} onShortage=${markShortage} onTinder=${()=>setNav({screen:"wh.tinder"})} />`;
+      body = html`<${WarehouseHome} st=${st} now=${now} who=${who} view=${whView} setView=${setWhView}
+        onApprove=${approveRequest} onShortage=${markShortage} onTinder=${()=>setNav({screen:"wh.tinder"})}
+        onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
     else if(nav.screen === "wh.tinder")
       body = html`<${Tinder} transfers=${st.transfers} onAccept=${acceptTransfer} onSkip=${skipTransfer} onBack=${()=>setNav({screen:"wh.home"})} />`;
 
@@ -1201,8 +1402,21 @@
       </div>`;
   }
 
-  function Tile({ val, label, kind }){
-    return html`<div class=${"mt " + tone(kind, val)}><b>${val == null ? "—" : val}</b><span>${label}</span></div>`;
+  function Tile({ val, label, kind, cls }){
+    return html`<div class=${"mt " + (cls != null ? cls : tone(kind, val))}><b>${val == null ? "—" : val}</b><span>${label}</span></div>`;
+  }
+
+  /* מלאי של אתר: מתי עודכן ועל ידי מי */
+  function stockInfo(s, st, now){
+    const mats = s.materials || [];
+    const last = stockLast(s);
+    let by = s.stockBy || "";
+    const latest = mats.filter(m => m.at).sort((a, b) => b.at - a.at)[0];
+    if(latest && latest.at >= (s.stockAt || 0)) by = latest.by || by;
+    return {
+      last, by, fresh: last > 0 && now - last < CFG.stockDays * DAY,
+      short: mats.filter(m => m.onSite < m.need).length, count: mats.length
+    };
   }
 
   function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify }){
@@ -1211,11 +1425,11 @@
     const list = exceptions.filter(e => mgr === "all" || e.owner === mgr);
     const crit = exceptions.filter(e => e.sev === "crit").length;
     const l3 = exceptions.filter(e => e.level === 3).length;
-    const afterBy = isWorkday(now) && new Date(now).getHours() >= CFG.checkinBy;
-    const today = dstr(now);
-    const missing = afterBy ? st.sites.filter(s => s.active && !(s.checkin && s.checkin.date === today)).length : null;
+    const active = st.sites.filter(s => s.active);
+    const subm = active.filter(s => curWeekly(s, now)).length;
     const nudges = st.nudges || {};
     const siteName = id => { const s = st.sites.find(x => x.id === id); return s ? s.name : ""; };
+    const T = (k, label) => html`<button class=${"chip "+(tab===k?"on":"")} onClick=${()=>setCtl({...ctl, tab:k})}>${label}</button>`;
 
     async function shareRep(){
       try{ if(navigator.share){ await navigator.share({ text: rep }); return; } }
@@ -1227,7 +1441,7 @@
     return html`
       <div class="screen">
         <div class="shead rowbet">
-          <div><h2>מרכז בקרה</h2><span class="sub">${st.sites.filter(s=>s.active).length} אתרים פעילים · עדכון ${hhmm(now)}</span></div>
+          <div><h2>מרכז בקרה</h2><span class="sub">${active.length} אתרים פעילים · שבוע ${weekLabel(now)} · עדכון ${hhmm(now)}</span></div>
           <button class="btn" style=${{flex:"none", padding:"8px 14px"}} onClick=${()=>setRep(buildReport(st, exceptions, cards, now))}>📋 דוח</button>
         </div>
 
@@ -1235,19 +1449,21 @@
           <div class=${"kpi "+(exceptions.length?"warn":"")}><b>${exceptions.length}</b><span>חריגים פתוחים</span></div>
           <div class=${"kpi "+(crit?"crit":"")}><b>${crit}</b><span>אדומים</span></div>
           <div class=${"kpi "+(l3?"crit":"")}><b>${l3}</b><span>דרג בעלים</span></div>
-          <div class=${"kpi "+(missing?"warn":"")}><b>${missing == null ? "—" : missing}</b><span>בלי דיווח יומי</span></div>
+          <div class=${"kpi "+(subm < active.length ? "warn" : "")}><b>${subm}/${active.length}</b><span>דוח שבועי הוגש</span></div>
         </div>
 
         <div class="chips">
-          <button class=${"chip "+(tab==="ex"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"ex"})}>חריגים (${list.length})</button>
-          <button class=${"chip "+(tab==="mgr"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"mgr"})}>מנהלים</button>
-          <button class=${"chip "+(tab==="sites"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"sites"})}>אתרים</button>
-          <button class=${"chip "+(tab==="log"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"log"})}>יומן פעולות</button>
+          ${T("ex", "חריגים (" + list.length + ")")}
+          ${T("mgr", "מנהלים")}
+          ${T("plan", "תוכנית שבועית")}
+          ${T("stock", "מלאי")}
+          ${T("log", "יומן פעולות")}
         </div>
 
+        ${mgr !== "all" && tab !== "mgr" && tab !== "log" && html`<div class="alert warn" style=${{marginBottom:10}}><span class="b"></span>מסונן לפי מנהל: ${mgr}
+          <button class="chip" style=${{marginInlineStart:"auto"}} onClick=${()=>setCtl({...ctl, mgr:"all"})}>נקה סינון</button></div>`}
+
         ${tab === "ex" && html`
-          ${mgr !== "all" && html`<div class="alert warn" style=${{marginBottom:10}}><span class="b"></span>מסונן לפי מנהל: ${mgr}
-            <button class="chip" style=${{marginInlineStart:"auto"}} onClick=${()=>setCtl({...ctl, mgr:"all"})}>נקה סינון</button></div>`}
           <div class="exlist">
             ${list.map(e => {
               const n = nudges[e.key];
@@ -1262,15 +1478,15 @@
                   <div class="meta">אחראי: <b>${e.owner}</b>${e.ownerRole ? " · " + e.ownerRole : ""}${e.senior ? " · מנהל בכיר: " + e.senior : ""}<br/>ממתין ל: ${e.waitingOn} · פתוח <b>${ageText(e.ageMs)}</b> · ${LEVEL_TEXT[e.level]}</div>
                   ${n && html`<div class="meta">נדחף ע״י ${n.by} לפני ${ageText(now - n.at)}</div>`}
                   <div class="btnrow">
-                    <button class="btn" onClick=${()=>onOpen(e.siteId)}>פתח אתר</button>
-                    ${e.kind === "reported" && html`<button class="btn ok" onClick=${()=>onResolve(e.siteId)}>טופל</button>`}
+                    <button class="btn" onClick=${()=>onOpen(e.siteId)}>${e.siteIds && e.siteIds.length > 1 ? "פתח אתר ראשון" : "פתח אתר"}</button>
+                    ${(e.kind === "reported" || e.kind === "wissue" || e.kind === "safety") && html`<button class="btn ok" onClick=${()=>onResolve(e)}>טופל</button>`}
                     <button class="btn pri" onClick=${()=>onNudge(e)}>דחוף אחראי</button>
                   </div>
                 </div>`;
             })}
             ${list.length === 0 && html`<div class="alert empty"><span class="b"></span>אין חריגים פתוחים${mgr!=="all" ? " אצל "+mgr : ""} — הכל בקצב</div>`}
           </div>
-          <div class="hint">חריג עובר דרג אחרי ${CFG.escL2h} שעות (דרג 2) ו-${CFG.escL3h} שעות (דרג בעלים). דיווח יומי חסר עובר לדרג בעלים אחרי ${CFG.checkinEsc}:00.</div>
+          <div class="hint">נושאי הבקרה לפי טופס התוכנית השבועית: ליווי שלד · קומפלטים · השלמות · ספרינקלרים · חניונים · כ״א בשטח · הערות/חריגים · בטיחות, ובנוסף מלאי באתר. חריג עובר דרג אחרי ${CFG.escL2h} שעות (דרג 2) ו-${CFG.escL3h} שעות (דרג בעלים). נקודת בטיחות עולה מיד לדרג 2.</div>
         `}
 
         ${tab === "mgr" && html`
@@ -1282,22 +1498,27 @@
                   <span class=${"pill "+c.health}>${c.health==="crit"?"דורש התערבות":c.health==="warn"?"דורש מעקב":"תקין"}</span>
                 </div>
                 <div class="mgrid">
-                  <${Tile} val=${c.open} label="חריגים פתוחים" kind=${c.open ? "age" : ""} />
+                  <${Tile} val=${c.open} label="חריגים פתוחים" cls=${c.crit ? "crit" : c.open ? "warn" : ""} />
                   <${Tile} val=${c.open ? c.avgAgeH + " שע׳" : "—"} label="גיל ממוצע" kind=${c.open ? "age" : ""} />
-                  <${Tile} val=${c.pressureFail} label="בדיקות לחץ שנכשלו" kind="cnt" />
-                  <${Tile} val=${c.checklist == null ? null : c.checklist + "%"} label="צ׳קליסט הושלם" kind="" />
-                  <${Tile} val=${c.photos == null ? null : c.photos + "%"} label="יחידות עם תמונה" kind="" />
-                  <${Tile} val=${c.checkin == null ? null : c.checkin + "%"} label="דיווח יומי (7 ימים)" kind="" />
+                  <${Tile} val=${c.safety} label="חריגי בטיחות" kind="cnt" />
+                  <${Tile} val=${c.weekly + "/" + c.sites} label="דוח שבועי הוגש" cls=${c.weekly < c.sites ? "warn" : ""} />
+                  <${Tile} val=${c.progress == null ? null : c.progress + "%"} label="התקדמות ממוצעת" />
+                  <${Tile} val=${c.stalled} label="מסלולים תקועים / מתחת ליעד" kind="cntw" />
+                  <${Tile} val=${c.workers} label="כ״א בשטח השבוע" />
+                  <${Tile} val=${c.stockFresh + "/" + c.sites} label=${"מלאי עודכן (" + CFG.stockDays + " ימים)"} cls=${c.stockFresh < c.sites ? "warn" : ""} />
+                  <${Tile} val=${c.checkin == null ? null : c.checkin + "%"} label="דיווח יומי (7 ימים)" kind="ci" />
                 </div>
                 <div class="btnrow" style=${{marginTop:12}}>
                   <button class="btn" onClick=${()=>setCtl({tab:"ex", mgr:c.name})}>החריגים של ${c.name.split(" ")[0]}</button>
+                  <button class="btn" onClick=${()=>setCtl({tab:"plan", mgr:c.name})}>תוכנית שבועית</button>
                 </div>
               </div>`)}
           </div>
-          <div class="hint">אין ציון יחיד בכוונה — כל מדד מוצג לבד כדי שלא ינסו "לשחק" אותו. תמונות וצ׳קליסט נמדדים לצד חריגים ובדיקות שנכשלו.</div>
+          <div class="hint">אין ציון יחיד בכוונה — כל מדד מוצג לבד כדי שלא ינסו "לשחק" אותו. ההתקדמות נמדדת מדוחות התוכנית השבועית של המנהלים, לצד כ״א, בטיחות ומלאי.</div>
         `}
 
-        ${tab === "sites" && html`<${VPDash} sites=${st.sites} onOpen=${onOpen} embedded=${true} />`}
+        ${tab === "plan" && html`<${PlanMatrix} st=${st} now=${now} mgr=${mgr} cards=${cards} exceptions=${exceptions} onOpen=${onOpen} />`}
+        ${tab === "stock" && html`<${StockOverview} st=${st} now=${now} mgr=${mgr} cards=${cards} onOpen=${onOpen} />`}
 
         ${tab === "log" && html`
           <div class="card">
@@ -1305,7 +1526,7 @@
               <div class="logrow" key=${i}>
                 <span class="tm">${dmy(l.ts)} ${hhmm(l.ts)}</span> · <b>${l.who}</b>${l.siteId ? " · " + siteName(l.siteId) : ""}<br/>${l.text}
               </div>`)}
-            ${(st.log || []).length === 0 && html`<div class="empty" style=${{padding:"24px 0"}}>עדיין אין פעולות ביומן. כל סימון, תמונה, אישור ודחיפה יירשמו כאן עם שם המבצע.</div>`}
+            ${(st.log || []).length === 0 && html`<div class="empty" style=${{padding:"24px 0"}}>עדיין אין פעולות ביומן. כל דוח, עדכון מלאי, אישור ודחיפה יירשמו כאן עם שם המבצע.</div>`}
           </div>
         `}
 
@@ -1324,70 +1545,106 @@
       </div>`;
   }
 
-  function VPDash({ sites, onOpen, embedded }){
-    const [filter, setFilter] = useState("all");
-    const activeCount = sites.filter(s=>s.active).length;
-    const ranked = useMemo(()=>{
-      const rank = { crit:0, warn:1, ok:2, inactive:3 };
-      return sites.map(s=>({ s, status:siteStatus(s) }))
-        .filter(x=>{
-          if(filter==="off") return !x.s.active;
-          if(!x.s.active) return false;
-          if(filter==="mat") return siteLine(x.s).includes("חוסר");
-          if(filter==="sch") return x.s.schedule==="behind";
-          return true;
-        })
-        .sort((a,b)=> rank[a.status]-rank[b.status] || a.s.num-b.s.num);
-    }, [sites, filter]);
-    const alerts = useMemo(()=>alertsFor(sites), [sites]);
-
-    return html`
-      <div class=${embedded ? "" : "screen"}>
-        ${!embedded && html`<div class="shead">
-          <h2>מבט על</h2>
-          <span class="sub">${activeCount} אתרים פעילים · ${sites.length} בתיק · עודכן עכשיו</span>
-        </div>`}
-        <div class="chips">
-          <button class=${"chip "+(filter==="all"?"on":"")} onClick=${()=>setFilter("all")}>הכל</button>
-          <button class=${"chip "+(filter==="mat"?"on":"")} onClick=${()=>setFilter("mat")}>ממתין לחומר</button>
-          <button class=${"chip "+(filter==="sch"?"on":"")} onClick=${()=>setFilter("sch")}>באיחור לו״ז</button>
-          <button class=${"chip "+(filter==="off"?"on":"")} onClick=${()=>setFilter("off")}>לא פעיל</button>
-        </div>
-        <div class="grid">
-          ${ranked.map(({s,status})=> html`
-            <button key=${s.id} class=${"site "+(status==="crit"?"crit ":status==="inactive"?"inactive ":"")} onClick=${()=>onOpen(s.id)}>
-              <div class="r1">
-                <div><div class="nm">${s.name}</div><div class="bd">${s.contractor}</div></div>
-                <span class=${"dot "+status}></span>
-              </div>
-              <div>
-                <div class="stagebar">${stageFill(s).map((f,i)=> html`<i key=${i} class=${f}></i>`)}</div>
-                <div class="stagelbl"><span>שחור</span><span>לחץ</span><span>לבן</span></div>
-              </div>
-              <div class="st">${siteLine(s)}</div>
-            </button>`)}
-          ${ranked.length===0 && html`<div class="empty">אין אתרים בקטגוריה זו</div>`}
-        </div>
-
-        <div class="alerts">
-          <h4>התראות פתוחות</h4>
-          ${alerts.length === 0
-            ? html`<div class="alert empty"><span class="b"></span>אין התראות פעילות — כל האתרים בקצב</div>`
-            : alerts.map(a => html`<div key=${a.id} class=${"alert "+a.level}><span class="b"></span>${a.text}</div>`)}
-        </div>
-        <div class="hint">להבנת אתר בסיכון: הקשה על כרטיס ← הקשה על "פנייה לאחראי". שני קליקים למידע מלא, שלישי לפעולה.</div>
-        <div class="disc">שמות הפרויקטים והקבלנים — נתוני אמת מהתיק שלך. סטטוס שלבים, מלאי ואחראים — נתוני הדגמה עד לחיבור לדיווחי השטח. הפעולות נשמרות מקומית בדפדפן; ↺ מאפס.</div>
-      </div>`;
+  /* הטבלה המאוחדת = טופס "דוח תוכנית עבודה שבועית" של כל המנהלים */
+  function PlanCell({ s, k, now }){
+    const cur = curWeekly(s, now);
+    if(!cur) return html`<td class="pc na">·</td>`;
+    const v = cur.tracks && cur.tracks[k];
+    if(!v) return html`<td class="pc nr">—</td>`;
+    const ts = trackState(s, k, now);
+    const cls = v.pct >= 100 ? "done" : ts.stalled ? "bad" : ts.gap ? "warn" : "";
+    const dl = ts.delta;
+    return html`<td class=${"pc "+cls}><b>${v.pct}%</b>${dl ? html`<i>${dl > 0 ? "▲" : "▼"}${Math.abs(dl)}</i>` : null}${v.goal != null ? html`<small>יעד ${v.goal}</small>` : null}</td>`;
   }
 
-  function SiteDetail({ site, ex, log, onBack, onApproveConsultant, notify }){
+  function PlanMatrix({ st, now, mgr, cards, exceptions, onOpen }){
+    const names = cards.map(c => c.name).filter(n => mgr === "all" || n === mgr);
+    const rowsOf = n => st.sites.filter(s => s.active && ((s.owner && s.owner.name) || "—") === n).sort((a, b) => a.num - b.num);
+    const withText = st.sites.filter(s => {
+      if(!s.active || (mgr !== "all" && ((s.owner && s.owner.name) || "—") !== mgr)) return false;
+      const w = s.weekly; return w && (hasText(w.note) || hasText(w.safety));
+    });
+    return html`
+      <div class="pm">
+        <table class="plan">
+          <thead><tr>
+            <th class="nm">אתר</th>
+            ${TRACKS.map(t => html`<th key=${t.k} title=${t.label}>${t.short || t.label}</th>`)}
+            <th>כ״א</th>
+          </tr></thead>
+          <tbody>
+            ${names.map(n => {
+              const rows = rowsOf(n);
+              return html`
+                <tr class="grp" key=${"g"+n}><td colspan=${TRACKS.length + 2}>${n} · ${rows.length} אתרים · דוח שבועי ${rows.filter(s => curWeekly(s, now)).length}/${rows.length}</td></tr>
+                ${rows.map(s => {
+                  const cur = curWeekly(s, now);
+                  const flag = exOfSite(exceptions, s.id).some(e => e.kind === "safety" || e.kind === "wissue");
+                  return html`
+                    <tr key=${s.id} class="srow" onClick=${()=>onOpen(s.id)}>
+                      <td class="nm">${flag ? "⚠ " : ""}${s.name}<small>${s.contractor}</small></td>
+                      ${TRACKS.map(t => html`<${PlanCell} key=${t.k} s=${s} k=${t.k} now=${now} />`)}
+                      <td class=${"pc "+(cur ? (cur.workers === 0 && trackOpen(cur) ? "bad" : "") : "na")}>${cur ? (cur.workers == null ? "—" : html`<b>${cur.workers}</b>`) : "·"}</td>
+                    </tr>`;
+                })}`;
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div class="legend"><span class="lg bad"></span>תקוע / כ״א 0 <span class="lg warn"></span>מתחת ליעד השבוע <span class="lg done"></span>100% · — לא רלוונטי · · טרם הוגש דוח השבוע · ▲▼ שינוי מהדוח הקודם</div>
+
+      ${withText.length > 0 && html`
+        <div class="lbl" style=${{marginTop:18}}>הערות / חריגים ובטיחות מהדוחות</div>
+        <div style=${{display:"flex", flexDirection:"column", gap:8}}>
+          ${withText.map(s => html`
+            <button key=${s.id} class="wu" onClick=${()=>onOpen(s.id)}>
+              <span class="m"><b>${s.name}</b>
+                ${hasText(s.weekly.note) ? html`<span>${s.weekly.issue && !s.weekly.issueResolvedAt ? "⚠ " : ""}${s.weekly.note}</span>` : null}
+                ${hasText(s.weekly.safety) ? html`<span style=${{color: s.weekly.safetyResolvedAt ? "var(--ink-3)" : "var(--crit)"}}>🦺 ${s.weekly.safety}${s.weekly.safetyResolvedAt ? " · טופל" : ""}</span>` : null}
+              </span>
+            </button>`)}
+        </div>`}
+      <div class="hint">כך נראה הטופס השבועי של כל המנהלים במקום אחד. הקשה על אתר פותחת את הפירוט. מנהל מגיש את הדוח בלשונית שטח ← דוח שבועי.</div>`;
+  }
+
+  /* מלאי כל האתרים — בקרה על מה שהמנהלים הזינו */
+  function StockOverview({ st, now, mgr, cards, onOpen }){
+    const sites = st.sites.filter(s => s.active && (mgr === "all" || ((s.owner && s.owner.name) || "—") === mgr))
+      .map(s => ({ s, i: stockInfo(s, st, now) }))
+      .sort((a, b) => (b.i.short - a.i.short) || ((a.i.fresh ? 1 : 0) - (b.i.fresh ? 1 : 0)) || a.s.num - b.s.num);
+    const fresh = sites.filter(x => x.i.fresh).length, short = sites.reduce((a, x) => a + x.i.short, 0);
+    return html`
+      <div class="lbl">${fresh}/${sites.length} אתרים עודכנו ב-${CFG.stockDays} הימים האחרונים · ${short} חוסרים מול המינימום</div>
+      <div style=${{display:"flex", flexDirection:"column", gap:10, marginTop:6}}>
+        ${sites.map(({ s, i }) => html`
+          <div key=${s.id} class=${"card stk "+(i.short ? "short" : "")}>
+            <div class="rowbet" style=${{alignItems:"flex-start"}}>
+              <div><div style=${{fontWeight:700}}>${s.name}</div>
+                <div class="sub" style=${{fontFamily:"Heebo,sans-serif", fontSize:".72rem", color:"var(--ink-3)"}}>${s.owner ? s.owner.name : "—"} · ${s.contractor}</div></div>
+              <span class=${"pill "+(i.fresh ? "ok" : "warn")}>${i.last ? (i.fresh ? "עודכן " : "לא עודכן · ") + ageText(now - i.last) : "טרם עודכן"}</span>
+            </div>
+            ${i.last ? html`<div class="meta2">עדכון אחרון: ${dmy(i.last)} ${hhmm(i.last)}${i.by ? " · " + i.by : ""}</div>` : null}
+            ${(s.materials || []).map(m => html`
+              <div class=${"sr "+(m.onSite < m.need ? "bad" : "")} key=${m.item}>
+                <span class="n">${m.item}</span>
+                <span class="q"><b>${m.onSite}</b> ${m.unit}${m.need ? html`<small> / מינ׳ ${m.need}</small>` : null}</span>
+                ${!m.at ? html`<span class="tg">לא נספר</span>` : null}
+              </div>`)}
+            ${(s.materials || []).length === 0 && html`<div class="meta2">לא הוזן מלאי באתר</div>`}
+            <div class="btnrow" style=${{marginTop:8}}><button class="btn" onClick=${()=>onOpen(s.id)}>פתח אתר</button></div>
+          </div>`)}
+        ${sites.length === 0 && html`<div class="empty">אין אתרים להצגה</div>`}
+      </div>
+      <div class="hint">המנהלים מזינים מלאי בלשונית מחסן. "לא נספר" = כמות שעדיין לא אושרה על ידי מנהל הפרויקט (נתון הדגמה). חוסר = כמות במלאי נמוכה מהמינימום שהמנהל הגדיר.</div>`;
+  }
+
+  function SiteDetail({ site, ex, log, now, st, onBack, notify }){
     const [sheet, setSheet] = useState(false);
     if(!site) return null;
-    const status = siteStatus(site);
-    const short = (site.materials||[]).find(m => m.onSite < m.need);
-    const steps = [{k:"black"},{k:"pressure"},{k:"white"}].map(x=>({ k:x.k, state:site.stages[x.k] }));
-    const stateText = { done:"הושלם · אישור מצולם ✓", active:"בעבודה כעת", pending:"ממתין לביצוע", failed:"נכשל · דרוש תיקון וצילום חוזר", locked:"נעול" };
-    const mkClass = { done:"done", active:"active", pending:"active", failed:"fail", locked:"lock" };
+    const status = siteStatus(site, ex, now);
+    const own = ex.filter(e => !e.siteIds);
+    const cur = curWeekly(site, now);
+    const info = stockInfo(site, st, now);
 
     return html`
       <div class="screen narrow">
@@ -1400,36 +1657,42 @@
         </div>
 
         <div class="card" style=${{marginTop:14}}>
-          <div class="lbl">שלבי ביצוע</div>
-          <div class="tl">
-            ${steps.map(s=> html`
-              <div class="step" key=${s.k}>
-                <span class=${"mk "+(mkClass[s.state]||"lock")}></span>
-                <span class="tx"><b>${STAGES[s.k]}</b><span>${stateText[s.state]||s.state}</span></span>
-              </div>`)}
-          </div>
-          ${site.stages.black === "active" && !site.blackConsultant && html`
-            <button class="btn wide" style=${{marginTop:10}} onClick=${()=>onApproveConsultant(site.id)}>רשום אישור יועץ אינסטלציה על השחור</button>`}
+          <div class="lbl">תוכנית שבועית · ${weekLabel(now)}</div>
+          ${cur ? html`
+            <div class="sub2">הוגש ${dmy(cur.at)} ${hhmm(cur.at)} · ${cur.by}${cur.foreman ? " · מנהל עבודה: " + cur.foreman : ""}${cur.lead ? " · ראש צוות: " + cur.lead : ""}</div>
+            ${TRACKS.map(t => {
+              const v = cur.tracks && cur.tracks[t.k], ts = trackState(site, t.k, now);
+              return html`
+                <div class="trow" key=${t.k}>
+                  <span class="tn">${t.label}</span>
+                  ${v ? html`
+                    <span class="tb"><i style=${{width: v.pct + "%"}} class=${v.pct >= 100 ? "d" : ts.stalled ? "b" : ts.gap ? "w" : ""}></i></span>
+                    <span class="tv">${v.pct}%${ts.delta ? html` <small>${ts.delta > 0 ? "▲" : "▼"}${Math.abs(ts.delta)}</small>` : null}${v.goal != null ? html` <small>יעד ${v.goal}</small>` : null}</span>`
+                  : html`<span class="tv nr">לא רלוונטי</span>`}
+                </div>`;
+            })}
+            <div class="trow"><span class="tn">כ״א בשטח</span><span class="tb"></span><span class="tv">${cur.workers == null ? "—" : cur.workers}</span></div>
+            ${hasText(cur.note) ? html`<div class="val" style=${{marginTop:10, fontSize:".86rem"}}>${cur.issue && !cur.issueResolvedAt ? "⚠ " : ""}${cur.note}${cur.issueResolvedAt ? " · טופל" : ""}</div>` : null}
+            ${hasText(cur.safety) ? html`<div class=${"val "+(cur.safetyResolvedAt ? "" : "crit")} style=${{marginTop:6, fontSize:".86rem"}}>🦺 ${cur.safety}${cur.safetyResolvedAt ? " · טופל" : ""}</div>` : null}`
+          : html`<div class="val" style=${{color:"var(--warn)"}}>טרם הוגש דוח שבועי לשבוע הזה</div>`}
         </div>
 
-        ${short && html`
-          <div class="card">
-            <div class="lbl">מה עוצר</div>
-            <div class=${"val "+(short.blocksTomorrow?"crit":"")}>
-              חוסר ${short.need - short.onSite} ${short.unit} ${short.item}${short.blocksTomorrow ? " · יעכב את העבודה מחר בבוקר" : " · אין השפעה מיידית על הלו״ז"}
-            </div>
-          </div>`}
+        <div class="card">
+          <div class="lbl">מלאי באתר</div>
+          <div class="sub2">${info.last ? "עודכן " + dmy(info.last) + " " + hhmm(info.last) + (info.by ? " · " + info.by : "") : "טרם עודכן ע״י מנהל הפרויקט"}</div>
+          ${(site.materials || []).map(m => html`
+            <div class=${"sr "+(m.onSite < m.need ? "bad" : "")} key=${m.item}>
+              <span class="n">${m.item}</span>
+              <span class="q"><b>${m.onSite}</b> ${m.unit}${m.need ? html`<small> / מינ׳ ${m.need}</small>` : null}</span>
+              ${!m.at ? html`<span class="tg">לא נספר</span>` : null}
+            </div>`)}
+          ${(site.materials || []).length === 0 && html`<div class="val" style=${{color:"var(--ink-3)"}}>לא הוזן מלאי</div>`}
+        </div>
 
-        ${site.stages.pressure === "failed" && html`
-          <div class="card">
-            <div class="lbl">חריגה פתוחה</div>
-            <div class="val">בדיקת לחץ פאזה א׳ נכשלה — שלב הלבן חסום עד לצילום בדיקה תקינה</div>
-          </div>`}
-
-        ${ex && ex.length > 0 && html`
+        ${own.length > 0 && html`
           <div class="card">
             <div class="lbl">חריגים פתוחים באתר</div>
-            ${ex.map(e => html`<div class="exrow" key=${e.key}><b>${e.title}</b> · פתוח ${ageText(e.ageMs)} · ${LEVEL_SHORT[e.level]}<br/><span style=${{color:"var(--ink-3)"}}>ממתין ל: ${e.waitingOn}</span></div>`)}
+            ${own.map(e => html`<div class="exrow" key=${e.key}><b>${e.title}</b> · פתוח ${ageText(e.ageMs)} · ${LEVEL_SHORT[e.level]}<br/><span style=${{color:"var(--ink-3)"}}>ממתין ל: ${e.waitingOn}</span></div>`)}
           </div>`}
 
         <div class="card">
@@ -1454,13 +1717,12 @@
               <div class="who">${site.owner.name} · ${site.owner.role} — ${site.name}</div>
               <button class="opt" onClick=${()=>{ setSheet(false); notify("מחייג ל"+site.owner.name+"…"); }}><span class="e">📞</span> חיוג</button>
               <button class="opt" onClick=${()=>{ setSheet(false); notify("נפתח צ׳אט האתר"); }}><span class="e">💬</span> צ׳אט האתר</button>
-              <button class="opt" onClick=${()=>{ setSheet(false); notify("מציג את המשימה הפעילה של "+site.owner.name); }}><span class="e">📋</span> צפייה במשימה הנוכחית</button>
             </div>
           </div>`}
       </div>`;
   }
 
-  function FieldHome({ sites, now, onCheckin, onOpen, onAddUnit }){
+  function FieldHome({ sites, now, onCheckin, onOpen, onAddUnit, onWeekly }){
     const active = sites.filter(s=>s.active);
     const [sid, setSid] = useState(active[0].id);
     const [adding, setAdding] = useState(false);
@@ -1468,6 +1730,7 @@
     const [note, setNote] = useState("");
     const [nu, setNu] = useState({ title:"", floor:"", stage:"black" });
     const site = sites.find(s=>s.id===sid) || active[0];
+    const wk = curWeekly(site, now);
 
     function submitUnit(e){
       e.preventDefault();
@@ -1479,10 +1742,22 @@
 
     return html`
       <div class="screen narrow">
-        <div class="shead"><h2>דיווח שטח</h2><span class="sub">בחר אתר ויחידת עבודה</span></div>
+        <div class="shead"><h2>דיווח שטח</h2><span class="sub">בחר אתר · דוח שבועי, דיווח יומי ויחידות עבודה</span></div>
         <select class="pick" value=${sid} onChange=${e=>{ setSid(e.target.value); setAdding(false); }}>
-          ${active.map(s => html`<option key=${s.id} value=${s.id}>${s.name} · ${s.contractor}</option>`)}
+          ${active.map(s => html`<option key=${s.id} value=${s.id}>${s.name} · ${s.contractor}${curWeekly(s, now) ? " ✓" : ""}</option>`)}
         </select>
+
+        <div class="card ci" style=${{marginBottom:12}}>
+          <div class="lbl">דוח תוכנית עבודה שבועית · ${weekLabel(now)}</div>
+          ${wk
+            ? html`<div class="val">✓ הוגש ${dmy(wk.at)} ${hhmm(wk.at)} · ${wk.by}</div>
+                <div class="sub2">${TRACKS.filter(t => wk.tracks && wk.tracks[t.k]).map(t => t.label + " " + wk.tracks[t.k].pct + "%").join(" · ") || "אין מסלולים רלוונטיים"} · כ״א ${wk.workers == null ? "—" : wk.workers}</div>`
+            : html`<div class="val" style=${{color:"var(--warn)"}}>טרם הוגש דוח שבועי לאתר הזה</div>`}
+          <div class="btnrow" style=${{marginTop:10}}>
+            <button class="btn pri" onClick=${()=>onWeekly(site.id)}>${wk ? "עדכן דוח שבועי" : "📅 מלא דוח שבועי"}</button>
+          </div>
+        </div>
+
         <div class="card ci" style=${{marginBottom:12}}>
           <div class="lbl">דיווח יומי · ${site.name}</div>
           ${site.checkin && site.checkin.date === dstr(now)
@@ -1498,6 +1773,7 @@
                 <button type="submit" class="add" disabled=${!note.trim()} aria-label="שלח">➤</button>
               </form>`}
         </div>
+        <div class="lbl" style=${{marginTop:6}}>יחידות עבודה באתר</div>
         <div style=${{display:"flex", flexDirection:"column", gap:9}}>
           ${site.units.map(u=>{
             const locked = u.stage === "white" && site.stages.white === "locked";
@@ -1529,6 +1805,101 @@
         </div>
         <div class="hint">סימון שלב כ״הושלם״ מחייב תמונה אחת לפחות. סעיפים לצ׳קליסט מוסיפים בתוך כל יחידת עבודה.</div>
       </div>`;
+  }
+
+  /* הטופס השבועי — אותן עמודות כמו הטופס על הנייר */
+  function WeeklyForm({ site, now, onSubmit, onBack }){
+    const cur = curWeekly(site, now);
+    const hist = weekHistory(site, now), prev = hist.length ? hist[hist.length - 1] : null;
+    const old = site.weekly && !cur ? site.weekly : null;   // דוח קודם: חריגים פתוחים עוברים הלאה
+    const [d, setD] = useState(()=>{
+      const tracks = {};
+      TRACKS.forEach(t => {
+        const v = cur && cur.tracks ? cur.tracks[t.k] : null, p = prev ? pctOf(prev, t.k) : null;
+        tracks[t.k] = cur ? (v ? { pct: v.pct, goal: v.goal == null ? null : v.goal } : null) : (p != null && p < 100 ? { pct: p, goal: null } : null);
+      });
+      const base = cur || site.weekly || {};
+      const openNote = old && old.issue && !old.issueResolvedAt && hasText(old.note);
+      const openSafety = old && hasText(old.safety) && !old.safetyResolvedAt;
+      return {
+        tracks, foreman: base.foreman || "", lead: base.lead || "",
+        workers: cur ? (cur.workers == null ? "" : String(cur.workers)) : (prev && prev.workers != null ? String(prev.workers) : ""),
+        note: cur ? (cur.note || "") : (openNote ? old.note : ""), issue: cur ? !!cur.issue : !!openNote,
+        safety: cur ? (cur.safety || "") : (openSafety ? old.safety : "")
+      };
+    });
+    const set = patch => setD(x => ({ ...x, ...patch }));
+    const setTrack = (k, v) => setD(x => ({ ...x, tracks: { ...x.tracks, [k]: v } }));
+    const wOk = d.workers !== "" && !isNaN(Number(d.workers));
+    const goals = [];
+    for(let g = 5; g <= 100; g += 5) goals.push(g);
+
+    function submit(e){
+      e.preventDefault();
+      if(!wOk) return;
+      onSubmit(site.id, {
+        tracks: d.tracks, workers: Math.max(0, Math.round(Number(d.workers))),
+        foreman: d.foreman.trim(), lead: d.lead.trim(),
+        note: d.note.trim(), issue: d.issue && hasText(d.note), safety: d.safety.trim()
+      });
+    }
+
+    return html`
+      <form class="screen narrow" onSubmit=${submit}>
+        <div class="shead">
+          <button type="button" class="back" onClick=${onBack} aria-label="חזרה">→</button>
+          <div><h2 style=${{fontSize:"1.25rem"}}>דוח שבועי · ${site.name}</h2><span class="sub">${site.contractor} · שבוע ${weekLabel(now)} · מנהל פרויקט: ${site.owner.name}</span></div>
+        </div>
+
+        ${TRACKS.map(t => {
+          const v = d.tracks[t.k], p = prev ? pctOf(prev, t.k) : null;
+          return html`
+            <div class=${"card trk "+(v ? "" : "off")} key=${t.k}>
+              <div class="rowbet">
+                <b>${t.label}</b>
+                <label class="tgl"><input type="checkbox" checked=${!!v} onChange=${e => setTrack(t.k, e.target.checked ? { pct: p != null ? p : 0, goal: null } : null)} /> רלוונטי</label>
+              </div>
+              ${v ? html`
+                <div class="prow">
+                  <input type="range" class="rng" min="0" max="100" step="5" value=${v.pct} onInput=${e => setTrack(t.k, { ...v, pct: Number(e.target.value) })} aria-label=${t.label + " אחוז ביצוע"} />
+                  <b class="pv">${v.pct}%</b>
+                </div>
+                <div class="grow">
+                  <span>יעד לסוף השבוע</span>
+                  <select value=${v.goal == null ? "" : v.goal} onChange=${e => setTrack(t.k, { ...v, goal: e.target.value === "" ? null : Number(e.target.value) })}>
+                    <option value="">ללא יעד</option>
+                    ${goals.map(g => html`<option key=${g} value=${g}>${g}%</option>`)}
+                  </select>
+                  ${p != null ? html`<span class="prevv">שבוע שעבר: ${p}%</span>` : null}
+                </div>` : html`<div class="prevv">לא רלוונטי באתר הזה</div>`}
+            </div>`;
+        })}
+
+        <div class="card fl">
+          <label>כ״א בשטח השבוע (מס׳ עובדים)
+            <input type="number" inputMode="numeric" min="0" value=${d.workers} onInput=${e => set({ workers: e.target.value })} placeholder="0" required />
+          </label>
+          <label>מנהל עבודה
+            <input type="text" value=${d.foreman} onInput=${e => set({ foreman: e.target.value })} maxLength=${40} />
+          </label>
+          <label>ראש צוות (במידה ויש)
+            <input type="text" value=${d.lead} onInput=${e => set({ lead: e.target.value })} maxLength=${40} />
+          </label>
+        </div>
+
+        <div class="card fl">
+          <label>הערות / חריגים
+            <textarea rows="3" value=${d.note} onInput=${e => set({ note: e.target.value })} maxLength=${300} placeholder="מה עוצר או מעכב? מה צריך מההנהלה?"></textarea>
+          </label>
+          <label class="tgl" style=${{opacity: hasText(d.note) ? 1 : .5}}><input type="checkbox" disabled=${!hasText(d.note)} checked=${d.issue && hasText(d.note)} onChange=${e => set({ issue: e.target.checked })} /> זה חריג שדורש טיפול (יופיע במרכז הבקרה עד שיסומן "טופל")</label>
+          <label>נקודות בטיחות / חריגים בטיחותיים
+            <textarea rows="2" value=${d.safety} onInput=${e => set({ safety: e.target.value })} maxLength=${300} placeholder="השאר ריק אם אין"></textarea>
+          </label>
+        </div>
+
+        <button type="submit" class="btn pri wide" disabled=${!wOk}>${cur ? "עדכן דוח שבועי" : "הגש דוח שבועי"}</button>
+        <div class="hint">הדוח נרשם ביומן הפעולות ועולה למרכז הבקרה. נקודת בטיחות מסומנת אדומה ועולה מיד לדרג 2.</div>
+      </form>`;
   }
 
   function Report({ site, unit, photoMap, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onRemovePhoto, onPressure, notify }){
@@ -1638,60 +2009,169 @@
       </div>`;
   }
 
-  function WarehouseHome({ st, onApprove, onShortage, onTinder }){
+  /* מלאי באתר — מנהל הפרויקט מזין, ההנהלה רואה בלשונית "מלאי" במרכז הבקרה */
+  function QtyCell({ value, onCommit }){
+    const [v, setV] = useState(String(value));
+    useEffect(()=>{ setV(String(value)); }, [value]);
+    const commit = x => { const n = Number(x); if(x !== "" && !isNaN(n) && n >= 0 && n !== value) onCommit(n); else setV(String(value)); };
+    return html`
+      <div class="qty">
+        <button type="button" aria-label="הוסף" onClick=${()=>onCommit(value + 1)}>＋</button>
+        <input type="number" inputMode="decimal" min="0" value=${v} onInput=${e=>setV(e.target.value)} onBlur=${e=>commit(e.target.value)}
+          onKeyDown=${e=>{ if(e.key === "Enter") e.target.blur(); }} aria-label="כמות במלאי" />
+        <button type="button" aria-label="הפחת" onClick=${()=>value > 0 && onCommit(value - 1)}>−</button>
+      </div>`;
+  }
+
+  function StockForm({ init, onSave, onCancel, onDelete }){
+    const [f, setF] = useState(init || { item:"", onSite:"", unit:"יח׳", need:"", blocksTomorrow:false });
+    const ok = f.item.trim() && f.onSite !== "" && !isNaN(Number(f.onSite));
+    function submit(e){
+      e.preventDefault(); if(!ok) return;
+      onSave({ item: f.item.trim(), onSite: Number(f.onSite), unit: (f.unit || "יח׳").trim(), need: f.need === "" ? 0 : Number(f.need), blocksTomorrow: !!f.blocksTomorrow });
+    }
+    return html`
+      <form class="newunit" onSubmit=${submit}>
+        <input type="text" placeholder="שם הפריט (למשל: צנרת 4״)" value=${f.item} onInput=${e=>setF({...f, item:e.target.value})} maxLength=${50} />
+        <div class="two">
+          <input type="number" inputMode="decimal" min="0" placeholder="כמות במלאי" value=${f.onSite} onInput=${e=>setF({...f, onSite:e.target.value})} />
+          <input type="text" list="units" placeholder="יחידה" value=${f.unit} onInput=${e=>setF({...f, unit:e.target.value})} maxLength=${12} />
+        </div>
+        <datalist id="units">${["יח׳","מ׳","ק״ג","גליל","קופסה","שק","צרור","מ״ר"].map(u => html`<option key=${u} value=${u}></option>`)}</datalist>
+        <input type="number" inputMode="decimal" min="0" placeholder="מינימום נדרש באתר (אופציונלי) — מתחתיו נפתח חריג" value=${f.need} onInput=${e=>setF({...f, need:e.target.value})} />
+        <label class="tgl"><input type="checkbox" checked=${!!f.blocksTomorrow} onChange=${e=>setF({...f, blocksTomorrow:e.target.checked})} /> חוסר בפריט הזה עוצר עבודה (חריג אדום)</label>
+        <div class="btnrow">
+          ${onDelete ? html`<button type="button" class="btn danger" onClick=${onDelete}>מחק פריט</button>` : null}
+          <button type="button" class="btn" onClick=${onCancel}>ביטול</button>
+          <button type="submit" class="btn pri" disabled=${!ok}>${init ? "שמור" : "הוסף"}</button>
+        </div>
+      </form>`;
+  }
+
+  function StockEditor({ st, now, who, onSave, onDelete, onConfirm }){
+    const actives = st.sites.filter(s => s.active);
+    const mine = actives.filter(s => s.owner && s.owner.name === who);
+    const [all, setAll] = useState(false);
+    const list = (all || mine.length === 0) ? actives : mine;
+    const [sid, setSid] = useState(null);
+    const [adding, setAdding] = useState(false);
+    const [editing, setEditing] = useState(null);
+    const site = list.find(s => s.id === sid) || list[0];
+    if(!site) return html`<div class="empty">אין אתרים פעילים</div>`;
+    const info = stockInfo(site, st, now);
+    const mats = site.materials || [];
+
+    return html`
+      <div>
+        ${mine.length > 0 && html`<div class="chips" style=${{margin:"0 0 10px"}}>
+          <button class=${"chip "+(!all?"on":"")} onClick=${()=>setAll(false)}>האתרים שלי (${mine.length})</button>
+          <button class=${"chip "+(all?"on":"")} onClick=${()=>setAll(true)}>כל האתרים</button>
+        </div>`}
+        <select class="pick" value=${site.id} onChange=${e=>{ setSid(e.target.value); setAdding(false); setEditing(null); }}>
+          ${list.map(s => html`<option key=${s.id} value=${s.id}>${s.name} · ${s.contractor}${s.owner ? " · " + s.owner.name : ""}</option>`)}
+        </select>
+
+        <div class="card ci" style=${{marginBottom:12}}>
+          <div class="lbl">מלאי באתר · ${site.name}</div>
+          <div class=${"val "+(info.fresh ? "" : "crit")} style=${{fontSize:".88rem"}}>
+            ${info.last ? (info.fresh ? "✓ עודכן " : "לא עודכן · ") + ageText(now - info.last) + " · " + dmy(info.last) + " " + hhmm(info.last) + (info.by ? " · " + info.by : "") : "טרם עודכן ע״י מנהל הפרויקט — הכמויות למטה הן הדגמה"}
+          </div>
+          <div class="btnrow" style=${{marginTop:10}}>
+            <button class="btn ok" onClick=${()=>onConfirm(site.id)}>✓ המלאי מעודכן להיום</button>
+          </div>
+        </div>
+
+        <div style=${{display:"flex", flexDirection:"column", gap:9}}>
+          ${mats.map(m => editing === m.item
+            ? html`<${StockForm} key=${m.item} init=${{ item:m.item, onSite:String(m.onSite), unit:m.unit, need: m.need ? String(m.need) : "", blocksTomorrow:!!m.blocksTomorrow }}
+                onSave=${p => { onSave(site.id, m.item, p); setEditing(null); }} onCancel=${()=>setEditing(null)}
+                onDelete=${()=>{ onDelete(site.id, m.item); setEditing(null); }} />`
+            : html`
+              <div key=${m.item} class=${"req stkrow "+(m.onSite < m.need ? "blocked" : "")}>
+                <div class="top">
+                  <div style=${{minWidth:0}}>
+                    <div class="sitenm">${m.item}</div>
+                    <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".72rem", color: m.onSite < m.need ? "var(--crit)" : "var(--ink-3)"}}>
+                      ${m.onSite < m.need ? "חוסר " + (m.need - m.onSite) + " " + m.unit + " · " : ""}${m.need ? "מינימום " + m.need + " " + m.unit : "ללא מינימום"}${m.at ? "" : " · לא נספר"}
+                    </div>
+                  </div>
+                  <button type="button" class="xbtn" style=${{width:34, height:34}} aria-label="ערוך פריט" onClick=${()=>{ setEditing(m.item); setAdding(false); }}>✎</button>
+                </div>
+                <div class="rowbet">
+                  <${QtyCell} value=${m.onSite} onCommit=${n => onSave(site.id, m.item, { onSite:n })} />
+                  <span class="unit">${m.unit}</span>
+                </div>
+              </div>`)}
+          ${mats.length === 0 && !adding && html`<div class="empty" style=${{padding:"22px 0"}}>עדיין לא הוזן מלאי באתר הזה</div>`}
+          ${adding
+            ? html`<${StockForm} onSave=${p => { onSave(site.id, null, p); setAdding(false); }} onCancel=${()=>setAdding(false)} />`
+            : html`<button class="addsection" onClick=${()=>{ setAdding(true); setEditing(null); }}>＋ הוסף פריט למלאי</button>`}
+        </div>
+        <div class="hint">כל עדכון נרשם ביומן עם שמך. מינימום נדרש: כשהכמות יורדת מתחתיו נפתח חריג במרכז הבקרה. בלי עדכון ${CFG.stockDays} ימים — נפתח חריג "מלאי לא עודכן".</div>
+      </div>`;
+  }
+
+  function WarehouseHome({ st, now, who, view, setView, onApprove, onShortage, onTinder, onStockSave, onStockDelete, onStockConfirm }){
     const pending = st.requests.filter(r=>r.status==="pending");
     const blocked = st.requests.filter(r=>r.status==="blocked");
     const openTransfers = st.transfers.filter(t=>t.status==="open").length;
 
     return html`
       <div class="screen narrow">
-        <div class="shead"><h2>מחסן</h2><span class="sub">${pending.length} בקשות ניפוק ממתינות</span></div>
-
-        <button class="wu" style=${{marginBottom:16}} onClick=${onTinder}>
-          <span class="ic">🔁</span>
-          <span class="m"><b>ניוד מלאי בין אתרים</b><span>${openTransfers} התאמות פתוחות · מונע הזמנות כפולות</span></span>
-          <span class="rt">פתח ›</span>
-        </button>
-
-        <div class="lbl">בקשות ניפוק</div>
-        <div style=${{display:"flex", flexDirection:"column", gap:10, marginTop:6}}>
-          ${pending.length===0 && blocked.length===0 && html`<div class="empty">אין בקשות פתוחות</div>`}
-          ${pending.map(r=>{
-            const site = st.sites.find(s=>s.id===r.siteId);
-            return html`
-              <div key=${r.id} class="req">
-                <div class="top">
-                  <div>
-                    <div class="sitenm">${site.name} · ${site.contractor}</div>
-                    <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-2)"}}>${r.item}</div>
-                  </div>
-                  <div style=${{textAlign:"center"}}>
-                    <div class="q">${r.qty}</div>
-                    <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".66rem", color:"var(--ink-3)"}}>${r.unit}</div>
-                  </div>
-                </div>
-                <div class="why">${r.why}</div>
-                <div class="btnrow">
-                  <button class="btn" onClick=${()=>onShortage(r.id)}>אין במלאי</button>
-                  <button class="btn pri" onClick=${()=>onApprove(r.id)}>אשר ניפוק</button>
-                </div>
-              </div>`;
-          })}
-          ${blocked.map(r=>{
-            const site = st.sites.find(s=>s.id===r.siteId);
-            return html`
-              <div key=${r.id} class="req blocked">
-                <div class="top">
-                  <div><div class="sitenm">${site.name} · ${site.contractor}</div>
-                    <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-2)"}}>${r.item} · ${r.qty} ${r.unit}</div></div>
-                  <span class="pill lock">🔒 חסום</span>
-                </div>
-                <div class="why">${r.why}</div>
-                <button class="btn wide" disabled=${true}>ממתין לאישור שלב קודם</button>
-              </div>`;
-          })}
+        <div class="shead"><h2>מחסן</h2><span class="sub">מלאי באתרים · ${pending.length} בקשות ניפוק ממתינות</span></div>
+        <div class="chips" style=${{marginTop:6}}>
+          <button class=${"chip "+(view==="stock"?"on":"")} onClick=${()=>setView("stock")}>מלאי באתר</button>
+          <button class=${"chip "+(view==="req"?"on":"")} onClick=${()=>setView("req")}>בקשות ניפוק (${pending.length + blocked.length})</button>
         </div>
-        <div class="hint">ניפוק מאושר רק בהתאם לכמות שהשלב הבא בגאנט צורך.</div>
+
+        ${view === "stock" && html`<${StockEditor} st=${st} now=${now} who=${who} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} />`}
+
+        ${view === "req" && html`
+          <button class="wu" style=${{marginBottom:16}} onClick=${onTinder}>
+            <span class="ic">🔁</span>
+            <span class="m"><b>ניוד מלאי בין אתרים</b><span>${openTransfers} התאמות פתוחות · מונע הזמנות כפולות</span></span>
+            <span class="rt">פתח ›</span>
+          </button>
+
+          <div class="lbl">בקשות ניפוק</div>
+          <div style=${{display:"flex", flexDirection:"column", gap:10, marginTop:6}}>
+            ${pending.length===0 && blocked.length===0 && html`<div class="empty">אין בקשות פתוחות</div>`}
+            ${pending.map(r=>{
+              const site = st.sites.find(s=>s.id===r.siteId);
+              return html`
+                <div key=${r.id} class="req">
+                  <div class="top">
+                    <div>
+                      <div class="sitenm">${site.name} · ${site.contractor}</div>
+                      <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-2)"}}>${r.item}</div>
+                    </div>
+                    <div style=${{textAlign:"center"}}>
+                      <div class="q">${r.qty}</div>
+                      <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".66rem", color:"var(--ink-3)"}}>${r.unit}</div>
+                    </div>
+                  </div>
+                  <div class="why">${r.why}</div>
+                  <div class="btnrow">
+                    <button class="btn" onClick=${()=>onShortage(r.id)}>אין במלאי</button>
+                    <button class="btn pri" onClick=${()=>onApprove(r.id)}>אשר ניפוק</button>
+                  </div>
+                </div>`;
+            })}
+            ${blocked.map(r=>{
+              const site = st.sites.find(s=>s.id===r.siteId);
+              return html`
+                <div key=${r.id} class="req blocked">
+                  <div class="top">
+                    <div><div class="sitenm">${site.name} · ${site.contractor}</div>
+                      <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-2)"}}>${r.item} · ${r.qty} ${r.unit}</div></div>
+                    <span class="pill lock">🔒 חסום</span>
+                  </div>
+                  <div class="why">${r.why}</div>
+                  <button class="btn wide" disabled=${true}>ממתין לאישור שלב קודם</button>
+                </div>`;
+            })}
+          </div>
+          <div class="hint">ניפוק מאושר רק בהתאם לכמות שהשלב הבא בגאנט צורך.</div>`}
       </div>`;
   }
 
