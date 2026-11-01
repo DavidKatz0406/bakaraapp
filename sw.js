@@ -1,6 +1,6 @@
 /* Service worker — בקרה / ט.ש. מי-רון
    Bump CACHE whenever a shell file changes. */
-const CACHE = "bakara-v6";
+const CACHE = "bakara-v7";
 
 const SHELL = [
   "./",
@@ -9,6 +9,9 @@ const SHELL = [
   "vendor/react.production.min.js",
   "vendor/react-dom.production.min.js",
   "vendor/htm.umd.js",
+  "vendor/firebase-app-compat.js",
+  "vendor/firebase-auth-compat.js",
+  "vendor/firebase-firestore-compat.js",
   "favicon.ico",
   "favicon-32.png",
   "favicon-16.png",

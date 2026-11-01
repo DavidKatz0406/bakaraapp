@@ -157,6 +157,13 @@
   .exrow{ font-family:"Heebo",sans-serif; font-size:.8rem; padding:6px 0; line-height:1.45; }
   .rep{ white-space:pre-wrap; font-family:"Heebo",sans-serif; font-size:.8rem; line-height:1.65; background:var(--surface-2); border-radius:10px; padding:12px; max-height:46vh; overflow:auto; margin:10px 0 14px; }
   .ci .val{ font-size:.88rem; }
+  .banner{ background:var(--warn-wash); color:var(--warn); border-bottom:1px solid var(--warn); padding:7px 16px; font-family:"Heebo",sans-serif; font-size:.76rem; font-weight:500; text-align:center; display:flex; gap:10px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  .banner.err{ background:var(--crit-wash); color:var(--crit); border-color:var(--crit); }
+  .ic0.me{ position:relative; font-weight:700; }
+  .sdot{ position:absolute; top:-3px; inset-inline-start:-3px; width:10px; height:10px; border-radius:50%; border:2px solid var(--paper); background:var(--ink-3); }
+  .sdot.live{ background:var(--ok); } .sdot.connecting,.sdot.offline{ background:var(--warn); } .sdot.error{ background:var(--crit); }
+  .thumb .ph{ font-family:"Heebo",sans-serif; font-size:.6rem; color:var(--ink-3); display:flex; align-items:center; justify-content:center; height:100%; }
+  .tin{ width:100%; font-family:monospace; font-size:.9rem; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); }
   .alerts{ margin-top:22px; display:flex; flex-direction:column; gap:8px; }
   .alerts h4{ font-family:"Heebo",sans-serif; font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); }
   .alert{ display:flex; align-items:center; gap:9px; border-radius:10px; padding:10px 13px; font-family:"Heebo",sans-serif; font-size:.82rem; font-weight:500; border:1px solid; }
@@ -294,6 +301,9 @@
 <script src="vendor/react.production.min.js"></script>
 <script src="vendor/react-dom.production.min.js"></script>
 <script src="vendor/htm.umd.js"></script>
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-auth-compat.js"></script>
+<script src="vendor/firebase-firestore-compat.js"></script>
 <script>
 (function(){
   const {useState, useEffect, useMemo, useCallback, useRef} = React;
@@ -562,7 +572,7 @@
   }
   function pushLog(d, who, text, siteId){
     d.log = d.log || [];
-    d.log.unshift({ ts: Date.now(), who, text, siteId: siteId || null });
+    d.log.unshift({ id: "l" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), ts: Date.now(), who, text, siteId: siteId || null });
     if(d.log.length > 400) d.log.length = 400;
   }
 
@@ -733,8 +743,109 @@
     return lines.join("\n");
   }
 
+  /* ───────── מסד נתונים משותף (Firebase / Firestore) ─────────
+     כל הנתונים יושבים תחת t/{קוד צוות}/...  הקוד נמסר למנהלים בקישור (#k=...) ונשמר במכשיר.
+     בלי קוד האפליקציה עובדת במצב מקומי כמו קודם. */
+  const FB_CONFIG = {
+    apiKey: "AIzaSyCnFsct2Q4yhh1CH-fPu6t_e2PFkGTM_Sk",
+    authDomain: "bakara-b4231.firebaseapp.com",
+    projectId: "bakara-b4231",
+    storageBucket: "bakara-b4231.firebasestorage.app",
+    messagingSenderId: "316003592694",
+    appId: "1:316003592694:web:e1dc8415b4f7ed1e073fd7"
+  };
+  const ROSTER_V = 2;
+  const TEAM_KEY = "bakara_team";
+  const Cloud = { on:false, db:null, base:null };
+
+  function readTeamCode(){
+    try{
+      const m = /[#&?]k=([A-Za-z0-9]{16,64})/.exec(location.hash || "");
+      if(m){
+        localStorage.setItem(TEAM_KEY, m[1]);
+        sessionStorage.removeItem("bakara_local");
+        history.replaceState(null, "", location.pathname + location.search);
+      }
+      if(sessionStorage.getItem("bakara_local") === "1") return null;
+      return localStorage.getItem(TEAM_KEY) || null;
+    }catch(e){ return null; }
+  }
+  function emptyState(){
+    return { sites:[], requests:[], transfers:[], nudges:{}, since:{}, log:[], trackStart:Date.now(), rosterV:ROSTER_V };
+  }
+  const docKey = k => String(k).replace(/\//g, "|");
+  const cleanDoc = x => JSON.parse(JSON.stringify(x));
+  function stripSite(site){
+    const s = cleanDoc(site);
+    (s.units || []).forEach(u => { u.photos = (u.photos || []).map(p => ({ id:p.id, ts:p.ts || 0, by:p.by || "" })); });
+    return s;
+  }
+
+  function cloudStart(code, h){
+    if(typeof firebase === "undefined"){ h.status("error", { code:"sdk-missing" }); return ()=>{}; }
+    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    const db = firebase.firestore();
+    try{ db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
+    Cloud.db = db; Cloud.base = db.collection("t").doc(code); Cloud.on = true;
+    const unsubs = [];
+    let stopped = false;
+    firebase.auth().signInAnonymously().then(()=>{
+      if(stopped) return;
+      const col = n => Cloud.base.collection(n);
+      const err = e => h.status("error", e);
+      ["sites","requests","transfers","nudges","since"].forEach(n =>
+        unsubs.push(col(n).onSnapshot(s => h.data(n, s.docs.map(d => d.data()), s.metadata.fromCache), err)));
+      unsubs.push(col("log").orderBy("ts", "desc").limit(150)
+        .onSnapshot(s => h.data("log", s.docs.map(d => d.data()), s.metadata.fromCache), err));
+      unsubs.push(col("meta").doc("app").onSnapshot(d => h.meta(d.exists ? d.data() : null), err));
+      h.status("connecting");
+    }).catch(e => h.status("error", e));
+    return ()=>{ stopped = true; unsubs.forEach(u => { try{ u(); }catch(e){} }); };
+  }
+
+  function cloudWrite(prev, next){
+    if(!Cloud.on) return;
+    const col = n => Cloud.base.collection(n);
+    const batch = Cloud.db.batch();
+    let ops = 0;
+    const set = (n, id, data) => { batch.set(col(n).doc(docKey(id)), data); ops++; };
+    const del = (n, id) => { batch.delete(col(n).doc(docKey(id))); ops++; };
+
+    [["sites", stripSite], ["requests", cleanDoc], ["transfers", cleanDoc]].forEach(([n, fix])=>{
+      const before = new Map((prev[n] || []).map(x => [x.id, JSON.stringify(x)]));
+      const ids = new Set();
+      (next[n] || []).forEach(x => { ids.add(x.id); if(before.get(x.id) !== JSON.stringify(x)) set(n, x.id, fix(x)); });
+      before.forEach((_, id) => { if(!ids.has(id)) del(n, id); });
+    });
+    const pn = prev.nudges || {}, nn = next.nudges || {};
+    Object.keys(nn).forEach(k => { if(JSON.stringify(pn[k]) !== JSON.stringify(nn[k])) set("nudges", k, { k, at:nn[k].at, by:nn[k].by }); });
+    Object.keys(pn).forEach(k => { if(!(k in nn)) del("nudges", k); });
+    const ps = prev.since || {}, ns = next.since || {};
+    Object.keys(ns).forEach(k => { if(ps[k] !== ns[k]) set("since", k, { k, ts:ns[k] }); });
+    Object.keys(ps).forEach(k => { if(!(k in ns)) del("since", k); });
+    const seen = new Set((prev.log || []).map(l => l.id));
+    (next.log || []).forEach(l => { if(l.id && !seen.has(l.id)) set("log", l.id, cleanDoc(l)); });
+    if(prev.trackStart !== next.trackStart || prev.rosterV !== next.rosterV){
+      batch.set(col("meta").doc("app"), { trackStart:next.trackStart, rosterV:next.rosterV }, { merge:true }); ops++;
+    }
+    if(ops) batch.commit().catch(e => console.warn("cloud write failed", e));
+  }
+  function cloudPhotos(siteId, cb){
+    if(!Cloud.on) return ()=>{};
+    return Cloud.base.collection("photos").where("siteId", "==", siteId)
+      .onSnapshot(s => cb(s.docs.map(d => d.data())), ()=>{});
+  }
+  const cloudPhotoPut = p => Cloud.on && Cloud.base.collection("photos").doc(p.id).set(p).catch(e => console.warn("photo write failed", e));
+  const cloudPhotoDel = id => Cloud.on && Cloud.base.collection("photos").doc(id).delete().catch(()=>{});
+
   function App(){
-    const [st, setSt] = useState(load);
+    const cloudCode = useState(readTeamCode)[0];
+    const [st, setSt] = useState(()=> cloudCode ? emptyState() : load());
+    const stRef = useRef(null); if(stRef.current === null) stRef.current = st;
+    const [cloud, setCloud] = useState({ mode: !!cloudCode, status: cloudCode ? "connecting" : "local", ready: !cloudCode, empty:false, loaded:{ sites:false, since:false }, err:"" });
+    const [photoMap, setPhotoMap] = useState({});
+    const [teamSheet, setTeamSheet] = useState(false);
+    const [teamInput, setTeamInput] = useState("");
     const [role, setRole] = useState("ctl");
     const [nav, setNav] = useState({ screen:"ctl.home" });
     const [toast, setToast] = useState(null);
@@ -745,13 +856,82 @@
     const who = me.name;
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
 
-    useEffect(()=>{ if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
+    useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
-    const update = useCallback((fn)=> setSt(prev => fn(structuredClone(prev))), []);
+    const update = useCallback((fn)=>{
+      const prev = stRef.current;
+      const next = fn(structuredClone(prev));
+      stRef.current = next; setSt(next);
+      cloudWrite(prev, next);
+    }, []);
+
+    const applyRemote = useCallback((name, docs, fromCache)=>{
+      const cur = stRef.current, next = { ...cur };
+      if(name === "sites") next.sites = docs.slice().sort((a,b)=>(a.num||0)-(b.num||0));
+      else if(name === "requests" || name === "transfers") next[name] = docs.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+      else if(name === "nudges"){ next.nudges = {}; docs.forEach(d => { next.nudges[d.k] = { at:d.at, by:d.by }; }); }
+      else if(name === "since"){ next.since = {}; docs.forEach(d => { next.since[d.k] = d.ts; }); }
+      else if(name === "log") next.log = docs;
+      stRef.current = next; setSt(next);
+      if(name === "sites" || name === "since"){
+        const real = !fromCache || docs.length > 0;
+        setCloud(c => {
+          const loaded = real ? { ...c.loaded, [name]: true } : c.loaded;
+          if(name === "sites" && real) return { ...c, loaded, ready:true, empty: docs.length === 0, status: navigator.onLine ? "live" : "offline" };
+          return { ...c, loaded };
+        });
+      }
+    }, []);
+    useEffect(()=>{
+      if(!cloudCode) return;
+      const stop = cloudStart(cloudCode, {
+        data: applyRemote,
+        meta: (m)=>{ if(!m) return; const cur = stRef.current; const nx = { ...cur, trackStart: m.trackStart || cur.trackStart, rosterV: m.rosterV || cur.rosterV }; stRef.current = nx; setSt(nx); },
+        status: (s, e)=> setCloud(c => ({ ...c, status: s, err: e ? String(e.code || e.message || e) : "" }))
+      });
+      const net = ()=> setCloud(c => ({ ...c, status: navigator.onLine ? (c.ready ? "live" : "connecting") : "offline" }));
+      window.addEventListener("online", net); window.addEventListener("offline", net);
+      return ()=>{ stop(); window.removeEventListener("online", net); window.removeEventListener("offline", net); };
+    }, []);
+    // תמונות: נטענות לפי אתר רק כשפותחים דיווח
+    useEffect(()=>{
+      if(!cloudCode || nav.screen !== "field.report") return;
+      return cloudPhotos(nav.sid, docs => setPhotoMap(m => { const n = { ...m }; docs.forEach(d => { n[d.id] = d.url; }); return n; }));
+    }, [nav.screen, nav.sid]);
+    // מעבר מרשימת מנהלים ישנה לחדשה גם במסד המשותף
+    useEffect(()=>{
+      if(cloudCode && cloud.ready && !cloud.empty && st.rosterV !== ROSTER_V)
+        update(d => { d.sites.forEach(applyRoster); d.rosterV = ROSTER_V; return d; });
+    }, [cloud.ready, cloud.empty, st.rosterV]);
 
     const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : "wh.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
-    function reset(){ setSt(seed()); setNav({ screen: homeOf(role) }); notify("הדמו אופס לנתוני הבסיס"); }
+    function reset(){
+      if(cloudCode){
+        if(who !== "דוד"){ notify("איפוס המסד המשותף מותר רק לדוד"); return; }
+        if(!confirm("זה ימחק את כל הנתונים המשותפים ויחזיר נתוני הדגמה לכל המשתמשים. להמשיך?")) return;
+        const prev = stRef.current, s = seed();
+        s.log = prev.log;
+        stRef.current = s; setSt(s); cloudWrite(prev, s);
+        setNav({ screen: homeOf(role) }); notify("המסד אופס לנתוני הבסיס"); return;
+      }
+      const s0 = seed(); stRef.current = s0; setSt(s0); setNav({ screen: homeOf(role) }); notify("הדמו אופס לנתוני הבסיס");
+    }
+    function seedCloud(){
+      const s = seed();
+      stRef.current = s; setSt(s);
+      cloudWrite({ ...emptyState(), trackStart:0, rosterV:0 }, s);
+      setCloud(c => ({ ...c, empty:false, ready:true }));
+      notify("נתוני הבסיס נטענו למסד המשותף");
+    }
+    function goLocal(){ try{ sessionStorage.setItem("bakara_local", "1"); }catch(e){} location.reload(); }
+    function saveTeam(){
+      const v = teamInput.trim();
+      if(!/^[A-Za-z0-9]{16,64}$/.test(v)) return;
+      try{ localStorage.setItem(TEAM_KEY, v); sessionStorage.removeItem("bakara_local"); }catch(e){}
+      location.reload();
+    }
+    function disconnectTeam(){ try{ localStorage.removeItem(TEAM_KEY); }catch(e){} location.reload(); }
     function pickMe(m){
       setMe(m); setIdSheet(false);
       try{ localStorage.setItem("bakara_me", JSON.stringify(m)); }catch(e){}
@@ -765,6 +945,7 @@
     const cards = useMemo(()=> scorecards(st, exceptions, now), [st.sites, exceptions, now]);
     // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
     useEffect(()=>{
+      if(cloudCode && !(cloud.loaded.sites && cloud.loaded.since)) return;
       const keys = new Set(exceptions.map(e => e.key));
       const since = st.since || {};
       const fresh = exceptions.some(e => !(e.key in since) && !e.fixedTs);
@@ -776,7 +957,7 @@
         Object.keys(d.since).forEach(k => { if(!keys.has(k)) delete d.since[k]; });
         return d;
       });
-    }, [exceptions]);
+    }, [exceptions, cloud.loaded]);
 
     function approveRequest(reqId){
       update(d=>{
@@ -844,15 +1025,21 @@
       });
     }
     function addPhoto(siteId, unitId, dataUrl){
+      const pid = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), pts = Date.now();
+      if(cloudCode){
+        setPhotoMap(m => ({ ...m, [pid]: dataUrl }));
+        cloudPhotoPut({ id:pid, siteId, unitId, url:dataUrl, ts:pts, by:who });
+      }
       update(d=>{
         const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
         if(!Array.isArray(u.photos)) u.photos = [];
-        u.photos.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), url: dataUrl, ts: Date.now(), by: who });
+        u.photos.push(cloudCode ? { id:pid, ts:pts, by:who } : { id:pid, url:dataUrl, ts:pts, by:who });
         pushLog(d, who, "צירף תמונה (" + u.title + ")", siteId);
         return d;
       });
     }
     function removePhoto(siteId, unitId, photoId){
+      if(cloudCode) cloudPhotoDel(photoId);
       update(d=>{
         const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
         u.photos = (u.photos || []).filter(p => p.id !== photoId);
@@ -927,7 +1114,20 @@
     }
 
     let body;
-    if(nav.screen === "ctl.home")
+    const blocked = cloudCode && (!cloud.ready || cloud.empty);
+    if(blocked)
+      body = cloud.empty
+        ? html`<div class="screen narrow"><div class="card">
+            <div class="lbl">המסד המשותף ריק</div>
+            <div class="val">עדיין אין נתונים בצוות הזה.</div>
+            <div class="hint" style=${{textAlign:"start"}}>הלחיצה תעלה את 31 הפרויקטים ואת המנהלים אל המסד, ומאותו רגע כל מי שמחובר רואה אותם.</div>
+            <button class="btn pri wide" style=${{marginTop:12}} onClick=${seedCloud}>טען נתוני בסיס (31 פרויקטים)</button>
+          </div></div>`
+        : html`<div class="screen narrow"><div class="empty">
+            ${cloud.status === "error" ? "שגיאת חיבור: " + (cloud.err || "לא ידועה") : navigator.onLine ? "טוען נתונים משותפים…" : "אין חיבור — מחכה לרשת"}
+            <div style=${{marginTop:14}}><button class="btn" style=${{flex:"none", padding:"9px 16px"}} onClick=${goLocal}>המשך במצב מקומי</button></div>
+          </div></div>`;
+    else if(nav.screen === "ctl.home")
       body = html`<${Control} st=${st} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctl} setCtl=${setCtl}
         onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveReported} notify=${notify} />`;
     else if(nav.screen === "ctl.site")
@@ -940,7 +1140,7 @@
       const rsite = bySite(nav.sid);
       const runit = rsite && rsite.units.find(u=>u.id===nav.uid);
       body = runit
-        ? html`<${Report} site=${rsite} unit=${runit} onBack=${()=>setNav({screen:"field.home"})}
+        ? html`<${Report} site=${rsite} unit=${runit} photoMap=${photoMap} onBack=${()=>setNav({screen:"field.home"})}
             onToggle=${toggleTask} onAddTask=${addTask} onRemoveTask=${removeTask}
             onAddPhoto=${addPhoto} onRemovePhoto=${removePhoto}
             onPressure=${runPressure} notify=${notify} />`
@@ -963,13 +1163,29 @@
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
             <button role="tab" class=${role==="wh"?"on":""} onClick=${()=>switchRole("wh")}>מחסן</button>
           </div>
-          <button class="ic0" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}</button>
+          <button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
           <button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>
         </div>
+        ${!cloudCode
+          ? html`<div class="banner">מצב מקומי — הנתונים נשמרים רק במכשיר הזה <button class="chip" onClick=${()=>setTeamSheet(true)}>הזן קוד צוות</button></div>`
+          : cloud.status === "offline" ? html`<div class="banner">אין חיבור — השינויים נשמרים במכשיר ויסונכרנו כשהרשת תחזור</div>`
+          : cloud.status === "error" && cloud.ready ? html`<div class="banner err">בעיית סנכרון (${cloud.err}) — השינויים עלולים לא להישמר במסד</div>` : null}
         ${body}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
         ${toast && html`<div class="toast"><div>${toast}</div></div>`}
+        ${teamSheet && html`
+          <div class="scrim" onClick=${()=>setTeamSheet(false)}>
+            <div class="sheet" onClick=${e=>e.stopPropagation()}>
+              <h3>קוד צוות</h3>
+              <div class="who">${cloudCode ? "מחובר למסד המשותף. מצב: " + cloud.status : "מצב מקומי — הנתונים נשמרים רק במכשיר הזה."} את הקוד מקבלים מההנהלה, בדרך כלל כקישור שפותח את האפליקציה כבר מחוברת.</div>
+              <input class="tin" type="text" dir="ltr" value=${teamInput} onInput=${e=>setTeamInput(e.target.value)} placeholder="הדבק כאן קוד צוות" autocapitalize="off" autocomplete="off" />
+              <div class="btnrow" style=${{marginTop:10}}>
+                ${cloudCode ? html`<button class="btn danger" onClick=${disconnectTeam}>נתק מהמסד</button>` : html`<button class="btn" onClick=${()=>setTeamSheet(false)}>ביטול</button>`}
+                <button class="btn pri" disabled=${!/^[A-Za-z0-9]{16,64}$/.test(teamInput.trim())} onClick=${saveTeam}>התחבר</button>
+              </div>
+            </div>
+          </div>`}
         ${idSheet && html`
           <div class="scrim" onClick=${()=>setIdSheet(false)}>
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
@@ -979,6 +1195,7 @@
                 <button key=${m.name} class="opt" onClick=${()=>pickMe(m)}>
                   <span class="e">${me.name===m.name ? "✓" : "👤"}</span>${m.name}${m.role ? " · " + m.role : ""}
                 </button>`)}
+              <button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · מסד משותף (${cloudCode ? "מחובר" : "מקומי"})</button>
             </div>
           </div>`}
       </div>`;
@@ -1314,7 +1531,7 @@
       </div>`;
   }
 
-  function Report({ site, unit, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onRemovePhoto, onPressure, notify }){
+  function Report({ site, unit, photoMap, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onRemovePhoto, onPressure, notify }){
     const [newTask, setNewTask] = useState("");
     const [busy, setBusy] = useState(false);
     const [view, setView] = useState(null);
@@ -1324,6 +1541,7 @@
     const cl = unit.checklist;
     const photos = Array.isArray(unit.photos) ? unit.photos : [];
     const nPhotos = photos.length;
+    const urlOf = p => p.url || (photoMap || {})[p.id] || "";
     const allDone = cl.length > 0 && cl.every(c=>c.done);
     const canSave = nPhotos > 0 && !locked;
 
@@ -1393,8 +1611,8 @@
           </button>
           <div class="thumbs">
             ${photos.map(p => html`
-              <button key=${p.id} class="thumb" onClick=${()=>setView(p.url)}>
-                <img src=${p.url} alt="תמונת דיווח" />
+              <button key=${p.id} class="thumb" onClick=${()=>{ if(urlOf(p)) setView(urlOf(p)); }}>
+                ${urlOf(p) ? html`<img src=${urlOf(p)} alt="תמונת דיווח" />` : html`<span class="ph">טוען…</span>`}
                 ${!locked && html`<span class="del" role="button" title="מחק" onClick=${(e)=>{ e.stopPropagation(); onRemovePhoto(site.id, unit.id, p.id); }}>✕</span>`}
               </button>`)}
             ${nPhotos===0 && html`<span style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-3)"}}>טרם צורפו תמונות</span>`}
