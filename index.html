@@ -540,6 +540,12 @@
     { k:"parking",    label:"חניונים" }
   ];
 
+  /* פיילוט: רק המנהלים האלה נספרים בחריגי "דוח חסר", "מלאי לא עודכן" ו"דיווח יומי חסר".
+     כשמצטרפים עוד מנהלים — מוסיפים לכאן, או מרוקנים את הרשימה כדי לכלול את כולם. */
+  const PILOT = ["גיא", "יער", "סאמר", "יניב"];
+  const inPilot = name => PILOT.length === 0 || PILOT.includes(name);
+  const ownerName = s => (s.owner && s.owner.name) || "—";
+
   const pad2 = n => String(n).padStart(2, "0");
   function dstr(ts){ const d = new Date(ts); return d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()); }
   function hhmm(ts){ const d = new Date(ts); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
@@ -699,7 +705,7 @@
     /* חריגים מקובצים לפי מנהל (כדי לא להציף) */
     const grouped = (pick, mk)=>{
       const g = {};
-      st.sites.forEach(s=>{ if(s.active && pick(s)) (g[(s.owner && s.owner.name) || "—"] = g[(s.owner && s.owner.name) || "—"] || []).push(s); });
+      st.sites.forEach(s=>{ if(s.active && inPilot(ownerName(s)) && pick(s)) (g[ownerName(s)] = g[ownerName(s)] || []).push(s); });
       Object.keys(g).forEach(name => mk(name, g[name]));
     };
     const names = arr => arr.slice(0, 4).map(x => x.name).join(" · ") + (arr.length > 4 ? " · ועוד " + (arr.length - 4) : "");
@@ -790,10 +796,10 @@
         safety: ex.filter(e => e.kind === "safety").length,
         stockFresh: sites.filter(s => { const l = stockLast(s); return l > 0 && now - l < CFG.stockDays * DAY; }).length,
         shortages: ex.filter(e => e.kind === "material").length,
-        checkin,
+        checkin, pilot: inPilot(name),
         health: (l3 > 0 || crit >= 2) ? "crit" : ex.length ? "warn" : "ok"
       };
-    }).sort((a, b) => rank[a.health] - rank[b.health] || b.l3 - a.l3 || b.open - a.open);
+    }).sort((a, b) => (b.pilot ? 1 : 0) - (a.pilot ? 1 : 0) || rank[a.health] - rank[b.health] || b.l3 - a.l3 || b.open - a.open);
   }
 
   function tone(kind, v){
@@ -810,11 +816,12 @@
     const active = st.sites.filter(s => s.active);
     const crit = exceptions.filter(e => e.sev === "crit").length;
     const l3 = exceptions.filter(e => e.level === 3).length;
-    const subm = active.filter(s => curWeekly(s, now)).length;
+    const pilotSites = active.filter(s => inPilot(ownerName(s)));
+    const subm = pilotSites.filter(s => curWeekly(s, now)).length;
     lines.push("📋 דוח בקרה — ט.ש. מי רון");
     lines.push(dmy(now) + "/" + new Date(now).getFullYear() + " · " + hhmm(now) + " · שבוע " + weekLabel(now));
     lines.push("");
-    lines.push("אתרים פעילים: " + active.length + " · דוח שבועי הוגש: " + subm + "/" + active.length);
+    lines.push("אתרים פעילים: " + active.length + " · דוח שבועי הוגש: " + subm + "/" + pilotSites.length + (PILOT.length ? " (פיילוט: " + PILOT.join(", ") + ")" : ""));
     lines.push("חריגים פתוחים: " + exceptions.length + " (אדומים: " + crit + ") · בדרג בעלים: " + l3);
     if(exceptions.length){
       lines.push("");
@@ -1328,7 +1335,8 @@
     const crit = exceptions.filter(e => e.sev === "crit").length;
     const l3 = exceptions.filter(e => e.level === 3).length;
     const active = st.sites.filter(s => s.active);
-    const subm = active.filter(s => curWeekly(s, now)).length;
+    const pilotSites = active.filter(s => inPilot(ownerName(s)));
+    const subm = pilotSites.filter(s => curWeekly(s, now)).length;
     const nudges = st.nudges || {};
     const siteName = id => { const s = st.sites.find(x => x.id === id); return s ? s.name : ""; };
     const T = (k, label) => html`<button class=${"chip "+(tab===k?"on":"")} onClick=${()=>setCtl({...ctl, tab:k})}>${label}</button>`;
@@ -1351,8 +1359,10 @@
           <div class=${"kpi "+(exceptions.length?"warn":"")}><b>${exceptions.length}</b><span>חריגים פתוחים</span></div>
           <div class=${"kpi "+(crit?"crit":"")}><b>${crit}</b><span>אדומים</span></div>
           <div class=${"kpi "+(l3?"crit":"")}><b>${l3}</b><span>דרג בעלים</span></div>
-          <div class=${"kpi "+(subm < active.length ? "warn" : "")}><b>${subm}/${active.length}</b><span>דוח שבועי הוגש</span></div>
+          <div class=${"kpi "+(subm < pilotSites.length ? "warn" : "")}><b>${subm}/${pilotSites.length}</b><span>דוח שבועי הוגש${PILOT.length ? " (פיילוט)" : ""}</span></div>
         </div>
+
+        ${PILOT.length > 0 && html`<div class="alert warn" style=${{margin:"10px 0 0"}}><span class="b"></span>פיילוט: ${PILOT.join(", ")} — חריגי דוח שבועי, מלאי ודיווח יומי נספרים רק להם.</div>`}
 
         <div class="chips">
           ${T("ex", "חריגים (" + list.length + ")")}
@@ -1396,7 +1406,7 @@
             ${cards.map(c => html`
               <div key=${c.name} class="card mc">
                 <div class="rowbet">
-                  <div><div style=${{fontWeight:700, fontSize:"1.02rem"}}>${c.name}</div><div class="sub" style=${{fontFamily:"Heebo,sans-serif", fontSize:".74rem", color:"var(--ink-3)"}}>${c.role} · ${c.sites} אתרים</div></div>
+                  <div><div style=${{fontWeight:700, fontSize:"1.02rem"}}>${c.name}${c.pilot && PILOT.length ? html` <span class="tg" style=${{background:"var(--accent-wash)", color:"var(--accent-ink)"}}>פיילוט</span>` : null}</div><div class="sub" style=${{fontFamily:"Heebo,sans-serif", fontSize:".74rem", color:"var(--ink-3)"}}>${c.role} · ${c.sites} אתרים</div></div>
                   <span class=${"pill "+c.health}>${c.health==="crit"?"דורש התערבות":c.health==="warn"?"דורש מעקב":"תקין"}</span>
                 </div>
                 <div class="mgrid">
@@ -1478,7 +1488,7 @@
             ${names.map(n => {
               const rows = rowsOf(n);
               return html`
-                <tr class="grp" key=${"g"+n}><td colspan=${TRACKS.length + 2}>${n} · ${rows.length} אתרים · דוח שבועי ${rows.filter(s => curWeekly(s, now)).length}/${rows.length}</td></tr>
+                <tr class="grp" key=${"g"+n}><td colspan=${TRACKS.length + 2}>${n} · ${rows.length} אתרים · ${inPilot(n) ? "דוח שבועי " + rows.filter(s => curWeekly(s, now)).length + "/" + rows.length : "לא בפיילוט"}</td></tr>
                 ${rows.map(s => {
                   const cur = curWeekly(s, now);
                   const flag = exOfSite(exceptions, s.id).some(e => e.kind === "safety" || e.kind === "wissue");
@@ -1513,10 +1523,11 @@
   function StockOverview({ st, now, mgr, cards, onOpen }){
     const sites = st.sites.filter(s => s.active && (mgr === "all" || ((s.owner && s.owner.name) || "—") === mgr))
       .map(s => ({ s, i: stockInfo(s, st, now) }))
-      .sort((a, b) => (b.i.short - a.i.short) || ((a.i.fresh ? 1 : 0) - (b.i.fresh ? 1 : 0)) || a.s.num - b.s.num);
-    const fresh = sites.filter(x => x.i.fresh).length, short = sites.reduce((a, x) => a + x.i.short, 0);
+      .sort((a, b) => ((inPilot(ownerName(b.s)) ? 1 : 0) - (inPilot(ownerName(a.s)) ? 1 : 0)) || (b.i.short - a.i.short) || ((a.i.fresh ? 1 : 0) - (b.i.fresh ? 1 : 0)) || a.s.num - b.s.num);
+    const counted = sites.filter(x => inPilot(ownerName(x.s)));
+    const fresh = counted.filter(x => x.i.fresh).length, short = sites.reduce((a, x) => a + x.i.short, 0);
     return html`
-      <div class="lbl">${fresh}/${sites.length} אתרים עודכנו ב-${CFG.stockDays} הימים האחרונים · ${short} חוסרים מול המינימום</div>
+      <div class="lbl">${fresh}/${counted.length} אתרים${PILOT.length ? " בפיילוט" : ""} עודכנו ב-${CFG.stockDays} הימים האחרונים · ${short} חוסרים מול המינימום</div>
       <div style=${{display:"flex", flexDirection:"column", gap:10, marginTop:6}}>
         ${sites.map(({ s, i }) => html`
           <div key=${s.id} class=${"card stk "+(i.short ? "short" : "")}>
