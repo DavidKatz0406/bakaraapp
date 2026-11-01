@@ -385,7 +385,6 @@
     try{ localStorage.setItem("pls_theme", next); }catch(e){}
   }
 
-  const STAGES = { black:"שחור — תשתיות", pressure:"בדיקות לחץ", white:"לבן — סניטריה" };
 
   /* ---- real project roster (contractor · engagement · # · name) ---- */
   const RAW = [
@@ -435,74 +434,29 @@
   };
   function applyRoster(site){
     const m = MGR[site.num];
-    const prev = site.owner || {};
     site.owner = m
-      ? { name:m.name, role:"מנהל פרויקט", status: prev.status || "אחראי ביצוע על הפרויקט" }
-      : { name:"לא משויך", role:"דרוש שיוך מנהל", status:"אין מנהל משויך לאתר" };
+      ? { name:m.name, role:"מנהל פרויקט" }
+      : { name:"לא משויך", role:"דרוש שיוך מנהל" };
     site.senior = (m && m.co) ? m.co.join(", ") : "";
   }
 
-  /* scripted scenarios for a handful of projects — the rest get plausible defaults */
-  const SCEN = {
-    1:{ stages:{black:"done",pressure:"pending",white:"locked"}, schedule:"behind",
-        materials:[{item:"צנרת 4״",need:200,onSite:0,unit:"מ׳",blocksTomorrow:true}],
-        owner:{name:"דוד ל׳",role:"מנהל רכש",status:"בטיפול — חוסר חומר באתר"} },
-    11:{ stages:{black:"done",pressure:"failed",white:"locked"}, schedule:"on",
-        owner:{name:"רון מ׳",role:"מנהל עבודה ראשי",status:"מתקן ליקוי בקו ראשי קומה 5, צילום חוזר מחר"} },
-    24:{ stages:{black:"done",pressure:"done",white:"active"}, schedule:"behind",
-        materials:[{item:"סוללות אינטרפוץ",need:24,onSite:0,unit:"יח׳",blocksTomorrow:true}],
-        owner:{name:"מירי כ׳",role:"מנהלת פרויקט",status:"בטיפול — חוסר חומר באתר"} },
-    6:{ stages:{black:"done",pressure:"pending",white:"locked"}, schedule:"on",
-        owner:{name:"סאמר ע׳",role:"מנהל עבודה",status:"מוכן לבדיקת לחץ פאזה א׳"} },
-    13:{ stages:{black:"active",pressure:"locked",white:"locked"}, schedule:"behind", blackConsultant:false,
-        owner:{name:"אבי ט׳",role:"מנהל עבודה",status:"עבודת שחור קומה 4 — ממתין לאישור יועץ"} },
-    12:{ surplus:[{item:"צנרת 4״",qty:210,unit:"מ׳"}] },
-    23:{ surplus:[{item:"סוללות אינטרפוץ",qty:30,unit:"יח׳"}] }
-  };
-
-  const UNITS = {
-    1:[ {id:"u1",floor:"קומה 3",title:"פריסת קווי מים",stage:"black",photos:[],checklist:[{t:"פריסת קו ראשי + מפולים",done:true},{t:"נקודות מים קרים",done:true},{t:"נקודות מים חמים",done:false},{t:"עיגון וקיבוע לתקן",done:false}]},
-        {id:"u1b",floor:"כל הבניין",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:[],checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד מד־לחץ",done:false}]},
-        {id:"u1c",floor:"קומה 1-2",title:"התקנת כלים סניטריים",stage:"white",photos:[],checklist:[{t:"הרכבת אסלות ומיכלי הדחה",done:false},{t:"התקנת כיורים וברזים",done:false},{t:"בדיקת אטימות סופית",done:false}]} ],
-    11:[ {id:"u11",floor:"קומה 5",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:[],checklist:[{t:"איתור נזילה בקו ראשי",done:true},{t:"תיקון והחלפת מחבר",done:false},{t:"בדיקה חוזרת + תיעוד",done:false}]},
-        {id:"u11b",floor:"קומה 6",title:"פריסת קווי ביוב",stage:"black",photos:[],checklist:[{t:"פריסת קו אנכי",done:true},{t:"חיבור לנקודות",done:true},{t:"בדיקת שיפועים",done:true},{t:"אטימה וסימון",done:true}]} ],
-    24:[ {id:"u24",floor:"קומה 1",title:"התקנת כלים סניטריים",stage:"white",photos:[],checklist:[{t:"סימון מיקומי אינטרפוץ",done:true},{t:"התקנת סוללות אינטרפוץ",done:false},{t:"הרכבת כיורים",done:false},{t:"בדיקת אטימות",done:false}]} ],
-    13:[ {id:"u13",floor:"קומה 4",title:"פריסת קווי מים",stage:"black",photos:[],checklist:[{t:"פריסת קו ראשי",done:true},{t:"נקודות מים",done:true},{t:"בדיקת שיפועים",done:false},{t:"עיגון וקיבוע",done:false}]} ],
-    6:[ {id:"u6",floor:"כל הבניין",title:"בדיקת לחץ — פאזה א׳",stage:"pressure",photos:[],checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד",done:false}]} ]
-  };
-
-  function defStages(n){
-    const m = n % 3;
-    if(m === 0) return { black:"done", pressure:"done", white:"active" };
-    if(m === 1) return { black:"active", pressure:"locked", white:"locked" };
-    return { black:"done", pressure:"pending", white:"locked" };
-  }
-  function genUnit(id, stages){
-    if(stages.white === "active") return {id, floor:"קומה 1", title:"התקנת כלים סניטריים", stage:"white", photos:[], checklist:[{t:"הרכבת אסלות ומיכלי הדחה",done:true},{t:"התקנת כיורים וברזים",done:false},{t:"בדיקת אטימות סופית",done:false}]};
-    if(stages.pressure === "pending") return {id, floor:"כל הבניין", title:"בדיקת לחץ — פאזה א׳", stage:"pressure", photos:[], checklist:[{t:"מילוי מערכת ובידוד קטעים",done:false},{t:"העלאת לחץ ל־10 אטמ׳",done:false},{t:"החזקה 24 ש׳ + תיעוד",done:false}]};
-    return {id, floor:"קומה 2", title:"פריסת קווי מים", stage:"black", photos:[], checklist:[{t:"פריסת קו ראשי",done:true},{t:"נקודות מים קרים",done:true},{t:"נקודות מים חמים",done:false},{t:"עיגון וקיבוע",done:false}]};
+  /* ניקוי נתוני הדגמה ישנים (שלבי שחור/לחץ/לבן, יחידות עבודה, מלאי שלא נספר) — פעם אחת */
+  const CLEAN_V = 1;
+  function applyClean(site){
+    ["stages","schedule","blackConsultant","surplus"].forEach(k => { delete site[k]; });
+    if(site.owner) delete site.owner.status;
+    site.units = (site.units || []).filter(u => (u.photos || []).length > 0);
+    site.materials = (site.materials || []).filter(m => m.at);
   }
 
   function seed(){
     const sites = RAW.map(([contractor, exists, n, name])=>{
-      const active = exists !== "אין";
-      const sc = SCEN[n] || {};
-      const stages = sc.stages || (active ? defStages(n) : { black:"locked", pressure:"locked", white:"locked" });
-      return {
-        id:"s"+n, num:n, name, contractor, active,
-        stages,
-        blackConsultant: sc.blackConsultant !== undefined ? sc.blackConsultant : true,
-        schedule: sc.schedule || (n % 6 === 0 ? "behind" : "on"),
-        materials: sc.materials || [{ item:"צנרת ראשית 6״", need:100, onSite: active ? 100 : 0, unit:"מ׳", blocksTomorrow:false }],
-        surplus: sc.surplus || null,
-        owner: sc.owner ? { status: sc.owner.status } : null,
-        units: UNITS[n] || [ genUnit("u"+n, stages) ]
-      };
+      return { id:"s"+n, num:n, name, contractor, active: exists !== "אין", materials:[], units:[], owner:null };
     });
     sites.forEach(applyRoster);
     const T = Date.now();
     return {
-      sites, rosterV: 2,
+      sites, rosterV: 2, cleanV: CLEAN_V,
       log: [], nudges: {}, trackStart: T,
       since: {},
       requests: [], transfers: []
@@ -520,6 +474,7 @@
           (site.units || []).forEach(u => { if(!Array.isArray(u.photos)) u.photos = []; });
         });
         if(st.rosterV !== 2){ (st.sites || []).forEach(applyRoster); st.rosterV = 2; }
+        if(st.cleanV !== CLEAN_V){ (st.sites || []).forEach(applyClean); st.cleanV = CLEAN_V; }
         st.log = st.log || []; st.nudges = st.nudges || {}; st.since = st.since || {};
         st.trackStart = st.trackStart || Date.now();
         return st;
@@ -961,8 +916,8 @@
     Object.keys(ps).forEach(k => { if(!(k in ns)) del("since", k); });
     const seen = new Set((prev.log || []).map(l => l.id));
     (next.log || []).forEach(l => { if(l.id && !seen.has(l.id)) set("log", l.id, cleanDoc(l)); });
-    if(prev.trackStart !== next.trackStart || prev.rosterV !== next.rosterV){
-      batch.set(col("meta").doc("app"), { trackStart:next.trackStart, rosterV:next.rosterV }, { merge:true }); ops++;
+    if(prev.trackStart !== next.trackStart || prev.rosterV !== next.rosterV || prev.cleanV !== next.cleanV){
+      batch.set(col("meta").doc("app"), { trackStart:next.trackStart, rosterV:next.rosterV, cleanV:next.cleanV || 0 }, { merge:true }); ops++;
     }
     if(ops) batch.commit().catch(e => console.warn("cloud write failed", e));
   }
@@ -978,7 +933,7 @@
     const cloudCode = useState(readTeamCode)[0];
     const [st, setSt] = useState(()=> cloudCode ? emptyState() : load());
     const stRef = useRef(null); if(stRef.current === null) stRef.current = st;
-    const [cloud, setCloud] = useState({ mode: !!cloudCode, status: cloudCode ? "connecting" : "local", ready: !cloudCode, empty:false, loaded:{ sites:false, since:false }, err:"" });
+    const [cloud, setCloud] = useState({ mode: !!cloudCode, status: cloudCode ? "connecting" : "local", ready: !cloudCode, empty:false, loaded:{ sites:false, since:false, meta:false }, err:"" });
     const [photoMap, setPhotoMap] = useState({});
     const [teamSheet, setTeamSheet] = useState(false);
     const [teamInput, setTeamInput] = useState("");
@@ -1022,7 +977,7 @@
       if(!cloudCode) return;
       const stop = cloudStart(cloudCode, {
         data: applyRemote,
-        meta: (m)=>{ if(!m) return; const cur = stRef.current; const nx = { ...cur, trackStart: m.trackStart || cur.trackStart, rosterV: m.rosterV || cur.rosterV }; stRef.current = nx; setSt(nx); },
+        meta: (m)=>{ setCloud(c => ({ ...c, loaded: { ...c.loaded, meta: true } })); if(!m) return; const cur = stRef.current; const nx = { ...cur, trackStart: m.trackStart || cur.trackStart, rosterV: m.rosterV || cur.rosterV, cleanV: m.cleanV || 0 }; stRef.current = nx; setSt(nx); },
         status: (s, e)=> setCloud(c => ({ ...c, status: s, err: e ? String(e.code || e.message || e) : "" }))
       });
       const net = ()=> setCloud(c => ({ ...c, status: navigator.onLine ? (c.ready ? "live" : "connecting") : "offline" }));
@@ -1040,6 +995,11 @@
         update(d => { d.sites.forEach(applyRoster); d.rosterV = ROSTER_V; return d; });
     }, [cloud.ready, cloud.empty, st.rosterV]);
 
+    // ניקוי חד־פעמי של נתוני ההדגמה הישנים גם במסד המשותף
+    useEffect(()=>{
+      if(cloudCode && cloud.ready && !cloud.empty && cloud.loaded.meta && st.cleanV !== CLEAN_V)
+        update(d => { d.sites.forEach(applyClean); d.cleanV = CLEAN_V; return d; });
+    }, [cloud.ready, cloud.empty, cloud.loaded.meta, st.cleanV]);
     // המודל הישן של מחסן מרכזי (בקשות ניפוק / ניוד הדגמה) הוסר — מנקים אותו מהמסד המשותף
     useEffect(()=>{
       if(cloudCode && cloud.ready && !cloud.empty && ((st.requests || []).length || (st.transfers || []).length))
@@ -1062,7 +1022,7 @@
     function seedCloud(){
       const s = seed();
       stRef.current = s; setSt(s);
-      cloudWrite({ ...emptyState(), trackStart:0, rosterV:0 }, s);
+      cloudWrite({ ...emptyState(), trackStart:0, rosterV:0, cleanV:0 }, s);
       setCloud(c => ({ ...c, empty:false, ready:true }));
       notify("נתוני הבסיס נטענו למסד המשותף");
     }
@@ -1107,7 +1067,6 @@
         const u = s.units.find(x=>x.id===unitId);
         u.checklist[i].done = !u.checklist[i].done;
         pushLog(d, who, (u.checklist[i].done ? "סימן בוצע: " : "ביטל סימון: ") + u.checklist[i].t + " (" + u.title + ")", siteId);
-        if(u.checklist.length && u.checklist.every(c=>c.done) && u.stage==="black" && s.stages.black!=="done") s.stages.black = "done";
         return d;
       });
     }
@@ -1154,27 +1113,11 @@
     function addUnit(siteId, data){
       update(d=>{
         const s = d.sites.find(x=>x.id===siteId);
-        s.units.push({ id:"u"+siteId+"_"+Date.now(), floor:data.floor.trim()||"—", title:data.title.trim(), stage:data.stage, photos:[], checklist:[] });
+        s.units.push({ id:"u"+siteId+"_"+Date.now(), floor:data.floor.trim()||"—", title:data.title.trim(), stage:"task", photos:[], checklist:[] });
         pushLog(d, who, "פתח סעיף עבודה חדש: " + data.title.trim(), siteId);
         return d;
       });
       notify("סעיף עבודה חדש נוסף לאתר");
-    }
-    function runPressure(siteId, unitId, pass){
-      update(d=>{
-        const s = d.sites.find(x=>x.id===siteId);
-        const u = s.units.find(x=>x.id===unitId);
-        pushLog(d, who, pass ? "בדיקת לחץ עברה (" + u.title + ")" : "בדיקת לחץ נכשלה (" + u.title + ")", siteId);
-        if(pass){
-          u.checklist = u.checklist.map(c=>({...c,done:true}));
-          s.stages.pressure = "done";
-          if(s.stages.white === "locked") s.stages.white = "active";
-        } else {
-          s.stages.pressure = "failed";
-        }
-        return d;
-      });
-      notify(pass ? "בדיקת לחץ אושרה · שלב הלבן נפתח" : "כישלון נרשם · שלב הלבן נשאר נעול");
     }
     function checkin(siteId, status, note){
       update(d=>{
@@ -1305,7 +1248,7 @@
         ? html`<${Report} site=${rsite} unit=${runit} photoMap=${photoMap} onBack=${()=>setNav({screen:"field.home"})}
             onToggle=${toggleTask} onAddTask=${addTask} onRemoveTask=${removeTask}
             onAddPhoto=${addPhoto} onRemovePhoto=${removePhoto}
-            onPressure=${runPressure} notify=${notify} />`
+            notify=${notify} />`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
     else if(nav.screen === "stock.home")
@@ -1657,7 +1600,6 @@
         <div class="card">
           <div class="lbl">מי מטפל כעת</div>
           <div class="val">${site.owner.name} · ${site.owner.role}</div>
-          <div style=${{fontFamily:"Heebo, sans-serif", fontSize:".82rem", color:"var(--ink-2)", marginTop:4}}>${site.owner.status}</div>
           <div class="btnrow" style=${{marginTop:12}}>
             <button class="btn pri" onClick=${()=>setSheet(true)}>פנייה לאחראי</button>
           </div>
@@ -1687,7 +1629,7 @@
     const [adding, setAdding] = useState(false);
     const [issue, setIssue] = useState(false);
     const [note, setNote] = useState("");
-    const [nu, setNu] = useState({ title:"", floor:"", stage:"black" });
+    const [nu, setNu] = useState({ title:"", floor:"" });
     const site = sites.find(s=>s.id===sid) || active[0];
     const wk = curWeekly(site, now);
 
@@ -1695,13 +1637,13 @@
       e.preventDefault();
       if(!nu.title.trim()) return;
       onAddUnit(site.id, nu);
-      setNu({ title:"", floor:"", stage:"black" });
+      setNu({ title:"", floor:"" });
       setAdding(false);
     }
 
     return html`
       <div class="screen narrow">
-        <div class="shead"><h2>דיווח שטח</h2><span class="sub">בחר אתר · דוח שבועי, דיווח יומי ויחידות עבודה</span></div>
+        <div class="shead"><h2>דיווח שטח</h2><span class="sub">בחר אתר · דוח שבועי, דיווח יומי ומשימות</span></div>
         <select class="pick" value=${sid} onChange=${e=>{ setSid(e.target.value); setAdding(false); }}>
           ${active.map(s => html`<option key=${s.id} value=${s.id}>${s.name} · ${s.contractor}${curWeekly(s, now) ? " ✓" : ""}</option>`)}
         </select>
@@ -1732,37 +1674,31 @@
                 <button type="submit" class="add" disabled=${!note.trim()} aria-label="שלח">➤</button>
               </form>`}
         </div>
-        <div class="lbl" style=${{marginTop:6}}>יחידות עבודה באתר</div>
+        <div class="lbl" style=${{marginTop:6}}>משימות ותיעוד מצולם באתר</div>
         <div style=${{display:"flex", flexDirection:"column", gap:9}}>
           ${site.units.map(u=>{
-            const locked = u.stage === "white" && site.stages.white === "locked";
             const done = u.checklist.length>0 && u.checklist.every(c=>c.done);
             return html`
               <button key=${u.id} class="wu" onClick=${()=>onOpen(site.id, u.id)}>
-                <span class="ic">${u.stage==="pressure" ? "🧪" : locked ? "🔒" : done ? "✓" : "🛠"}</span>
+                <span class="ic">${done ? "✓" : "📋"}</span>
                 <span class="m"><b>${u.title}</b><span>${u.floor} · ${u.checklist.filter(c=>c.done).length}/${u.checklist.length} משימות · ${(u.photos||[]).length} תמונות</span></span>
-                <span class=${"stgbadge "+u.stage}>${u.stage==="black"?"שחור":u.stage==="pressure"?"לחץ":"לבן"}</span>
               </button>`;
           })}
+          ${site.units.length === 0 && !adding && html`<div class="empty" style=${{padding:"14px 0"}}>אין עדיין משימות לתיעוד באתר הזה</div>`}
 
           ${adding
             ? html`
               <form class="newunit" onSubmit=${submitUnit}>
-                <input type="text" placeholder="שם הסעיף (למשל: פריסת קווי מים קומה 4)" value=${nu.title} onInput=${e=>setNu({...nu, title:e.target.value})} maxLength=${60} />
+                <input type="text" placeholder="שם המשימה (למשל: צילום ליווי שלד קומה 4)" value=${nu.title} onInput=${e=>setNu({...nu, title:e.target.value})} maxLength=${60} />
                 <input type="text" placeholder="מיקום / קומה" value=${nu.floor} onInput=${e=>setNu({...nu, floor:e.target.value})} maxLength=${30} />
-                <select value=${nu.stage} onChange=${e=>setNu({...nu, stage:e.target.value})}>
-                  <option value="black">שלב: שחור — תשתיות</option>
-                  <option value="pressure">שלב: בדיקת לחץ</option>
-                  <option value="white">שלב: לבן — סניטריה</option>
-                </select>
                 <div class="btnrow">
                   <button type="button" class="btn" onClick=${()=>setAdding(false)}>ביטול</button>
-                  <button type="submit" class="btn pri" disabled=${!nu.title.trim()}>הוסף סעיף</button>
+                  <button type="submit" class="btn pri" disabled=${!nu.title.trim()}>הוסף משימה</button>
                 </div>
               </form>`
-            : html`<button class="addsection" onClick=${()=>setAdding(true)}>＋ הוסף סעיף עבודה לאתר</button>`}
+            : html`<button class="addsection" onClick=${()=>setAdding(true)}>＋ הוסף משימה / תיעוד</button>`}
         </div>
-        <div class="hint">סימון שלב כ״הושלם״ מחייב תמונה אחת לפחות. סעיפים לצ׳קליסט מוסיפים בתוך כל יחידת עבודה.</div>
+        <div class="hint">אפשר לפתוח משימה, להוסיף לה סעיפי צ׳קליסט ולצרף תמונות. ההנהלה רואה את התמונות ביומן הפעולות.</div>
       </div>`;
   }
 
@@ -1861,19 +1797,17 @@
       </form>`;
   }
 
-  function Report({ site, unit, photoMap, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onRemovePhoto, onPressure, notify }){
+  function Report({ site, unit, photoMap, onBack, onToggle, onAddTask, onRemoveTask, onAddPhoto, onRemovePhoto, notify }){
     const [newTask, setNewTask] = useState("");
     const [busy, setBusy] = useState(false);
     const [view, setView] = useState(null);
     const fileRef = useRef(null);
-    const isPressure = unit.stage === "pressure";
-    const locked = unit.stage === "white" && site.stages.white === "locked";
+    const locked = false;
     const cl = unit.checklist;
     const photos = Array.isArray(unit.photos) ? unit.photos : [];
     const nPhotos = photos.length;
     const urlOf = p => p.url || (photoMap || {})[p.id] || "";
     const allDone = cl.length > 0 && cl.every(c=>c.done);
-    const canSave = nPhotos > 0 && !locked;
 
     function submitTask(e){
       e.preventDefault();
@@ -1908,14 +1842,11 @@
           <button class="back" onClick=${onBack} aria-label="חזרה">→</button>
           <div class="rowbet" style=${{flex:1}}>
             <div><h2 style=${{fontSize:"1.15rem"}}>${unit.title}</h2><span class="sub">${site.name} · ${unit.floor}</span></div>
-            <span class=${"stgbadge "+unit.stage}>${unit.stage==="black"?"שחור":unit.stage==="pressure"?"לחץ":"לבן"}</span>
           </div>
         </div>
 
-        ${locked && html`<div class="gate">⛔ שלב ״לבן״ נעול — נדרש אישור מצולם של בדיקת לחץ תקינה או אישור יועץ אינסטלציה על השחור. לא ניתן לדווח כאן עדיין.</div>`}
-
         <div class="card" style=${{marginTop:14}}>
-          <div class="lbl">${isPressure ? "שלבי הבדיקה" : "צ׳קליסט יחידת עבודה"} · ${cl.filter(c=>c.done).length}/${cl.length}</div>
+          <div class="lbl">צ׳קליסט · ${cl.filter(c=>c.done).length}/${cl.length}</div>
           <div class="check">
             ${cl.map((c,i)=> html`
               <div class="citem" key=${i}>
@@ -1949,16 +1880,9 @@
           </div>
         </div>
 
-        ${isPressure ? html`
-          <div class="btnrow">
-            <button class="btn danger" disabled=${nPhotos===0} onClick=${()=>{ onPressure(site.id, unit.id, false); onBack(); }}>רשום: נכשלה</button>
-            <button class="btn ok" disabled=${!allDone || nPhotos===0} onClick=${()=>{ onPressure(site.id, unit.id, true); onBack(); }}>רשום: עברה</button>
-          </div>
-          ${nPhotos===0 && html`<div class="hint">נדרשת תמונה של מד־הלחץ כדי לרשום תוצאה.</div>`}
-        ` : html`
-          <button class="btn pri wide" disabled=${!canSave} onClick=${()=>{ notify(allDone ? "הדיווח נשמר · השלב הושלם" : "הדיווח נשמר"); onBack(); }}>
-            ${locked ? "שמירה חסומה" : nPhotos===0 ? "צרף תמונה כדי לשמור" : allDone ? "שמור וסיים שלב" : "שמור דיווח"}
-          </button>`}
+        <button class="btn pri wide" disabled=${nPhotos===0} onClick=${()=>{ notify(allDone ? "הדיווח נשמר · המשימה הושלמה" : "הדיווח נשמר"); onBack(); }}>
+          ${nPhotos===0 ? "צרף תמונה כדי לשמור" : allDone ? "שמור וסיים משימה" : "שמור דיווח"}
+        </button>
 
         ${view && html`
           <div class="lightbox" onClick=${()=>setView(null)}>
