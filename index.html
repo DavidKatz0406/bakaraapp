@@ -130,6 +130,33 @@
   .stagebar i.p{ background:var(--warn); }
   .stagelbl{ display:flex; justify-content:space-between; font-family:"Heebo",sans-serif; font-size:.64rem; color:var(--ink-3); margin-top:4px; }
 
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0 4px; }
+  .kpi{ background:var(--surface); border:1px solid var(--line-2); border-radius:12px; padding:10px 6px; text-align:center; }
+  .kpi b{ display:block; font-size:1.4rem; font-weight:800; line-height:1.1; }
+  .kpi span{ font-family:"Heebo",sans-serif; font-size:.64rem; color:var(--ink-3); }
+  .kpi.warn b{ color:var(--warn); } .kpi.crit b{ color:var(--crit); }
+  .exlist{ display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+  .ex{ background:var(--surface); border:1px solid var(--line-2); border-inline-start:4px solid var(--warn); border-radius:12px; padding:13px 14px; display:flex; flex-direction:column; gap:5px; }
+  .ex.crit{ border-inline-start-color:var(--crit); }
+  .ex .t{ font-weight:700; font-size:.93rem; line-height:1.35; }
+  .ex .ds{ font-family:"Heebo",sans-serif; font-size:.78rem; color:var(--ink-2); }
+  .ex .meta{ font-family:"Heebo",sans-serif; font-size:.72rem; color:var(--ink-3); line-height:1.55; }
+  .ex .meta b{ color:var(--ink-2); }
+  .ex .btnrow{ margin-top:6px; }
+  .lvl{ font-family:"Heebo",sans-serif; font-size:.66rem; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line); flex:none; }
+  .lvl.l2{ background:var(--warn-wash); color:var(--warn); border-color:var(--warn); }
+  .lvl.l3{ background:var(--crit); color:#fff; border-color:var(--crit); }
+  .mc .mgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+  .mt{ background:var(--surface-2); border-radius:10px; padding:9px 4px; text-align:center; }
+  .mt b{ display:block; font-size:1.05rem; font-weight:800; }
+  .mt span{ font-family:"Heebo",sans-serif; font-size:.6rem; color:var(--ink-3); line-height:1.3; display:block; }
+  .mt.warn b{ color:var(--warn); } .mt.crit b{ color:var(--crit); }
+  .logrow{ font-family:"Heebo",sans-serif; font-size:.78rem; padding:8px 0; border-bottom:1px solid var(--line-2); line-height:1.5; }
+  .logrow:last-child{ border-bottom:0; }
+  .logrow .tm{ color:var(--ink-3); font-size:.7rem; }
+  .exrow{ font-family:"Heebo",sans-serif; font-size:.8rem; padding:6px 0; line-height:1.45; }
+  .rep{ white-space:pre-wrap; font-family:"Heebo",sans-serif; font-size:.8rem; line-height:1.65; background:var(--surface-2); border-radius:10px; padding:12px; max-height:46vh; overflow:auto; margin:10px 0 14px; }
+  .ci .val{ font-size:.88rem; }
   .alerts{ margin-top:22px; display:flex; flex-direction:column; gap:8px; }
   .alerts h4{ font-family:"Heebo",sans-serif; font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); }
   .alert{ display:flex; align-items:center; gap:9px; border-radius:10px; padding:10px 13px; font-family:"Heebo",sans-serif; font-size:.82rem; font-weight:500; border:1px solid; }
@@ -388,8 +415,11 @@
         units: UNITS[n] || [ genUnit("u"+n, stages) ]
       };
     });
+    const T = Date.now();
     return {
       sites,
+      log: [], nudges: {}, trackStart: T,
+      since: { "s1:material": T-26*3600e3, "s24:material": T-5*3600e3, "s11:pressure": T-52*3600e3, "s13:consultant": T-30*3600e3 },
       requests:[
         { id:"r1", siteId:"s1", item:"צנרת 4״", qty:200, unit:"מ׳", stage:"black", status:"pending", why:"שלב הבא בגאנט: פריסת קווי מים קומה 3 — מחר 07:00" },
         { id:"r2", siteId:"s24", item:"סוללות אינטרפוץ", qty:24, unit:"יח׳", stage:"white", status:"pending", why:"שלב הבא בגאנט: התקנת כלים סניטריים קומה 1" },
@@ -408,9 +438,12 @@
       const s = localStorage.getItem(KEY);
       if(s){
         const st = JSON.parse(s);
-        (st.sites || []).forEach(site => (site.units || []).forEach(u => {
-          if(!Array.isArray(u.photos)) u.photos = [];
-        }));
+        (st.sites || []).forEach(site => {
+          site.checkinLog = site.checkinLog || [];
+          (site.units || []).forEach(u => { if(!Array.isArray(u.photos)) u.photos = []; });
+        });
+        st.log = st.log || []; st.nudges = st.nudges || {}; st.since = st.since || {};
+        st.trackStart = st.trackStart || Date.now();
         return st;
       }
     }catch(e){}
@@ -489,29 +522,249 @@
     return out;
   }
 
+  /* ───────── בקרה וניטור: חריגים, הסלמה, כרטיסי מנהל, דוח ─────────
+     כל הספים במקום אחד (CFG) כדי שיהיה קל לשפר תוך כדי תנועה. */
+  const CFG = {
+    checkinBy: 10,         // שעה: מכאן אתר בלי דיווח יומי מסומן
+    checkinEsc: 12,        // שעה: מכאן החריגה עוברת לדרג בעלים
+    escL2h: 4,             // שעות פתוחה → דרג 2
+    escL3h: 24,            // שעות פתוחה → דרג 3 (בעלים)
+    workDays: [0,1,2,3,4]  // א׳–ה׳
+  };
+  const LEVEL_SHORT = { 1:"דרג 1", 2:"דרג 2", 3:"דרג 3" };
+  const LEVEL_TEXT = { 1:"דרג 1 · מנהל אחראי", 2:"דרג 2 · מנהל בכיר", 3:"דרג 3 · בעלים" };
+  const HOUR = 3600e3;
+
+  const pad2 = n => String(n).padStart(2, "0");
+  function dstr(ts){ const d = new Date(ts); return d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()); }
+  function hhmm(ts){ const d = new Date(ts); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+  function dmy(ts){ const d = new Date(ts); return pad2(d.getDate()) + "/" + pad2(d.getMonth()+1); }
+  function isWorkday(ts){ return CFG.workDays.includes(new Date(ts).getDay()); }
+  function ageText(ms){
+    const m = Math.max(0, Math.round(ms / 60000));
+    if(m < 60) return m + " דק׳";
+    const h = Math.round(m / 60);
+    if(h < 48) return h + " שע׳";
+    return Math.round(h / 24) + " ימים";
+  }
+  function pushLog(d, who, text, siteId){
+    d.log = d.log || [];
+    d.log.unshift({ ts: Date.now(), who, text, siteId: siteId || null });
+    if(d.log.length > 400) d.log.length = 400;
+  }
+
+  /* חריגים מחושבים מהמצב עצמו (לא נשמרים), ו"מאז מתי" נשמר ב-st.since */
+  function deriveExceptions(st, now){
+    const out = [];
+    const today = dstr(now), hour = new Date(now).getHours();
+    const since = st.since || {};
+    const add = (e)=>{
+      e.sinceTs = e.fixedTs || since[e.key] || now;
+      e.ageMs = Math.max(0, now - e.sinceTs);
+      const ageH = e.ageMs / HOUR;
+      e.level = e.kind === "checkin"
+        ? (hour >= CFG.checkinEsc ? 3 : 1)
+        : (ageH >= CFG.escL3h ? 3 : ageH >= CFG.escL2h ? 2 : 1);
+      out.push(e);
+    };
+
+    st.sites.forEach(s=>{
+      if(!s.active) return;
+      const ow = (s.owner && s.owner.name) || "—";
+      const role = (s.owner && s.owner.role) || "";
+      const base = { siteId: s.id, siteName: s.name, owner: ow, ownerRole: role };
+      const pendingReq = st.requests.find(r => r.siteId === s.id && r.status === "pending");
+      const blockedReq = st.requests.find(r => r.siteId === s.id && r.status === "blocked");
+
+      const short = (s.materials || []).find(m => m.onSite < m.need);
+      if(short){
+        add({ ...base, key: s.id + ":material", kind: "material",
+          sev: short.blocksTomorrow ? "crit" : "warn",
+          title: "חוסר " + (short.need - short.onSite) + " " + short.unit + " " + short.item,
+          detail: short.blocksTomorrow ? "יעכב את העבודה מחר בבוקר" : "אין השפעה מיידית על הלו״ז",
+          waitingOn: pendingReq ? "מחסן — ממתין לאישור ניפוק" : blockedReq ? "יועץ — אישור על השחור" : "רכש — אין בקשה פתוחה" });
+      }
+      if(s.stages.pressure === "failed"){
+        add({ ...base, key: s.id + ":pressure", kind: "pressure", sev: "crit",
+          title: "בדיקת לחץ נכשלה", detail: "שלב הלבן חסום עד לתיקון וצילום בדיקה תקינה",
+          waitingOn: "מנהל עבודה — תיקון וצילום חוזר" });
+      }
+      if(s.stages.black === "active" && !s.blackConsultant){
+        add({ ...base, key: s.id + ":consultant", kind: "consultant", sev: "warn",
+          title: "ממתין לאישור יועץ אינסטלציה", detail: "שלב שחור בעבודה — בקשות ניפוק חסומות עד האישור",
+          waitingOn: "יועץ אינסטלציה" });
+      }
+      if(s.stages.pressure === "pending" && s.stages.black === "done"){
+        add({ ...base, key: s.id + ":presready", kind: "presready", sev: "warn",
+          title: "מוכן לבדיקת לחץ — טרם בוצעה", detail: "השחור הושלם; בדיקת הלחץ מעכבת את מעבר ללבן",
+          waitingOn: "מנהל עבודה — לבצע בדיקת לחץ" });
+      }
+      if(s.schedule === "behind"){
+        add({ ...base, key: s.id + ":schedule", kind: "schedule", sev: "warn",
+          title: "איחור מול לו״ז", detail: "הקצב בפועל נמוך מהתכנון",
+          waitingOn: "מנהל הפרויקט — תוכנית החזרה לקצב" });
+      }
+      if(s.checkin && s.checkin.status === "issue" && !s.checkin.resolvedAt){
+        add({ ...base, key: s.id + ":reported", kind: "reported", sev: "warn",
+          title: "חריגה מהשטח: " + s.checkin.note,
+          detail: "דווח ע״י " + s.checkin.by + " ב-" + dmy(s.checkin.at) + " " + hhmm(s.checkin.at),
+          waitingOn: "מנהל אחראי — טיפול וסימון 'טופל'", fixedTs: s.checkin.at });
+      }
+    });
+
+    // דיווח יומי חסר — מקובץ לפי מנהל כדי לא להציף
+    if(isWorkday(now) && hour >= CFG.checkinBy){
+      const missing = {};
+      st.sites.forEach(s=>{
+        if(!s.active) return;
+        if(!(s.checkin && s.checkin.date === today)){
+          const n = (s.owner && s.owner.name) || "—";
+          (missing[n] = missing[n] || []).push(s);
+        }
+      });
+      const deadline = new Date(now); deadline.setHours(CFG.checkinBy, 0, 0, 0);
+      Object.keys(missing).forEach(name=>{
+        const arr = missing[name];
+        add({ key: "mgr:" + name + ":checkin:" + today, kind: "checkin",
+          sev: hour >= CFG.checkinEsc ? "crit" : "warn",
+          siteId: arr[0].id, siteName: null, owner: name, ownerRole: (arr[0].owner && arr[0].owner.role) || "",
+          title: arr.length + (arr.length === 1 ? " אתר בלי דיווח יומי" : " אתרים בלי דיווח יומי"),
+          detail: arr.slice(0, 4).map(x => x.name).join(" · ") + (arr.length > 4 ? " · ועוד " + (arr.length - 4) : ""),
+          waitingOn: "דיווח יומי מהשטח", fixedTs: deadline.getTime() });
+      });
+    }
+
+    const sevRank = { crit: 0, warn: 1 };
+    out.sort((a, b) => b.level - a.level || sevRank[a.sev] - sevRank[b.sev] || b.ageMs - a.ageMs);
+    return out;
+  }
+
+  function scorecards(st, exceptions, now){
+    const hour = new Date(now).getHours();
+    const startDs = dstr(st.trackStart || now);
+    const days = [];
+    for(let i = 0; i < 7; i++){
+      const ts = now - i * 24 * HOUR;
+      if(!isWorkday(ts)) continue;
+      const ds = dstr(ts);
+      if(ds < startDs) continue;
+      if(i === 0 && hour < CFG.checkinBy) continue;
+      days.push(ds);
+    }
+    const names = [...new Set(st.sites.filter(s => s.active).map(s => (s.owner && s.owner.name) || "—"))];
+    const rank = { crit: 0, warn: 1, ok: 2 };
+    return names.map(name=>{
+      const sites = st.sites.filter(s => s.active && ((s.owner && s.owner.name) || "—") === name);
+      const ex = exceptions.filter(e => e.owner === name);
+      const units = sites.flatMap(s => s.units || []);
+      const items = units.flatMap(u => u.checklist || []);
+      const done = items.filter(c => c.done).length;
+      const withPhoto = units.filter(u => (u.photos || []).length > 0).length;
+      let checkin = null;
+      if(days.length){
+        let hit = 0;
+        sites.forEach(s => days.forEach(d => { if((s.checkinLog || []).includes(d)) hit++; }));
+        checkin = Math.round(100 * hit / (sites.length * days.length));
+      }
+      const crit = ex.filter(e => e.sev === "crit").length;
+      const l3 = ex.filter(e => e.level === 3).length;
+      return {
+        name, role: (sites[0].owner && sites[0].owner.role) || "", sites: sites.length,
+        open: ex.length, crit, l3,
+        avgAgeH: ex.length ? Math.round(ex.reduce((a, e) => a + e.ageMs, 0) / ex.length / HOUR) : 0,
+        checklist: items.length ? Math.round(100 * done / items.length) : null,
+        photos: units.length ? Math.round(100 * withPhoto / units.length) : null,
+        checkin,
+        pressureFail: sites.filter(s => s.stages.pressure === "failed").length,
+        health: (l3 > 0 || crit >= 2) ? "crit" : ex.length ? "warn" : "ok"
+      };
+    }).sort((a, b) => rank[a.health] - rank[b.health] || b.l3 - a.l3 || b.open - a.open);
+  }
+
+  function tone(kind, v){
+    if(v == null) return "";
+    if(kind === "age") return v >= 24 ? "crit" : v >= 4 ? "warn" : "";
+    if(kind === "pct") return v < 40 ? "crit" : v < 70 ? "warn" : "";
+    if(kind === "ci")  return v < 50 ? "crit" : v < 80 ? "warn" : "";
+    if(kind === "cnt") return v > 0 ? "crit" : "";
+    return "";
+  }
+
+  function buildReport(st, exceptions, cards, now){
+    const lines = [];
+    const active = st.sites.filter(s => s.active).length;
+    const crit = exceptions.filter(e => e.sev === "crit").length;
+    const l3 = exceptions.filter(e => e.level === 3).length;
+    lines.push("📋 דוח בקרה — ט.ש. מי רון");
+    lines.push(dmy(now) + "/" + new Date(now).getFullYear() + " · " + hhmm(now));
+    lines.push("");
+    lines.push("אתרים פעילים: " + active + " · חריגים פתוחים: " + exceptions.length + " (אדומים: " + crit + ") · בדרג בעלים: " + l3);
+    if(exceptions.length){
+      lines.push("");
+      lines.push("— חריגים בולטים —");
+      exceptions.slice(0, 8).forEach(e =>
+        lines.push("• " + e.title + (e.siteName ? " (" + e.siteName + ")" : "") + " — אחראי: " + e.owner + " — פתוח " + ageText(e.ageMs) + " — " + LEVEL_SHORT[e.level]));
+    }
+    lines.push("");
+    lines.push("— כרטיסי מנהלים —");
+    cards.forEach(c =>
+      lines.push(c.name + " (" + c.sites + " אתרים): חריגים " + c.open + (c.open ? " (גיל ממוצע " + c.avgAgeH + " שע׳)" : "") +
+        " · צ׳קליסט " + (c.checklist == null ? "—" : c.checklist + "%") +
+        " · תמונות " + (c.photos == null ? "—" : c.photos + "%") +
+        " · דיווח יומי " + (c.checkin == null ? "—" : c.checkin + "%")));
+    return lines.join("\n");
+  }
+
   function App(){
     const [st, setSt] = useState(load);
-    const [role, setRole] = useState("vp");
-    const [nav, setNav] = useState({ screen:"vp.dash" });
+    const [role, setRole] = useState("ctl");
+    const [nav, setNav] = useState({ screen:"ctl.home" });
     const [toast, setToast] = useState(null);
+    const [now, setNow] = useState(Date.now());
+    const [ctl, setCtl] = useState({ tab:"ex", mgr:"all" });
+    const [idSheet, setIdSheet] = useState(false);
+    const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"בעלים" }; });
+    const who = me.name;
+    useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
 
     useEffect(()=>{ if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
     const update = useCallback((fn)=> setSt(prev => fn(structuredClone(prev))), []);
 
-    function switchRole(r){
-      setRole(r);
-      setNav({ screen: r === "vp" ? "vp.dash" : r === "field" ? "field.home" : "wh.home" });
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : "wh.home";
+    function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
+    function reset(){ setSt(seed()); setNav({ screen: homeOf(role) }); notify("הדמו אופס לנתוני הבסיס"); }
+    function pickMe(m){
+      setMe(m); setIdSheet(false);
+      try{ localStorage.setItem("bakara_me", JSON.stringify(m)); }catch(e){}
+      notify("מחובר כ-" + m.name);
     }
-    function reset(){ setSt(seed()); setNav({ screen: role === "vp" ? "vp.dash" : role === "field" ? "field.home" : "wh.home" }); notify("הדמו אופס לנתוני הבסיס"); }
 
     const sites = st.sites;
     const bySite = useCallback((id)=> sites.find(s=>s.id===id), [sites]);
+
+    const exceptions = useMemo(()=> deriveExceptions(st, now), [st.sites, st.requests, st.since, now]);
+    const cards = useMemo(()=> scorecards(st, exceptions, now), [st.sites, exceptions, now]);
+    // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
+    useEffect(()=>{
+      const keys = new Set(exceptions.map(e => e.key));
+      const since = st.since || {};
+      const fresh = exceptions.some(e => !(e.key in since) && !e.fixedTs);
+      const stale = Object.keys(since).some(k => !keys.has(k));
+      if(!fresh && !stale) return;
+      update(d=>{
+        d.since = d.since || {};
+        exceptions.forEach(e => { if(!(e.key in d.since) && !e.fixedTs) d.since[e.key] = Date.now(); });
+        Object.keys(d.since).forEach(k => { if(!keys.has(k)) delete d.since[k]; });
+        return d;
+      });
+    }, [exceptions]);
 
     function approveRequest(reqId){
       update(d=>{
         const r = d.requests.find(x=>x.id===reqId); if(!r || r.status!=="pending") return d;
         r.status = "approved";
+        pushLog(d, who, "אישר ניפוק: " + r.qty + " " + r.unit + " " + r.item, r.siteId);
         const s = d.sites.find(x=>x.id===r.siteId);
         const m = (s.materials||[]).find(x=>x.item===r.item);
         if(m) m.onSite += r.qty; else (s.materials=s.materials||[]).push({item:r.item,need:r.qty,onSite:r.qty,unit:r.unit,blocksTomorrow:false});
@@ -530,6 +783,7 @@
       update(d=>{
         const t = d.transfers.find(x=>x.id===tId); if(!t || t.status!=="open") return d;
         t.status = "accepted";
+        pushLog(d, who, "אישר ניוד: " + t.qty + " " + t.unit + " " + t.item + " מ-" + t.fromSite, t.toId);
         const dest = d.sites.find(s=>s.id===t.toId);
         if(dest){
           const m = (dest.materials||[]).find(x=>x.item===t.item);
@@ -549,6 +803,7 @@
         const s = d.sites.find(x=>x.id===siteId);
         const u = s.units.find(x=>x.id===unitId);
         u.checklist[i].done = !u.checklist[i].done;
+        pushLog(d, who, (u.checklist[i].done ? "סימן בוצע: " : "ביטל סימון: ") + u.checklist[i].t + " (" + u.title + ")", siteId);
         if(u.checklist.length && u.checklist.every(c=>c.done) && u.stage==="black" && s.stages.black!=="done") s.stages.black = "done";
         return d;
       });
@@ -557,6 +812,7 @@
       update(d=>{
         const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
         u.checklist.push({ t:text, done:false });
+        pushLog(d, who, "הוסיף סעיף לצ׳קליסט: " + text + " (" + u.title + ")", siteId);
         return d;
       });
       notify("סעיף נוסף לצ׳קליסט");
@@ -564,7 +820,8 @@
     function removeTask(siteId, unitId, i){
       update(d=>{
         const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
-        u.checklist.splice(i,1);
+        const gone = u.checklist.splice(i,1)[0];
+        pushLog(d, who, "הסיר סעיף: " + (gone ? gone.t : "") + " (" + u.title + ")", siteId);
         return d;
       });
     }
@@ -572,7 +829,8 @@
       update(d=>{
         const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
         if(!Array.isArray(u.photos)) u.photos = [];
-        u.photos.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), url: dataUrl, ts: Date.now() });
+        u.photos.push({ id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), url: dataUrl, ts: Date.now(), by: who });
+        pushLog(d, who, "צירף תמונה (" + u.title + ")", siteId);
         return d;
       });
     }
@@ -580,6 +838,7 @@
       update(d=>{
         const u = d.sites.find(s=>s.id===siteId).units.find(x=>x.id===unitId);
         u.photos = (u.photos || []).filter(p => p.id !== photoId);
+        pushLog(d, who, "מחק תמונה (" + u.title + ")", siteId);
         return d;
       });
     }
@@ -587,6 +846,7 @@
       update(d=>{
         const s = d.sites.find(x=>x.id===siteId);
         s.units.push({ id:"u"+siteId+"_"+Date.now(), floor:data.floor.trim()||"—", title:data.title.trim(), stage:data.stage, photos:[], checklist:[] });
+        pushLog(d, who, "פתח סעיף עבודה חדש: " + data.title.trim(), siteId);
         return d;
       });
       notify("סעיף עבודה חדש נוסף לאתר");
@@ -595,6 +855,7 @@
       update(d=>{
         const s = d.sites.find(x=>x.id===siteId);
         const u = s.units.find(x=>x.id===unitId);
+        pushLog(d, who, pass ? "בדיקת לחץ עברה (" + u.title + ")" : "בדיקת לחץ נכשלה (" + u.title + ")", siteId);
         if(pass){
           u.checklist = u.checklist.map(c=>({...c,done:true}));
           s.stages.pressure = "done";
@@ -606,9 +867,41 @@
       });
       notify(pass ? "בדיקת לחץ אושרה · שלב הלבן נפתח" : "כישלון נרשם · שלב הלבן נשאר נעול");
     }
+    function checkin(siteId, status, note){
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId);
+        const ts = Date.now(), ds = dstr(ts);
+        s.checkin = { at:ts, date:ds, by:who, status, note: note || "" };
+        s.checkinLog = s.checkinLog || [];
+        if(!s.checkinLog.includes(ds)) s.checkinLog.push(ds);
+        if(s.checkinLog.length > 60) s.checkinLog.shift();
+        pushLog(d, who, status === "issue" ? "דיווח יומי · חריגה: " + note : "דיווח יומי · אין חריגים", siteId);
+        return d;
+      });
+      notify(status === "issue" ? "החריגה נשלחה לאחראי ולמרכז הבקרה" : "הדיווח היומי נרשם");
+    }
+    function resolveReported(siteId){
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId);
+        if(s.checkin) s.checkin.resolvedAt = Date.now();
+        pushLog(d, who, "סימן חריגה מהשטח כטופלה", siteId);
+        return d;
+      });
+      notify("החריגה סומנה כטופלה");
+    }
+    function nudge(e){
+      update(d=>{
+        d.nudges = d.nudges || {};
+        d.nudges[e.key] = { at: Date.now(), by: who };
+        pushLog(d, who, "דחף את " + e.owner + ": " + e.title, e.siteId);
+        return d;
+      });
+      notify("נרשמה דחיפה ל" + e.owner + " · Push אמיתי יופעל עם חיבור המסד המשותף");
+    }
     function approveConsultant(siteId){
       update(d=>{
         const s = d.sites.find(x=>x.id===siteId); s.blackConsultant = true;
+        pushLog(d, who, "רשם אישור יועץ אינסטלציה על השחור", siteId);
         const r = d.requests.find(x=>x.siteId===siteId && x.status==="blocked"); if(r) r.status = "pending";
         return d;
       });
@@ -616,12 +909,15 @@
     }
 
     let body;
-    if(nav.screen === "vp.dash")
-      body = html`<${VPDash} sites=${sites} onOpen=${id=>setNav({screen:"vp.site", id})} />`;
-    else if(nav.screen === "vp.site")
-      body = html`<${SiteDetail} site=${bySite(nav.id)} onBack=${()=>setNav({screen:"vp.dash"})} onApproveConsultant=${approveConsultant} notify=${notify} />`;
+    if(nav.screen === "ctl.home")
+      body = html`<${Control} st=${st} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctl} setCtl=${setCtl}
+        onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveReported} notify=${notify} />`;
+    else if(nav.screen === "ctl.site")
+      body = html`<${SiteDetail} site=${bySite(nav.id)} ex=${exceptions.filter(e=>e.siteId===nav.id && e.kind!=="checkin")}
+        log=${(st.log||[]).filter(l=>l.siteId===nav.id).slice(0,8)}
+        onBack=${()=>setNav({screen:"ctl.home"})} onApproveConsultant=${approveConsultant} notify=${notify} />`;
     else if(nav.screen === "field.home")
-      body = html`<${FieldHome} sites=${sites} onOpen=${(sid,uid)=>setNav({screen:"field.report", sid, uid})} onAddUnit=${addUnit} />`;
+      body = html`<${FieldHome} sites=${sites} now=${now} onCheckin=${checkin} onOpen=${(sid,uid)=>setNav({screen:"field.report", sid, uid})} onAddUnit=${addUnit} />`;
     else if(nav.screen === "field.report"){
       const rsite = bySite(nav.sid);
       const runit = rsite && rsite.units.find(u=>u.id===nav.uid);
@@ -645,20 +941,155 @@
             <span class="txt"><b>ט.ש. מי רון</b><span>פלס · בקרת ביצוע לאינסטלציה</span></span>
           </div>
           <div class="seg" role="tablist">
-            <button role="tab" class=${role==="vp"?"on":""} onClick=${()=>switchRole("vp")}>סמנכ״ל ביצוע</button>
+            <button role="tab" class=${role==="ctl"?"on":""} onClick=${()=>switchRole("ctl")}>בקרה</button>
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
             <button role="tab" class=${role==="wh"?"on":""} onClick=${()=>switchRole("wh")}>מחסן</button>
           </div>
+          <button class="ic0" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}</button>
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
           <button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>
         </div>
         ${body}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
         ${toast && html`<div class="toast"><div>${toast}</div></div>`}
+        ${idSheet && html`
+          <div class="scrim" onClick=${()=>setIdSheet(false)}>
+            <div class="sheet" onClick=${e=>e.stopPropagation()}>
+              <h3>מי אתה?</h3>
+              <div class="who">השם נרשם ביומן הפעולות ליד כל פעולה שתבצע. התחברות מאובטחת אישית תיכנס עם חיבור המסד המשותף.</div>
+              ${[{name:"בעלים"}, ...cards.map(c=>({name:c.name, role:c.role})), {name:"מחסנאי"}, {name:"איש שטח"}].map(m => html`
+                <button key=${m.name} class="opt" onClick=${()=>pickMe(m)}>
+                  <span class="e">${me.name===m.name ? "✓" : "👤"}</span>${m.name}${m.role ? " · " + m.role : ""}
+                </button>`)}
+            </div>
+          </div>`}
       </div>`;
   }
 
-  function VPDash({ sites, onOpen }){
+  function Tile({ val, label, kind }){
+    return html`<div class=${"mt " + tone(kind, val)}><b>${val == null ? "—" : val}</b><span>${label}</span></div>`;
+  }
+
+  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify }){
+    const [rep, setRep] = useState(null);
+    const { tab, mgr } = ctl;
+    const list = exceptions.filter(e => mgr === "all" || e.owner === mgr);
+    const crit = exceptions.filter(e => e.sev === "crit").length;
+    const l3 = exceptions.filter(e => e.level === 3).length;
+    const afterBy = isWorkday(now) && new Date(now).getHours() >= CFG.checkinBy;
+    const today = dstr(now);
+    const missing = afterBy ? st.sites.filter(s => s.active && !(s.checkin && s.checkin.date === today)).length : null;
+    const nudges = st.nudges || {};
+    const siteName = id => { const s = st.sites.find(x => x.id === id); return s ? s.name : ""; };
+
+    async function shareRep(){
+      try{ if(navigator.share){ await navigator.share({ text: rep }); return; } }
+      catch(e){ if(e && e.name === "AbortError") return; }
+      try{ await navigator.clipboard.writeText(rep); notify("הדוח הועתק — הדבק בוואטסאפ"); }
+      catch(e){ notify("לא ניתן להעתיק אוטומטית — סמן והעתק ידנית"); }
+    }
+
+    return html`
+      <div class="screen">
+        <div class="shead rowbet">
+          <div><h2>מרכז בקרה</h2><span class="sub">${st.sites.filter(s=>s.active).length} אתרים פעילים · עדכון ${hhmm(now)}</span></div>
+          <button class="btn" style=${{flex:"none", padding:"8px 14px"}} onClick=${()=>setRep(buildReport(st, exceptions, cards, now))}>📋 דוח</button>
+        </div>
+
+        <div class="kpis">
+          <div class=${"kpi "+(exceptions.length?"warn":"")}><b>${exceptions.length}</b><span>חריגים פתוחים</span></div>
+          <div class=${"kpi "+(crit?"crit":"")}><b>${crit}</b><span>אדומים</span></div>
+          <div class=${"kpi "+(l3?"crit":"")}><b>${l3}</b><span>דרג בעלים</span></div>
+          <div class=${"kpi "+(missing?"warn":"")}><b>${missing == null ? "—" : missing}</b><span>בלי דיווח יומי</span></div>
+        </div>
+
+        <div class="chips">
+          <button class=${"chip "+(tab==="ex"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"ex"})}>חריגים (${list.length})</button>
+          <button class=${"chip "+(tab==="mgr"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"mgr"})}>מנהלים</button>
+          <button class=${"chip "+(tab==="sites"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"sites"})}>אתרים</button>
+          <button class=${"chip "+(tab==="log"?"on":"")} onClick=${()=>setCtl({...ctl, tab:"log"})}>יומן פעולות</button>
+        </div>
+
+        ${tab === "ex" && html`
+          ${mgr !== "all" && html`<div class="alert warn" style=${{marginBottom:10}}><span class="b"></span>מסונן לפי מנהל: ${mgr}
+            <button class="chip" style=${{marginInlineStart:"auto"}} onClick=${()=>setCtl({...ctl, mgr:"all"})}>נקה סינון</button></div>`}
+          <div class="exlist">
+            ${list.map(e => {
+              const n = nudges[e.key];
+              return html`
+                <div key=${e.key} class=${"ex "+e.sev}>
+                  <div class="rowbet" style=${{alignItems:"flex-start"}}>
+                    <div class="t">${e.title}</div>
+                    <span class=${"lvl l"+e.level}>${LEVEL_SHORT[e.level]}</span>
+                  </div>
+                  ${e.siteName && html`<div class="ds">${e.siteName}</div>`}
+                  <div class="ds">${e.detail}</div>
+                  <div class="meta">אחראי: <b>${e.owner}</b>${e.ownerRole ? " · " + e.ownerRole : ""}<br/>ממתין ל: ${e.waitingOn} · פתוח <b>${ageText(e.ageMs)}</b> · ${LEVEL_TEXT[e.level]}</div>
+                  ${n && html`<div class="meta">נדחף ע״י ${n.by} לפני ${ageText(now - n.at)}</div>`}
+                  <div class="btnrow">
+                    <button class="btn" onClick=${()=>onOpen(e.siteId)}>פתח אתר</button>
+                    ${e.kind === "reported" && html`<button class="btn ok" onClick=${()=>onResolve(e.siteId)}>טופל</button>`}
+                    <button class="btn pri" onClick=${()=>onNudge(e)}>דחוף אחראי</button>
+                  </div>
+                </div>`;
+            })}
+            ${list.length === 0 && html`<div class="alert empty"><span class="b"></span>אין חריגים פתוחים${mgr!=="all" ? " אצל "+mgr : ""} — הכל בקצב</div>`}
+          </div>
+          <div class="hint">חריג עובר דרג אחרי ${CFG.escL2h} שעות (דרג 2) ו-${CFG.escL3h} שעות (דרג בעלים). דיווח יומי חסר עובר לדרג בעלים אחרי ${CFG.checkinEsc}:00.</div>
+        `}
+
+        ${tab === "mgr" && html`
+          <div style=${{display:"flex", flexDirection:"column", gap:12}}>
+            ${cards.map(c => html`
+              <div key=${c.name} class="card mc">
+                <div class="rowbet">
+                  <div><div style=${{fontWeight:700, fontSize:"1.02rem"}}>${c.name}</div><div class="sub" style=${{fontFamily:"Heebo,sans-serif", fontSize:".74rem", color:"var(--ink-3)"}}>${c.role} · ${c.sites} אתרים</div></div>
+                  <span class=${"pill "+c.health}>${c.health==="crit"?"דורש התערבות":c.health==="warn"?"דורש מעקב":"תקין"}</span>
+                </div>
+                <div class="mgrid">
+                  <${Tile} val=${c.open} label="חריגים פתוחים" kind=${c.open ? "age" : ""} />
+                  <${Tile} val=${c.open ? c.avgAgeH + " שע׳" : "—"} label="גיל ממוצע" kind=${c.open ? "age" : ""} />
+                  <${Tile} val=${c.pressureFail} label="בדיקות לחץ שנכשלו" kind="cnt" />
+                  <${Tile} val=${c.checklist == null ? null : c.checklist + "%"} label="צ׳קליסט הושלם" kind="" />
+                  <${Tile} val=${c.photos == null ? null : c.photos + "%"} label="יחידות עם תמונה" kind="" />
+                  <${Tile} val=${c.checkin == null ? null : c.checkin + "%"} label="דיווח יומי (7 ימים)" kind="" />
+                </div>
+                <div class="btnrow" style=${{marginTop:12}}>
+                  <button class="btn" onClick=${()=>setCtl({tab:"ex", mgr:c.name})}>החריגים של ${c.name.split(" ")[0]}</button>
+                </div>
+              </div>`)}
+          </div>
+          <div class="hint">אין ציון יחיד בכוונה — כל מדד מוצג לבד כדי שלא ינסו "לשחק" אותו. תמונות וצ׳קליסט נמדדים לצד חריגים ובדיקות שנכשלו.</div>
+        `}
+
+        ${tab === "sites" && html`<${VPDash} sites=${st.sites} onOpen=${onOpen} embedded=${true} />`}
+
+        ${tab === "log" && html`
+          <div class="card">
+            ${(st.log || []).slice(0, 80).map((l, i) => html`
+              <div class="logrow" key=${i}>
+                <span class="tm">${dmy(l.ts)} ${hhmm(l.ts)}</span> · <b>${l.who}</b>${l.siteId ? " · " + siteName(l.siteId) : ""}<br/>${l.text}
+              </div>`)}
+            ${(st.log || []).length === 0 && html`<div class="empty" style=${{padding:"24px 0"}}>עדיין אין פעולות ביומן. כל סימון, תמונה, אישור ודחיפה יירשמו כאן עם שם המבצע.</div>`}
+          </div>
+        `}
+
+        ${rep && html`
+          <div class="scrim" onClick=${()=>setRep(null)}>
+            <div class="sheet" onClick=${e=>e.stopPropagation()}>
+              <h3>דוח בקרה</h3>
+              <div class="who">מוכן לשליחה בוואטסאפ</div>
+              <pre class="rep">${rep}</pre>
+              <div class="btnrow">
+                <button class="btn" onClick=${()=>setRep(null)}>סגור</button>
+                <button class="btn pri" onClick=${shareRep}>שתף / העתק</button>
+              </div>
+            </div>
+          </div>`}
+      </div>`;
+  }
+
+  function VPDash({ sites, onOpen, embedded }){
     const [filter, setFilter] = useState("all");
     const activeCount = sites.filter(s=>s.active).length;
     const ranked = useMemo(()=>{
@@ -676,11 +1107,11 @@
     const alerts = useMemo(()=>alertsFor(sites), [sites]);
 
     return html`
-      <div class="screen">
-        <div class="shead">
+      <div class=${embedded ? "" : "screen"}>
+        ${!embedded && html`<div class="shead">
           <h2>מבט על</h2>
           <span class="sub">${activeCount} אתרים פעילים · ${sites.length} בתיק · עודכן עכשיו</span>
-        </div>
+        </div>`}
         <div class="chips">
           <button class=${"chip "+(filter==="all"?"on":"")} onClick=${()=>setFilter("all")}>הכל</button>
           <button class=${"chip "+(filter==="mat"?"on":"")} onClick=${()=>setFilter("mat")}>ממתין לחומר</button>
@@ -714,7 +1145,7 @@
       </div>`;
   }
 
-  function SiteDetail({ site, onBack, onApproveConsultant, notify }){
+  function SiteDetail({ site, ex, log, onBack, onApproveConsultant, notify }){
     const [sheet, setSheet] = useState(false);
     if(!site) return null;
     const status = siteStatus(site);
@@ -760,6 +1191,12 @@
             <div class="val">בדיקת לחץ פאזה א׳ נכשלה — שלב הלבן חסום עד לצילום בדיקה תקינה</div>
           </div>`}
 
+        ${ex && ex.length > 0 && html`
+          <div class="card">
+            <div class="lbl">חריגים פתוחים באתר</div>
+            ${ex.map(e => html`<div class="exrow" key=${e.key}><b>${e.title}</b> · פתוח ${ageText(e.ageMs)} · ${LEVEL_SHORT[e.level]}<br/><span style=${{color:"var(--ink-3)"}}>ממתין ל: ${e.waitingOn}</span></div>`)}
+          </div>`}
+
         <div class="card">
           <div class="lbl">מי מטפל כעת</div>
           <div class="val">${site.owner.name} · ${site.owner.role}</div>
@@ -768,6 +1205,12 @@
             <button class="btn pri" onClick=${()=>setSheet(true)}>פנייה לאחראי</button>
           </div>
         </div>
+
+        ${log && log.length > 0 && html`
+          <div class="card">
+            <div class="lbl">יומן פעולות באתר</div>
+            ${log.map((l, i) => html`<div class="logrow" key=${i}><span class="tm">${dmy(l.ts)} ${hhmm(l.ts)}</span> · <b>${l.who}</b><br/>${l.text}</div>`)}
+          </div>`}
 
         ${sheet && html`
           <div class="scrim" onClick=${()=>setSheet(false)}>
@@ -782,10 +1225,12 @@
       </div>`;
   }
 
-  function FieldHome({ sites, onOpen, onAddUnit }){
+  function FieldHome({ sites, now, onCheckin, onOpen, onAddUnit }){
     const active = sites.filter(s=>s.active);
     const [sid, setSid] = useState(active[0].id);
     const [adding, setAdding] = useState(false);
+    const [issue, setIssue] = useState(false);
+    const [note, setNote] = useState("");
     const [nu, setNu] = useState({ title:"", floor:"", stage:"black" });
     const site = sites.find(s=>s.id===sid) || active[0];
 
@@ -803,6 +1248,21 @@
         <select class="pick" value=${sid} onChange=${e=>{ setSid(e.target.value); setAdding(false); }}>
           ${active.map(s => html`<option key=${s.id} value=${s.id}>${s.name} · ${s.contractor}</option>`)}
         </select>
+        <div class="card ci" style=${{marginBottom:12}}>
+          <div class="lbl">דיווח יומי · ${site.name}</div>
+          ${site.checkin && site.checkin.date === dstr(now)
+            ? html`<div class="val">✓ דווח היום ${hhmm(site.checkin.at)} · ${site.checkin.by} · ${site.checkin.status === "issue" ? "חריגה: " + site.checkin.note : "אין חריגים"}</div>`
+            : html`<div class="val" style=${{color:"var(--warn)"}}>טרם דווח היום${new Date(now).getHours() >= CFG.checkinBy ? " — נדרש דיווח" : ""}</div>`}
+          ${!issue
+            ? html`<div class="btnrow" style=${{marginTop:10}}>
+                <button class="btn ok" onClick=${()=>onCheckin(site.id, "ok", "")}>✓ אין חריגים</button>
+                <button class="btn danger" onClick=${()=>setIssue(true)}>⚠ יש חריגה</button>
+              </div>`
+            : html`<form class="addrow" onSubmit=${(e)=>{ e.preventDefault(); if(!note.trim()) return; onCheckin(site.id, "issue", note.trim()); setNote(""); setIssue(false); }}>
+                <input type="text" value=${note} onInput=${e=>setNote(e.target.value)} placeholder="תאר בקצרה את החריגה…" maxLength=${100} />
+                <button type="submit" class="add" disabled=${!note.trim()} aria-label="שלח">➤</button>
+              </form>`}
+        </div>
         <div style=${{display:"flex", flexDirection:"column", gap:9}}>
           ${site.units.map(u=>{
             const locked = u.stage === "white" && site.stages.white === "locked";
