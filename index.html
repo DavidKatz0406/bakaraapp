@@ -446,12 +446,12 @@
   const SCEN = {
     1:{ stages:{black:"done",pressure:"pending",white:"locked"}, schedule:"behind",
         materials:[{item:"צנרת 4״",need:200,onSite:0,unit:"מ׳",blocksTomorrow:true}],
-        owner:{name:"דוד ל׳",role:"מנהל רכש",status:"בטיפול — ממתין לאישור ניפוק מהמחסן"} },
+        owner:{name:"דוד ל׳",role:"מנהל רכש",status:"בטיפול — חוסר חומר באתר"} },
     11:{ stages:{black:"done",pressure:"failed",white:"locked"}, schedule:"on",
         owner:{name:"רון מ׳",role:"מנהל עבודה ראשי",status:"מתקן ליקוי בקו ראשי קומה 5, צילום חוזר מחר"} },
     24:{ stages:{black:"done",pressure:"done",white:"active"}, schedule:"behind",
         materials:[{item:"סוללות אינטרפוץ",need:24,onSite:0,unit:"יח׳",blocksTomorrow:true}],
-        owner:{name:"מירי כ׳",role:"מנהלת פרויקט",status:"בטיפול — בקשת ניפוק נשלחה למחסן"} },
+        owner:{name:"מירי כ׳",role:"מנהלת פרויקט",status:"בטיפול — חוסר חומר באתר"} },
     6:{ stages:{black:"done",pressure:"pending",white:"locked"}, schedule:"on",
         owner:{name:"סאמר ע׳",role:"מנהל עבודה",status:"מוכן לבדיקת לחץ פאזה א׳"} },
     13:{ stages:{black:"active",pressure:"locked",white:"locked"}, schedule:"behind", blackConsultant:false,
@@ -504,16 +504,8 @@
     return {
       sites, rosterV: 2,
       log: [], nudges: {}, trackStart: T,
-      since: { "s1:material": T-26*3600e3, "s24:material": T-5*3600e3, "s11:pressure": T-52*3600e3, "s13:consultant": T-30*3600e3 },
-      requests:[
-        { id:"r1", siteId:"s1", item:"צנרת 4״", qty:200, unit:"מ׳", stage:"black", status:"pending", why:"שלב הבא בגאנט: פריסת קווי מים קומה 3 — מחר 07:00" },
-        { id:"r2", siteId:"s24", item:"סוללות אינטרפוץ", qty:24, unit:"יח׳", stage:"white", status:"pending", why:"שלב הבא בגאנט: התקנת כלים סניטריים קומה 1" },
-        { id:"r3", siteId:"s13", item:"משאבת ביוב 3״", qty:1, unit:"יח׳", stage:"black", status:"blocked", why:"חסום — נדרש אישור יועץ אינסטלציה על שלב השחור לפני ניפוק" }
-      ],
-      transfers:[
-        { id:"t1", fromId:"s12", toId:"s1", fromSite:"כפר אזר 116 · אלקטרה", toSite:"עץ החיים · אשטרום", item:"צנרת 4״", qty:210, unit:"מ׳", distanceKm:16, eta:"מחר 08:00 · ~30 דק׳ נסיעה", saving:4200, status:"open" },
-        { id:"t2", fromId:"s23", toId:"s24", fromSite:"גליל ים · דניה סיבוס", toSite:"מרינה הרצליה · דניה סיבוס", item:"סוללות אינטרפוץ", qty:30, unit:"יח׳", distanceKm:5, eta:"מחר 09:30 · ~15 דק׳ נסיעה", saving:3600, status:"open" }
-      ]
+      since: {},
+      requests: [], transfers: []
     };
   }
 
@@ -574,7 +566,7 @@
     checkinBy: 10,         // שעה: מכאן אתר בלי דיווח יומי מסומן
     checkinEsc: 12,        // שעה: מכאן החריגה עוברת לדרג בעלים
     weeklyBy: 12,          // שעה ביום א׳: עד אז צריך להגיש את הדוח השבועי
-    stockDays: 7,          // ימים: מלאי שלא עודכן מעבר לזה נחשב לא מעודכן
+    stockDays: 3,          // ימים: מלאי שלא עודכן מעבר לזה נחשב לא מעודכן
     workerDrop: 0.6,       // ירידת כ"א: ביחס לשבוע שעבר מתחת ל-60% = חריג
     escL2h: 4,             // שעות פתוחה → דרג 2
     escL3h: 24,            // שעות פתוחה → דרג 3 (בעלים)
@@ -729,12 +721,16 @@
       /* מלאי באתר מול המינימום שהמנהל הגדיר */
       (s.materials || []).forEach(m=>{
         if(!(m.onSite < m.need)) return;
-        const pendingReq = st.requests.find(r => r.siteId === s.id && r.item === m.item && r.status === "pending");
+        const lack = m.need - m.onSite;
+        const donor = st.sites.filter(o => o.active && o.id !== s.id)
+          .map(o => ({ o, d: (o.materials || []).find(x => x.at && x.item.trim() === m.item.trim() && x.need > 0 && x.onSite - x.need > 0) }))
+          .filter(x => x.d).sort((a, b) => (b.d.onSite - b.d.need) - (a.d.onSite - a.d.need))[0];
         add({ ...base, key: s.id + ":material:" + m.item, kind: "material",
           sev: m.blocksTomorrow ? "crit" : "warn",
-          title: "חוסר " + (m.need - m.onSite) + " " + m.unit + " " + m.item,
-          detail: "במלאי " + m.onSite + " מתוך מינימום " + m.need + (m.blocksTomorrow ? " · יעכב את העבודה" : ""),
-          waitingOn: pendingReq ? "מחסן — ממתין לאישור ניפוק" : "רכש — אין בקשה פתוחה" });
+          title: "חוסר " + lack + " " + m.unit + " " + m.item,
+          detail: "במלאי " + m.onSite + " מתוך מינימום " + m.need + (m.blocksTomorrow ? " · יעכב את העבודה" : "") +
+            (donor ? " · אפשר לנייד מ" + donor.o.name + " (" + ((donor.o.owner && donor.o.owner.name) || "—") + "): עודף " + (donor.d.onSite - donor.d.need) + " " + donor.d.unit : ""),
+          waitingOn: "מנהל הפרויקט — השלמת החומר (ניוד מאתר אחר או הזמנה ברכש)" });
       });
 
       if(s.checkin && s.checkin.status === "issue" && !s.checkin.resolvedAt){
@@ -780,7 +776,7 @@
         add({ key: "mgr:" + name + ":stock", kind: "stock", sev: "warn",
           siteId: arr[0].id, siteIds: arr.map(x => x.id), siteName: null, owner: name, ownerRole: roleOf(arr),
           title: arr.length + (arr.length === 1 ? " אתר בלי עדכון מלאי" : " אתרים בלי עדכון מלאי"),
-          detail: names(arr) + " · מעל " + CFG.stockDays + " ימים", waitingOn: "עדכון מלאי בלשונית מחסן",
+          detail: names(arr) + " · מעל " + CFG.stockDays + " ימים", waitingOn: "עדכון מלאי בלשונית מלאי",
           fixedTs: Math.min(...arr.map(x => stockRef(x, st.trackStart) + CFG.stockDays * DAY)) }));
     }
 
@@ -991,7 +987,6 @@
     const [toast, setToast] = useState(null);
     const [now, setNow] = useState(Date.now());
     const [ctl, setCtl] = useState({ tab:"ex", mgr:"all" });
-    const [whView, setWhView] = useState("stock");
     const [idSheet, setIdSheet] = useState(false);
     const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"דוד" }; });
     const who = me.name;
@@ -1045,7 +1040,13 @@
         update(d => { d.sites.forEach(applyRoster); d.rosterV = ROSTER_V; return d; });
     }, [cloud.ready, cloud.empty, st.rosterV]);
 
-    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : "wh.home";
+    // המודל הישן של מחסן מרכזי (בקשות ניפוק / ניוד הדגמה) הוסר — מנקים אותו מהמסד המשותף
+    useEffect(()=>{
+      if(cloudCode && cloud.ready && !cloud.empty && ((st.requests || []).length || (st.transfers || []).length))
+        update(d => { d.requests = []; d.transfers = []; return d; });
+    }, [cloud.ready, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
+
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
     function reset(){
       if(cloudCode){
@@ -1082,7 +1083,7 @@
     const sites = st.sites;
     const bySite = useCallback((id)=> sites.find(s=>s.id===id), [sites]);
 
-    const exceptions = useMemo(()=> deriveExceptions(st, now), [st.sites, st.requests, st.since, st.trackStart, now]);
+    const exceptions = useMemo(()=> deriveExceptions(st, now), [st.sites, st.since, st.trackStart, now]);
     const cards = useMemo(()=> scorecards(st, exceptions, now), [st.sites, st.trackStart, exceptions, now]);
     // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
     useEffect(()=>{
@@ -1099,44 +1100,6 @@
         return d;
       });
     }, [exceptions, cloud.loaded]);
-
-    function approveRequest(reqId){
-      update(d=>{
-        const r = d.requests.find(x=>x.id===reqId); if(!r || r.status!=="pending") return d;
-        r.status = "approved";
-        pushLog(d, who, "אישר ניפוק: " + r.qty + " " + r.unit + " " + r.item, r.siteId);
-        const s = d.sites.find(x=>x.id===r.siteId);
-        const m = (s.materials||[]).find(x=>x.item===r.item);
-        if(m) m.onSite += r.qty; else (s.materials=s.materials||[]).push({item:r.item,need:r.qty,onSite:r.qty,unit:r.unit,blocksTomorrow:false});
-        if(s.owner) s.owner.status = "החומר נופק — בדרך לאתר";
-        return d;
-      });
-      notify("החומר נופק · הגאנט והמלאי עודכנו");
-    }
-    function markShortage(reqId){
-      const r = st.requests.find(x=>x.id===reqId);
-      const match = st.transfers.find(t=>t.status==="open" && t.toId===r.siteId && t.item===r.item);
-      if(match){ setNav({ screen:"wh.tinder" }); notify("נמצאה התאמת ניוד לבקשה — אשר או דלג"); }
-      else notify("אין מלאי ואין ניוד זמין — נפתחה הזמנת רכש");
-    }
-    function acceptTransfer(tId){
-      update(d=>{
-        const t = d.transfers.find(x=>x.id===tId); if(!t || t.status!=="open") return d;
-        t.status = "accepted";
-        pushLog(d, who, "אישר ניוד: " + t.qty + " " + t.unit + " " + t.item + " מ-" + t.fromSite, t.toId);
-        const dest = d.sites.find(s=>s.id===t.toId);
-        if(dest){
-          const m = (dest.materials||[]).find(x=>x.item===t.item);
-          if(m) m.onSite += t.qty; else (dest.materials=dest.materials||[]).push({item:t.item,need:t.qty,onSite:t.qty,unit:t.unit,blocksTomorrow:false});
-          const req = d.requests.find(rr=>rr.siteId===dest.id && rr.item===t.item && rr.status==="pending");
-          if(req) req.status = "approved";
-          if(dest.owner) dest.owner.status = "חומר בניוד מאתר סמוך — נמנעה הזמנה כפולה";
-        }
-        return d;
-      });
-      notify("ניוד אושר · נמנעה הזמנת חירום כפולה");
-    }
-    function skipTransfer(tId){ update(d=>{ const t=d.transfers.find(x=>x.id===tId); if(t) t.status="skipped"; return d; }); }
 
     function toggleTask(siteId, unitId, i){
       update(d=>{
@@ -1345,12 +1308,8 @@
             onPressure=${runPressure} notify=${notify} />`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
-    else if(nav.screen === "wh.home")
-      body = html`<${WarehouseHome} st=${st} now=${now} who=${who} view=${whView} setView=${setWhView}
-        onApprove=${approveRequest} onShortage=${markShortage} onTinder=${()=>setNav({screen:"wh.tinder"})}
-        onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
-    else if(nav.screen === "wh.tinder")
-      body = html`<${Tinder} transfers=${st.transfers} onAccept=${acceptTransfer} onSkip=${skipTransfer} onBack=${()=>setNav({screen:"wh.home"})} />`;
+    else if(nav.screen === "stock.home")
+      body = html`<${StockHome} st=${st} now=${now} who=${who} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
 
     return html`
       <div class="app">
@@ -1362,7 +1321,7 @@
           <div class="seg" role="tablist">
             <button role="tab" class=${role==="ctl"?"on":""} onClick=${()=>switchRole("ctl")}>בקרה</button>
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
-            <button role="tab" class=${role==="wh"?"on":""} onClick=${()=>switchRole("wh")}>מחסן</button>
+            <button role="tab" class=${role==="stock"?"on":""} onClick=${()=>switchRole("stock")}>מלאי</button>
           </div>
           <button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
@@ -1392,7 +1351,7 @@
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
               <h3>מי אתה?</h3>
               <div class="who">השם נרשם ביומן הפעולות ליד כל פעולה שתבצע. התחברות מאובטחת אישית תיכנס עם חיבור המסד המשותף.</div>
-              ${[{name:"דוד", role:"הנהלה"}, {name:"טל", role:"מאשר הזמנות"}, {name:"שרון", role:"רכש"}, ...cards.filter(c=>c.name!=="לא משויך").map(c=>({name:c.name, role:c.role})), {name:"מחסנאי"}, {name:"איש שטח"}].map(m => html`
+              ${[{name:"דוד", role:"הנהלה"}, {name:"טל", role:"מאשר הזמנות"}, {name:"שרון", role:"רכש"}, ...cards.filter(c=>c.name!=="לא משויך").map(c=>({name:c.name, role:c.role})), {name:"איש שטח"}].map(m => html`
                 <button key=${m.name} class="opt" onClick=${()=>pickMe(m)}>
                   <span class="e">${me.name===m.name ? "✓" : "👤"}</span>${m.name}${m.role ? " · " + m.role : ""}
                 </button>`)}
@@ -1628,14 +1587,14 @@
               <div class=${"sr "+(m.onSite < m.need ? "bad" : "")} key=${m.item}>
                 <span class="n">${m.item}</span>
                 <span class="q"><b>${m.onSite}</b> ${m.unit}${m.need ? html`<small> / מינ׳ ${m.need}</small>` : null}</span>
-                ${!m.at ? html`<span class="tg">לא נספר</span>` : null}
+                ${m.at ? html`<span class="tg">${ageText(now - m.at)}</span>` : html`<span class="tg">לא נספר</span>`}
               </div>`)}
             ${(s.materials || []).length === 0 && html`<div class="meta2">לא הוזן מלאי באתר</div>`}
             <div class="btnrow" style=${{marginTop:8}}><button class="btn" onClick=${()=>onOpen(s.id)}>פתח אתר</button></div>
           </div>`)}
         ${sites.length === 0 && html`<div class="empty">אין אתרים להצגה</div>`}
       </div>
-      <div class="hint">המנהלים מזינים מלאי בלשונית מחסן. "לא נספר" = כמות שעדיין לא אושרה על ידי מנהל הפרויקט (נתון הדגמה). חוסר = כמות במלאי נמוכה מהמינימום שהמנהל הגדיר.</div>`;
+      <div class="hint">המנהלים מזינים מלאי בלשונית מלאי. "לא נספר" = כמות שעדיין לא אושרה על ידי מנהל הפרויקט (נתון הדגמה). חוסר = כמות במלאי נמוכה מהמינימום שהמנהל הגדיר.</div>`;
   }
 
   function SiteDetail({ site, ex, log, now, st, onBack, notify }){
@@ -2111,107 +2070,13 @@
       </div>`;
   }
 
-  function WarehouseHome({ st, now, who, view, setView, onApprove, onShortage, onTinder, onStockSave, onStockDelete, onStockConfirm }){
-    const pending = st.requests.filter(r=>r.status==="pending");
-    const blocked = st.requests.filter(r=>r.status==="blocked");
-    const openTransfers = st.transfers.filter(t=>t.status==="open").length;
-
+  function StockHome({ st, now, who, onStockSave, onStockDelete, onStockConfirm }){
     return html`
       <div class="screen narrow">
-        <div class="shead"><h2>מחסן</h2><span class="sub">מלאי באתרים · ${pending.length} בקשות ניפוק ממתינות</span></div>
-        <div class="chips" style=${{marginTop:6}}>
-          <button class=${"chip "+(view==="stock"?"on":"")} onClick=${()=>setView("stock")}>מלאי באתר</button>
-          <button class=${"chip "+(view==="req"?"on":"")} onClick=${()=>setView("req")}>בקשות ניפוק (${pending.length + blocked.length})</button>
+        <div class="shead"><h2>מלאי באתר</h2><span class="sub">כל מנהל מנהל את המלאי של האתרים שלו · ההנהלה רואה בזמן אמת</span></div>
+        <div style=${{marginTop:12}}>
+          <${StockEditor} st=${st} now=${now} who=${who} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} />
         </div>
-
-        ${view === "stock" && html`<${StockEditor} st=${st} now=${now} who=${who} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} />`}
-
-        ${view === "req" && html`
-          <button class="wu" style=${{marginBottom:16}} onClick=${onTinder}>
-            <span class="ic">🔁</span>
-            <span class="m"><b>ניוד מלאי בין אתרים</b><span>${openTransfers} התאמות פתוחות · מונע הזמנות כפולות</span></span>
-            <span class="rt">פתח ›</span>
-          </button>
-
-          <div class="lbl">בקשות ניפוק</div>
-          <div style=${{display:"flex", flexDirection:"column", gap:10, marginTop:6}}>
-            ${pending.length===0 && blocked.length===0 && html`<div class="empty">אין בקשות פתוחות</div>`}
-            ${pending.map(r=>{
-              const site = st.sites.find(s=>s.id===r.siteId);
-              return html`
-                <div key=${r.id} class="req">
-                  <div class="top">
-                    <div>
-                      <div class="sitenm">${site.name} · ${site.contractor}</div>
-                      <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-2)"}}>${r.item}</div>
-                    </div>
-                    <div style=${{textAlign:"center"}}>
-                      <div class="q">${r.qty}</div>
-                      <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".66rem", color:"var(--ink-3)"}}>${r.unit}</div>
-                    </div>
-                  </div>
-                  <div class="why">${r.why}</div>
-                  <div class="btnrow">
-                    <button class="btn" onClick=${()=>onShortage(r.id)}>אין במלאי</button>
-                    <button class="btn pri" onClick=${()=>onApprove(r.id)}>אשר ניפוק</button>
-                  </div>
-                </div>`;
-            })}
-            ${blocked.map(r=>{
-              const site = st.sites.find(s=>s.id===r.siteId);
-              return html`
-                <div key=${r.id} class="req blocked">
-                  <div class="top">
-                    <div><div class="sitenm">${site.name} · ${site.contractor}</div>
-                      <div style=${{fontFamily:"Heebo,sans-serif", fontSize:".78rem", color:"var(--ink-2)"}}>${r.item} · ${r.qty} ${r.unit}</div></div>
-                    <span class="pill lock">🔒 חסום</span>
-                  </div>
-                  <div class="why">${r.why}</div>
-                  <button class="btn wide" disabled=${true}>ממתין לאישור שלב קודם</button>
-                </div>`;
-            })}
-          </div>
-          <div class="hint">ניפוק מאושר רק בהתאם לכמות שהשלב הבא בגאנט צורך.</div>`}
-      </div>`;
-  }
-
-  function Tinder({ transfers, onAccept, onSkip, onBack }){
-    const queue = transfers.filter(t=>t.status==="open");
-    const [anim, setAnim] = useState(null);
-    function go(t, dir){
-      setAnim({ id:t.id, dir });
-      setTimeout(()=>{ dir==="right" ? onAccept(t.id) : onSkip(t.id); setAnim(null); }, 340);
-    }
-    return html`
-      <div class="screen narrow">
-        <div class="shead">
-          <button class="back" onClick=${onBack} aria-label="חזרה">→</button>
-          <div><h2 style=${{fontSize:"1.25rem"}}>ניוד מלאי</h2><span class="sub">עודף באתר אחד ← חוסר מיידי באחר</span></div>
-        </div>
-        <div class="deck">
-          ${queue.length === 0 && html`<div class="deck-empty"><div style=${{fontSize:"1.6rem"}}>✓</div>אין התאמות ניוד פתוחות<br/>כל החוסרים המיידיים מכוסים</div>`}
-          ${queue.slice(0,2).reverse().map((t, idx, arr)=>{
-            const isTop = idx === arr.length - 1;
-            const cls = isTop ? (anim && anim.id===t.id ? "gone-"+anim.dir : "") : "behind";
-            return html`
-              <div key=${t.id} class=${"swipe "+cls}>
-                <div><div class="tag">עודף באתר</div><div class="big">${t.fromSite}</div>
-                  <div class="meta">${t.qty} ${t.unit} ${t.item} · פנוי עד שלב הלבן</div></div>
-                <div class="arrow">↓</div>
-                <div><div class="tag">חוסר מיידי</div><div class="big">${t.toSite}</div>
-                  <div class="meta crit">חסרים ${t.qty} ${t.unit} · עוצר עבודה מחר</div></div>
-                <hr/>
-                <div class="meta" style=${{textAlign:"center", color:"var(--ink-3)"}}>${t.distanceKm} ק״מ · ${t.eta}</div>
-                <div class="save">חוסך הזמנת חירום · ≈ ₪${t.saving.toLocaleString("he-IL")}</div>
-              </div>`;
-          })}
-        </div>
-        ${queue.length > 0 && html`
-          <div class="btnrow" style=${{marginTop:18}}>
-            <button class="btn" onClick=${()=>go(queue[0], "left")}>✕ דלג</button>
-            <button class="btn pri" onClick=${()=>go(queue[0], "right")}>✓ אשר ניוד</button>
-          </div>`}
-        <div class="hint">אישור יוצר תעודת ניוד בין־אתרית ומעדכן מלאי בשני האתרים.</div>
       </div>`;
   }
 
