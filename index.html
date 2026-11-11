@@ -972,7 +972,40 @@
   };
   const ROSTER_V = 4;
   const TEAM_KEY = "bakara_team";
-  const Cloud = { on:false, db:null, base:null };
+  const Cloud = { on:false, db:null, base:null, mgr:null };
+
+  /* ───── כניסה אישית עם מספר טלפון (SMS) ─────
+     staff/{+9725…}   { name, role:"office"|"mgr", active }  — מי מורשה ומה תפקידו (במסד, לא בקוד)
+     staffmeta/owner  { phone } — הבעלים; נוצר פעם אחת, בכניסה הראשונה למערכת
+     משרד רואה ומשנה הכול; מנהל פרויקט רואה ומשנה רק את האתרים שבהם הוא המנהל ואת העובדים שלהם.
+     האכיפה האמיתית בחוקי Firestore (firestore.rules) — האפליקציה רק מתאימה את התצוגה. */
+  let fbReady = false;
+  function fbInit(){
+    if(typeof firebase === "undefined") return null;
+    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    if(!fbReady){ fbReady = true; try{ firebase.firestore().enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){} }
+    return firebase;
+  }
+  function normPhone(v){
+    let d = String(v || "").replace(/[^\d+]/g, "");
+    if(d.startsWith("+")) return /^\+\d{9,15}$/.test(d) ? d : null;
+    if(d.startsWith("972")) d = "+" + d;
+    else if(d.startsWith("0")) d = "+972" + d.slice(1);
+    else return null;
+    return /^\+972\d{8,9}$/.test(d) ? d : null;
+  }
+  const fmtPhone = p => p && p.startsWith("+972") ? ("0" + p.slice(4)).replace(/^(\d{3})(\d+)$/, "$1-$2") : (p || "");
+  function authErr(e){
+    const c = String((e && e.code) || "");
+    if(c.includes("invalid-phone")) return "מספר הטלפון לא תקין";
+    if(c.includes("invalid-verification-code")) return "הקוד שגוי — בדוק את ה-SMS ונסה שוב";
+    if(c.includes("code-expired")) return "תוקף הקוד פג — בקש קוד חדש";
+    if(c.includes("too-many-requests") || c.includes("quota")) return "יותר מדי ניסיונות — נסה שוב מאוחר יותר";
+    if(c.includes("operation-not-allowed") || c.includes("billing")) return "כניסה עם טלפון עוד לא הופעלה ב-Firebase — פנה לדוד";
+    if(c.includes("unauthorized-domain") || c.includes("captcha") || c.includes("app-not-authorized")) return "בעיית אימות של האתר (" + c + ") — פנה לדוד";
+    if(c.includes("network")) return "אין חיבור לרשת";
+    return "הכניסה נכשלה: " + (c || (e && e.message) || e);
+  }
 
   function readTeamCode(){
     try{
@@ -998,14 +1031,13 @@
   }
 
   function cloudStart(code, h){
-    if(typeof firebase === "undefined"){ h.status("error", { code:"sdk-missing" }); return ()=>{}; }
-    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    if(!fbInit()){ h.status("error", { code:"sdk-missing" }); return ()=>{}; }
     const db = firebase.firestore();
-    try{ db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
     Cloud.db = db; Cloud.base = db.collection("t").doc(code); Cloud.on = true;
     const unsubs = [];
     let stopped = false;
-    firebase.auth().signInAnonymously().then(()=>{
+    // המשתמש כבר מחובר בטלפון (נבדק באפליקציה לפני שמגיעים לכאן)
+    Promise.resolve().then(()=>{
       if(stopped) return;
       const col = n => Cloud.base.collection(n);
       const err = e => h.status("error", e);
@@ -1027,11 +1059,13 @@
     const set = (n, id, data) => { batch.set(col(n).doc(docKey(id)), data); ops++; };
     const del = (n, id) => { batch.delete(col(n).doc(docKey(id))); ops++; };
 
+    // מנהל פרויקט כותב רק לאתרים שלו (החוקים במסד חוסמים כל דבר אחר — ואז כל הצרור נכשל)
+    const mine = (n, x) => !Cloud.mgr || n !== "sites" || (x && ownerName(x) === Cloud.mgr);
     [["sites", stripSite], ["requests", cleanDoc], ["transfers", cleanDoc]].forEach(([n, fix])=>{
       const before = new Map((prev[n] || []).map(x => [x.id, JSON.stringify(x)]));
       const ids = new Set();
-      (next[n] || []).forEach(x => { ids.add(x.id); if(before.get(x.id) !== JSON.stringify(x)) set(n, x.id, fix(x)); });
-      before.forEach((_, id) => { if(!ids.has(id)) del(n, id); });
+      (next[n] || []).forEach(x => { ids.add(x.id); if(before.get(x.id) !== JSON.stringify(x) && mine(n, x)) set(n, x.id, fix(x)); });
+      before.forEach((_, id) => { if(!ids.has(id) && !(Cloud.mgr && n === "sites")) del(n, id); });
     });
     const pn = prev.nudges || {}, nn = next.nudges || {};
     Object.keys(nn).forEach(k => { if(JSON.stringify(pn[k]) !== JSON.stringify(nn[k])) set("nudges", k, { k, at:nn[k].at, by:nn[k].by }); });
@@ -1041,7 +1075,7 @@
     Object.keys(ps).forEach(k => { if(!(k in ns)) del("since", k); });
     const seen = new Set((prev.log || []).map(l => l.id));
     (next.log || []).forEach(l => { if(l.id && !seen.has(l.id)) set("log", l.id, cleanDoc(l)); });
-    if(prev.trackStart !== next.trackStart || prev.rosterV !== next.rosterV || prev.cleanV !== next.cleanV){
+    if(!Cloud.mgr && (prev.trackStart !== next.trackStart || prev.rosterV !== next.rosterV || prev.cleanV !== next.cleanV)){
       batch.set(col("meta").doc("app"), { trackStart:next.trackStart, rosterV:next.rosterV, cleanV:next.cleanV || 0 }, { merge:true }); ops++;
     }
     if(ops) batch.commit().catch(e => console.warn("cloud write failed", e));
@@ -1415,7 +1449,9 @@ ${l}`
       base.current = b;
       const uns = [];
       let stop = false;
-      firebase.auth().signInAnonymously().then(()=>{
+      const fa = firebase.auth();
+      new Promise(res => { const u = fa.onAuthStateChanged(x => { u(); res(x); }); })
+        .then(x => x ? x : fa.signInAnonymously()).then(()=>{
         if(stop) return;
         uns.push(b.collection("workers").doc(id.w).onSnapshot(d => {
           if(d.exists){ const w = d.data(); setWorker(w); setPhase(w.active === false ? "off" : "ok"); }
@@ -1478,11 +1514,11 @@ ${l}`
       batch.set(b.collection("punch").doc(pid), p);
       batch.set(b.collection("pph").doc(pid), { id:pid, w:id.w, day:today, site:sid, url:f.photo });
       // הסלפי הראשון נשמר כתמונת הזיהוי של העובד (לא נמחקת במחיקה החודשית; מנהל יכול להחליף)
-      if(!worker.hasRef && f.cam === "live"){
-        batch.set(b.collection("ref").doc(id.w), { w:id.w, url:f.photo, pid, at:FV(), by:"auto" });
-        batch.set(b.collection("workers").doc(id.w), { hasRef:true }, { merge:true });
-      }
       batch.commit().catch(e => setDone({ err: String(e.code || e.message || e) }));
+      // תמונת הזיהוי נכתבת בנפרד — אם תיכשל, הרישום עצמו לא נפגע
+      if(!worker.hasRef && f.cam === "live")
+        b.collection("ref").doc(id.w).set({ w:id.w, url:f.photo, pid, at:FV(), by:"auto" })
+          .then(()=> b.collection("workers").doc(id.w).set({ hasRef:true }, { merge:true })).catch(()=>{});
       setFlow(null);
       setDone({ type:f.type, at:t, off, photo:f.photo, site:siteName(sid) });
     }
@@ -1549,7 +1585,7 @@ ${l}`
   /* ═════════════ נוכחות — מסך המנהלים / המשרד ═════════════ */
   // עובד יכול לעבוד בכמה פרויקטים של הצוות: site = אתר הבית, sites = כל הפרויקטים
   const wSites = w => [...new Set([w.site, ...(w.sites || [])].filter(Boolean))];
-  function Attendance({ st, now, mgr, who, notify }){
+  function Attendance({ st, now, mgr, who, notify, office }){
     const [code, setCode] = useState(null);
     const [err, setErr] = useState("");
     const [view, setView] = useState("day");
@@ -1576,6 +1612,7 @@ ${l}`
       const ref = Cloud.base.collection("meta").doc("att");
       return ref.onSnapshot(d => {
         if(d.exists && d.data().code) setCode(d.data().code);
+        else if(!d.metadata.fromCache && !office) setErr("מרחב הנוכחות עוד לא נפתח — המשרד צריך לפתוח את לשונית הנוכחות פעם אחת");
         else if(!d.metadata.fromCache)
           Cloud.db.runTransaction(tx => tx.get(ref).then(x => { if(!x.exists || !x.data().code) tx.set(ref, { code: rid(24), at: Date.now(), by: who }); }))
             .catch(e => setErr(String(e.code || e.message || e)));
@@ -1589,8 +1626,10 @@ ${l}`
       return ()=>{ u1(); u2(); };
     }, [B]);
     // שמות האתרים והמנהלים עוברים מהבקרה למרחב הנוכחות (בלי לגעת במיקום שנקבע)
+    // סימון המרחב כמרחב נוכחות — חוקי המסד מאפשרים לעובדים (בלי כניסה) לגשת רק למרחב כזה
+    useEffect(()=>{ if(B && office) B.collection("meta").doc("space").set({ kind:"att" }, { merge:true }).catch(()=>{}); }, [B, office]);
     useEffect(()=>{
-      if(!B || !asLoaded) return;
+      if(!B || !asLoaded || !office) return;
       const have = new Map(asites.map(s => [s.id, s]));
       const batch = Cloud.db.batch();
       let n = 0;
@@ -1599,7 +1638,7 @@ ${l}`
         if(!a || a.name !== want.name || a.owner !== want.owner || a.active !== want.active || a.num !== want.num){ batch.set(B.collection("sites").doc(docKey(s.id)), want, { merge:true }); n++; }
       });
       if(n) batch.commit().catch(()=>{});
-    }, [B, asLoaded, st.sites]);
+    }, [B, asLoaded, st.sites, office]);
     useEffect(()=>{
       if(!B || view === "month") return;
       const e = x => setErr(String(x.code || x.message || x));
@@ -1623,7 +1662,8 @@ ${l}`
     useEffect(()=>{
       if(!B || !asLoaded || view === "month") return;
       const med = a => { const x = a.slice().sort((p, q) => p - q); return x[Math.floor(x.length / 2)]; };
-      asites.filter(s => s.lat == null && s.active !== false).forEach(s => {
+      const mine = new Set(st.sites.filter(x => mgr === "all" || ownerName(x) === mgr).map(x => x.id));
+      asites.filter(s => s.lat == null && s.active !== false && mine.has(s.id)).forEach(s => {
         const pts = punches.filter(p => p.site === s.id && p.lat != null && (p.acc || 999) <= 100);
         if(pts.length < 3 || new Set(pts.map(p => p.w)).size < 2) return;
         const c = { lat: med(pts.map(p => p.lat)), lng: med(pts.map(p => p.lng)) };
@@ -1632,7 +1672,7 @@ ${l}`
         const pos = { lat: near.reduce((a, p) => a + p.lat, 0) / near.length, lng: near.reduce((a, p) => a + p.lng, 0) / near.length };
         B.collection("sites").doc(docKey(s.id)).set({ ...pos, r: s.r || ATT_R, locBy:"איתור אוטומטי", locAt:Date.now(), locHow:"אוטומטי — " + near.length + " רישומי עובדים ב-" + dayLabel(day) }, { merge:true }).catch(()=>{});
       });
-    }, [B, asLoaded, view, punches, asites]);
+    }, [B, asLoaded, view, punches, asites, mgr]);
     function loadPhotos(ids){
       const need = ids.filter(id => !(id in photos));
       if(!need.length || !B) return;
@@ -2090,6 +2130,124 @@ ${l}`
   }
 
 
+  /* ───── מסכי כניסה וניהול משתמשים ───── */
+  function PhoneLogin(){
+    const [ph, setPh] = useState(""), [code, setCode] = useState("");
+    const [step, setStep] = useState("phone"), [busy, setBusy] = useState(false), [err, setErr] = useState("");
+    const [rk, setRk] = useState(0);
+    const conf = useRef(null), ver = useRef(null);
+    function resetCaptcha(){ try{ ver.current && ver.current.clear(); }catch(x){} ver.current = null; setRk(k => k + 1); }
+    async function send(){
+      const p = normPhone(ph);
+      if(!p){ setErr("מספר לא תקין — למשל 050-1234567"); return; }
+      setBusy(true); setErr("");
+      try{
+        fbInit();
+        if(!ver.current) ver.current = new firebase.auth.RecaptchaVerifier("rcap" + rk, { size:"invisible" });
+        conf.current = await firebase.auth().signInWithPhoneNumber(p, ver.current);
+        setStep("code");
+      }catch(e){ setErr(authErr(e)); resetCaptcha(); }
+      setBusy(false);
+    }
+    async function confirm(){
+      if(!conf.current) return;
+      setBusy(true); setErr("");
+      try{ await conf.current.confirm(code.replace(/\D/g, "")); }
+      catch(e){ setErr(authErr(e)); setBusy(false); }
+    }
+    const digits = code.replace(/\D/g, "");
+    return html`
+      <div class="screen narrow"><div class="card">
+        <div class="lbl">כניסה לבקרה</div>
+        ${step === "phone" ? html`
+          <div class="hint" style=${{textAlign:"start", margin:"6px 0 10px"}}>הכנס את מספר הטלפון שלך — יישלח אליך SMS עם קוד. נכנסים פעם אחת, והטלפון זוכר אותך.</div>
+          <input class="tin" type="tel" dir="ltr" inputmode="tel" autocomplete="tel" placeholder="050-1234567" value=${ph}
+            onInput=${e=>setPh(e.target.value)} onKeyDown=${e=>e.key==="Enter" && send()} />
+          <button class="btn pri wide" style=${{marginTop:10}} disabled=${busy || !ph.trim()} onClick=${send}>${busy ? "שולח…" : "שלח קוד ב-SMS"}</button>`
+        : html`
+          <div class="hint" style=${{textAlign:"start", margin:"6px 0 10px"}}>שלחנו קוד ל-<span dir="ltr">${fmtPhone(normPhone(ph))}</span>. הקלד אותו כאן:</div>
+          <input class="tin" type="text" dir="ltr" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" value=${code}
+            onInput=${e=>setCode(e.target.value)} onKeyDown=${e=>e.key==="Enter" && digits.length === 6 && confirm()} />
+          <button class="btn pri wide" style=${{marginTop:10}} disabled=${busy || digits.length !== 6} onClick=${confirm}>${busy ? "בודק…" : "כניסה"}</button>
+          <button class="btn wide" style=${{marginTop:8}} onClick=${()=>{ setStep("phone"); setCode(""); setErr(""); resetCaptcha(); }}>מספר אחר / שלח קוד שוב</button>`}
+        ${err && html`<div class="alert crit" style=${{marginTop:10}}><span class="b"></span>${err}</div>`}
+        <div id=${"rcap" + rk}></div>
+      </div></div>`;
+  }
+  function OwnerSetup({ phone, onOk, onOut }){
+    const [name, setName] = useState("דוד");
+    return html`
+      <div class="screen narrow"><div class="card">
+        <div class="lbl">כניסה ראשונה למערכת</div>
+        <div class="hint" style=${{textAlign:"start", margin:"6px 0 10px"}}>עוד לא הוגדר בעלים לבקרה. המספר <b dir="ltr">${fmtPhone(phone)}</b> יוגדר כבעלים עם גישה מלאה (משרד), ואחר כך תוסיף את שאר המשתמשים.</div>
+        <input class="tin" type="text" value=${name} placeholder="השם שלך" onInput=${e=>setName(e.target.value)} />
+        <button class="btn pri wide" style=${{marginTop:10}} disabled=${!name.trim()} onClick=${()=>onOk(name)}>הגדר אותי כבעלים</button>
+        <button class="btn wide" style=${{marginTop:8}} onClick=${onOut}>זה לא המספר שלי — יציאה</button>
+      </div></div>`;
+  }
+  const OFFICE_NAMES = ["דוד", "טל", "שרון"];
+  function StaffAdmin({ st, who, myPhone, notify, onClose }){
+    const [list, setList] = useState(null);
+    const [ph, setPh] = useState(""), [name, setName] = useState(""), [role, setRole] = useState("mgr");
+    const owners = [...new Set(st.sites.filter(s => s.active).map(ownerName).filter(n => n && n !== "—" && n !== "לא משויך"))].sort((a, b) => a.localeCompare(b, "he"));
+    const sitesOf = n => st.sites.filter(s => s.active && ownerName(s) === n).length;
+    useEffect(()=> firebase.firestore().collection("staff").onSnapshot(
+      q => setList(q.docs.map(d => ({ id:d.id, ...d.data() })).sort((a, b) => (a.role === b.role ? 0 : a.role === "office" ? -1 : 1) || String(a.name).localeCompare(String(b.name), "he"))),
+      e => notify("אין הרשאה לרשימת המשתמשים: " + (e.code || e.message))), []);
+    const col = ()=> firebase.firestore().collection("staff");
+    function add(){
+      const p = normPhone(ph);
+      if(!p){ notify("מספר טלפון לא תקין"); return; }
+      const n = name.trim(); if(!n){ notify("בחר שם"); return; }
+      if(list && list.some(x => x.id === p)){ notify("המספר כבר רשום"); return; }
+      col().doc(p).set({ name:n, role, active:true, at:Date.now(), by:who })
+        .then(()=>{ notify(n + " נוסף — שלח לו את קישור הכניסה"); setPh(""); setName(""); })
+        .catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+    }
+    const upd = (r, patch, m) => col().doc(r.id).set(patch, { merge:true }).then(()=> m && notify(m)).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+    function invite(r){
+      const team = (()=>{ try{ return localStorage.getItem(TEAM_KEY); }catch(e){ return ""; } })();
+      const link = location.origin + location.pathname + "#k=" + team;
+      const text = "שלום " + r.name + ", זה הקישור לבקרה של ט.ש. מי-רון.\nנכנסים עם מספר הטלפון שלך (" + fmtPhone(r.id) + ") ומקבלים קוד ב-SMS — פעם אחת בלבד.\n" + link;
+      window.open("https://wa.me/" + r.id.replace(/\D/g, "") + "?text=" + encodeURIComponent(text), "_blank");
+    }
+    const warnName = role === "mgr" && name.trim() && !owners.includes(name.trim());
+    return html`
+      <div class="scrim" onClick=${onClose}>
+        <div class="sheet asheet" onClick=${e=>e.stopPropagation()}>
+          <h3>👥 משתמשים והרשאות</h3>
+          <div class="who">משרד רואה ומשנה הכול. מנהל פרויקט רואה ומשנה רק את האתרים שבהם הוא רשום כמנהל, ואת העובדים שלהם. הכניסה בקוד SMS למספר שלו.</div>
+          <div class="lbl" style=${{marginTop:10}}>הוספת משתמש</div>
+          <div class="newunit" style=${{display:"flex", flexDirection:"column", gap:8}}>
+            <input class="tin" type="tel" dir="ltr" placeholder="050-1234567" value=${ph} onInput=${e=>setPh(e.target.value)} />
+            <select value=${role} onChange=${e=>{ setRole(e.target.value); setName(""); }}>
+              <option value="mgr">מנהל פרויקט — רק האתרים שלו</option>
+              <option value="office">משרד — רואה הכול</option>
+            </select>
+            ${role === "mgr"
+              ? html`<select value=${name} onChange=${e=>setName(e.target.value)}>
+                  <option value="">בחר מנהל…</option>
+                  ${owners.map(n => html`<option key=${n} value=${n}>${n} (${sitesOf(n)} אתרים)</option>`)}
+                </select>`
+              : html`<input class="tin" type="text" list="offnames" placeholder="שם" value=${name} onInput=${e=>setName(e.target.value)} /><datalist id="offnames">${OFFICE_NAMES.map(n => html`<option key=${n} value=${n} />`)}</datalist>`}
+            ${warnName && html`<div class="alert warn"><span class="b"></span>אין אתרים פעילים בשם הזה — המנהל לא יראה כלום.</div>`}
+            <button class="btn pri" disabled=${!ph.trim() || !name.trim()} onClick=${add}>הוסף</button>
+          </div>
+          <div class="lbl" style=${{marginTop:14}}>משתמשים (${list ? list.length : "…"})</div>
+          ${(list || []).map(r => html`
+            <div key=${r.id} class=${"awk " + (r.active === false ? "off" : "")}>
+              <div class="an">${r.name}<small>${r.role === "office" ? "משרד" : "מנהל פרויקט · " + sitesOf(r.name) + " אתרים"} · <span dir="ltr">${fmtPhone(r.id)}</span>${r.active === false ? " · מושבת" : ""}</small></div>
+              <div class="awkb">
+                <button class="chip" title="שלח קישור כניסה בוואטסאפ" onClick=${()=>invite(r)}>🔗 שלח</button>
+                ${r.id !== myPhone && html`<button class="chip" onClick=${()=> r.active === false ? upd(r, { active:true }, "הופעל") : confirm("להשבית את " + r.name + "? הוא לא יוכל להיכנס לבקרה.") && upd(r, { active:false }, "הושבת")}>${r.active === false ? "הפעל" : "השבת"}</button>`}
+                ${r.id !== myPhone && html`<button class="chip" onClick=${()=> confirm("למחוק את " + r.name + " מהמשתמשים?") && col().doc(r.id).delete().then(()=>notify("נמחק")).catch(e => notify("מחיקה נכשלה: " + (e.code || e.message)))}>✕</button>`}
+              </div>
+            </div>`)}
+          <button class="btn wide" style=${{marginTop:12}} onClick=${onClose}>סגור</button>
+        </div>
+      </div>`;
+  }
+
   function App(){
     const cloudCode = useState(readTeamCode)[0];
     const [st, setSt] = useState(()=> cloudCode ? emptyState() : load());
@@ -2105,7 +2263,43 @@ ${l}`
     const [ctl, setCtl] = useState({ tab:"ex", mgr:"all" });
     const [idSheet, setIdSheet] = useState(false);
     const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"דוד" }; });
-    const who = me.name;
+    // כניסה אישית: מי מחובר ומה התפקיד שלו (משרד / מנהל פרויקט)
+    const [auth, setAuth] = useState(()=> ({ s: cloudCode ? "checking" : "off" }));
+    const [staffSheet, setStaffSheet] = useState(false);
+    const signedIn = cloudCode && auth.s === "in";
+    const who = signedIn ? auth.staff.name : me.name;
+    const myMgr = signedIn && auth.staff.role !== "office" ? auth.staff.name : null;
+    const isOffice = !myMgr;
+    async function checkStaff(u){
+      if(!u || !u.phoneNumber){ setAuth({ s:"out" }); return; }
+      setAuth({ s:"checking", phone:u.phoneNumber });
+      try{
+        const db = firebase.firestore();
+        const d = await db.collection("staff").doc(u.phoneNumber).get();
+        if(d.exists && d.data().active !== false){
+          const sd = d.data();
+          Cloud.mgr = sd.role === "office" ? null : sd.name;
+          setAuth({ s:"in", phone:u.phoneNumber, staff:sd }); return;
+        }
+        let ownerSet = true;
+        try{ ownerSet = (await db.collection("staffmeta").doc("owner").get()).exists; }catch(e){}
+        setAuth({ s: ownerSet ? "nostaff" : "owner", phone:u.phoneNumber });
+      }catch(e){ setAuth({ s:"err", phone:u.phoneNumber, err:String(e.code || e.message || e) }); }
+    }
+    useEffect(()=>{
+      if(!cloudCode) return;
+      if(!fbInit()){ setAuth({ s:"err", err:"sdk-missing" }); return; }
+      return firebase.auth().onAuthStateChanged(u => { checkStaff(u); });
+    }, []);
+    async function becomeOwner(name){
+      const db = firebase.firestore(), p = auth.phone;
+      try{
+        await db.collection("staffmeta").doc("owner").set({ phone:p, at:Date.now() });
+        await db.collection("staff").doc(p).set({ name:(name || "דוד").trim(), role:"office", active:true, at:Date.now(), by:"בעלים" });
+        checkStaff(firebase.auth().currentUser);
+      }catch(e){ notify("ההגדרה נכשלה: " + (e.code || e.message)); }
+    }
+    function logout(){ firebase.auth().signOut().then(()=> location.reload()); }
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
 
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
@@ -2135,7 +2329,7 @@ ${l}`
       }
     }, []);
     useEffect(()=>{
-      if(!cloudCode) return;
+      if(!cloudCode || !signedIn) return;
       const stop = cloudStart(cloudCode, {
         data: applyRemote,
         meta: (m)=>{ setCloud(c => ({ ...c, loaded: { ...c.loaded, meta: true } })); if(!m) return; const cur = stRef.current; const nx = { ...cur, trackStart: m.trackStart || cur.trackStart, rosterV: m.rosterV || cur.rosterV, cleanV: m.cleanV || 0 }; stRef.current = nx; setSt(nx); },
@@ -2144,7 +2338,7 @@ ${l}`
       const net = ()=> setCloud(c => ({ ...c, status: navigator.onLine ? (c.ready ? "live" : "connecting") : "offline" }));
       window.addEventListener("online", net); window.addEventListener("offline", net);
       return ()=>{ stop(); window.removeEventListener("online", net); window.removeEventListener("offline", net); };
-    }, []);
+    }, [signedIn]);
     // תמונות: נטענות לפי אתר רק כשפותחים דיווח
     useEffect(()=>{
       if(!cloudCode || nav.screen !== "field.report") return;
@@ -2152,18 +2346,18 @@ ${l}`
     }, [nav.screen, nav.sid]);
     // מעבר מרשימת מנהלים ישנה לחדשה גם במסד המשותף
     useEffect(()=>{
-      if(cloudCode && cloud.ready && !cloud.empty && st.rosterV !== ROSTER_V)
+      if(cloudCode && isOffice && cloud.ready && !cloud.empty && st.rosterV !== ROSTER_V)
         update(d => { rosterSync(d); d.rosterV = ROSTER_V; return d; });
-    }, [cloud.ready, cloud.empty, st.rosterV]);
+    }, [cloud.ready, cloud.empty, st.rosterV, isOffice]);
 
     // ניקוי חד־פעמי של נתוני ההדגמה הישנים גם במסד המשותף
     useEffect(()=>{
-      if(cloudCode && cloud.ready && !cloud.empty && cloud.loaded.meta && st.cleanV !== CLEAN_V)
+      if(cloudCode && isOffice && cloud.ready && !cloud.empty && cloud.loaded.meta && st.cleanV !== CLEAN_V)
         update(d => { d.sites.forEach(applyClean); d.cleanV = CLEAN_V; return d; });
     }, [cloud.ready, cloud.empty, cloud.loaded.meta, st.cleanV]);
     // המודל הישן של מחסן מרכזי (בקשות ניפוק / ניוד הדגמה) הוסר — מנקים אותו מהמסד המשותף
     useEffect(()=>{
-      if(cloudCode && cloud.ready && !cloud.empty && ((st.requests || []).length || (st.transfers || []).length))
+      if(cloudCode && isOffice && cloud.ready && !cloud.empty && ((st.requests || []).length || (st.transfers || []).length))
         update(d => { d.requests = []; d.transfers = []; return d; });
     }, [cloud.ready, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
@@ -2171,7 +2365,7 @@ ${l}`
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
     function reset(){
       if(cloudCode){
-        if(who !== "דוד"){ notify("איפוס המסד המשותף מותר רק לדוד"); return; }
+        if(!isOffice || who !== "דוד"){ notify("איפוס המסד המשותף מותר רק לדוד"); return; }
         if(!confirm("זה ימחק את כל הנתונים המשותפים ויחזיר נתוני הדגמה לכל המשתמשים. להמשיך?")) return;
         const prev = stRef.current, s = seed();
         s.log = prev.log;
@@ -2209,26 +2403,36 @@ ${l}`
       notify("מחובר כ-" + m.name);
     }
 
-    const sites = st.sites;
+    // מנהל פרויקט רואה רק את האתרים שלו — כל המסכים מקבלים את התצוגה המסוננת (vst)
+    const vst = useMemo(()=>{
+      if(!myMgr) return st;
+      const own = st.sites.filter(s => ownerName(s) === myMgr), ids = new Set(own.map(s => s.id));
+      // גם יומן הפעולות: רק פעולות באתרים שלו (או פעולות כלליות שהוא עצמו ביצע)
+      return { ...st, sites: own, log: (st.log || []).filter(l => l.siteId ? ids.has(l.siteId) : l.who === myMgr) };
+    }, [st, myMgr]);
+    const sites = vst.sites;
     const bySite = useCallback((id)=> sites.find(s=>s.id===id), [sites]);
 
-    const exceptions = useMemo(()=> deriveExceptions(st, now), [st.sites, st.since, st.trackStart, now]);
-    const cards = useMemo(()=> scorecards(st, exceptions, now), [st.sites, st.trackStart, exceptions, now]);
+    const exAll = useMemo(()=> deriveExceptions(st, now), [st.sites, st.since, st.trackStart, now]);
+    const exceptions = useMemo(()=> myMgr ? exAll.filter(e => e.owner === myMgr) : exAll, [exAll, myMgr]);
+    const cards = useMemo(()=> scorecards(vst, exceptions, now), [vst, st.trackStart, exceptions, now]);
+    const ctlV = myMgr ? { ...ctl, mgr: myMgr } : ctl;
+    const setCtlV = c => setCtl(myMgr ? { ...c, mgr: myMgr } : c);
     // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
     useEffect(()=>{
       if(cloudCode && !(cloud.loaded.sites && cloud.loaded.since)) return;
-      const keys = new Set(exceptions.map(e => e.key));
+      const keys = new Set(exAll.map(e => e.key));
       const since = st.since || {};
-      const fresh = exceptions.some(e => !(e.key in since) && !e.fixedTs);
+      const fresh = exAll.some(e => !(e.key in since) && !e.fixedTs);
       const stale = Object.keys(since).some(k => !keys.has(k));
       if(!fresh && !stale) return;
       update(d=>{
         d.since = d.since || {};
-        exceptions.forEach(e => { if(!(e.key in d.since) && !e.fixedTs) d.since[e.key] = Date.now(); });
+        exAll.forEach(e => { if(!(e.key in d.since) && !e.fixedTs) d.since[e.key] = Date.now(); });
         Object.keys(d.since).forEach(k => { if(!keys.has(k)) delete d.since[k]; });
         return d;
       });
-    }, [exceptions, cloud.loaded]);
+    }, [exAll, cloud.loaded]);
 
     function toggleTask(siteId, unitId, i){
       update(d=>{
@@ -2383,23 +2587,38 @@ ${l}`
     }
     let body;
     const blocked = cloudCode && (!cloud.ready || cloud.empty);
-    if(blocked)
+    if(cloudCode && auth.s !== "in")
+      body = auth.s === "out" ? html`<${PhoneLogin} />`
+        : auth.s === "owner" ? html`<${OwnerSetup} phone=${auth.phone} onOk=${becomeOwner} onOut=${logout} />`
+        : auth.s === "nostaff" ? html`<div class="screen narrow"><div class="card">
+            <div class="lbl">המספר לא רשום</div>
+            <div class="val">${fmtPhone(auth.phone)}</div>
+            <div class="hint" style=${{textAlign:"start"}}>המספר הזה עוד לא הוגדר כמשתמש בבקרה. בקש מהמשרד להוסיף אותך, ואז היכנס שוב.</div>
+            <button class="btn wide" style=${{marginTop:12}} onClick=${logout}>יציאה / מספר אחר</button>
+          </div></div>`
+        : auth.s === "err" ? html`<div class="screen narrow"><div class="card">
+            <div class="lbl">שגיאה בבדיקת ההרשאה</div><div class="hint" style=${{textAlign:"start"}}>${auth.err}</div>
+            <button class="btn wide" style=${{marginTop:12}} onClick=${()=>location.reload()}>נסה שוב</button>
+            <button class="btn wide" style=${{marginTop:8}} onClick=${logout}>יציאה</button>
+          </div></div>`
+        : html`<div class="screen narrow"><div class="empty">בודק הרשאה…</div></div>`;
+    else if(blocked)
       body = cloud.empty
         ? html`<div class="screen narrow"><div class="card">
             <div class="lbl">המסד המשותף ריק</div>
             <div class="val">עדיין אין נתונים בצוות הזה.</div>
             <div class="hint" style=${{textAlign:"start"}}>הלחיצה תעלה את ${RAW.length} הפרויקטים ואת המנהלים אל המסד, ומאותו רגע כל מי שמחובר רואה אותם.</div>
-            <button class="btn pri wide" style=${{marginTop:12}} onClick=${seedCloud}>טען נתוני בסיס (${RAW.length} פרויקטים)</button>
+            ${isOffice ? html`<button class="btn pri wide" style=${{marginTop:12}} onClick=${seedCloud}>טען נתוני בסיס (${RAW.length} פרויקטים)</button>` : html`<div class="alert warn" style=${{marginTop:12}}><span class="b"></span>המשרד צריך לטעון את נתוני הבסיס.</div>`}
           </div></div>`
         : html`<div class="screen narrow"><div class="empty">
             ${cloud.status === "error" ? "שגיאת חיבור: " + (cloud.err || "לא ידועה") : navigator.onLine ? "טוען נתונים משותפים…" : "אין חיבור — מחכה לרשת"}
             <div style=${{marginTop:14}}><button class="btn" style=${{flex:"none", padding:"9px 16px"}} onClick=${goLocal}>המשך במצב מקומי</button></div>
           </div></div>`;
     else if(nav.screen === "ctl.home")
-      body = html`<${Control} st=${st} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctl} setCtl=${setCtl}
+      body = html`<${Control} st=${vst} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctlV} setCtl=${setCtlV} locked=${!!myMgr}
         onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} who=${who} />`;
     else if(nav.screen === "ctl.site")
-      body = html`<${SiteDetail} site=${bySite(nav.id)} st=${st} now=${now} ex=${exOfSite(exceptions, nav.id)}
+      body = html`<${SiteDetail} site=${bySite(nav.id)} st=${vst} now=${now} ex=${exOfSite(exceptions, nav.id)}
         log=${(st.log||[]).filter(l=>l.siteId===nav.id).slice(0,8)}
         onBack=${()=>setNav({screen:"ctl.home"})} notify=${notify} />`;
     else if(nav.screen === "field.home")
@@ -2421,7 +2640,7 @@ ${l}`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
     else if(nav.screen === "stock.home")
-      body = html`<${StockHome} st=${st} now=${now} who=${who} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
+      body = html`<${StockHome} st=${vst} now=${now} who=${who} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
 
     return html`
       <div class="app">
@@ -2437,7 +2656,7 @@ ${l}`
           </div>
           <button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
-          <button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>
+          ${isOffice && (!cloudCode || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
         </div>
         ${!cloudCode
           ? html`<div class="banner">מצב מקומי — הנתונים נשמרים רק במכשיר הזה <button class="chip" onClick=${()=>setTeamSheet(true)}>הזן קוד צוות</button></div>`
@@ -2462,15 +2681,23 @@ ${l}`
         ${idSheet && html`
           <div class="scrim" onClick=${()=>setIdSheet(false)}>
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
+              ${signedIn ? html`
+                <h3>החשבון שלי</h3>
+                <div class="who">${auth.staff.name} · ${isOffice ? "משרד — רואה הכול" : "מנהל פרויקט — רואה רק את האתרים שלו (" + sites.length + ")"} · <span dir="ltr">${fmtPhone(auth.phone)}</span></div>
+                ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setStaffSheet(true); }}><span class="e">👥</span>משתמשים והרשאות</button>`}
+                ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · שיתוף קישור</button>`}
+                <button class="opt" onClick=${logout}><span class="e">🚪</span>יציאה מהחשבון</button>
+              ` : html`
               <h3>מי אתה?</h3>
               <div class="who">השם נרשם ביומן הפעולות ליד כל פעולה שתבצע. התחברות מאובטחת אישית תיכנס עם חיבור המסד המשותף.</div>
               ${[{name:"דוד", role:"הנהלה"}, {name:"טל", role:"מאשר הזמנות"}, {name:"שרון", role:"רכש"}, ...cards.filter(c=>c.name!=="לא משויך").map(c=>({name:c.name, role:c.role})), {name:"איש שטח"}].map(m => html`
                 <button key=${m.name} class="opt" onClick=${()=>pickMe(m)}>
                   <span class="e">${me.name===m.name ? "✓" : "👤"}</span>${m.name}${m.role ? " · " + m.role : ""}
                 </button>`)}
-              <button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · מסד משותף (${cloudCode ? "מחובר" : "מקומי"})</button>
+              <button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · מסד משותף (${cloudCode ? "מחובר" : "מקומי"})</button>`}
             </div>
           </div>`}
+        ${staffSheet && html`<${StaffAdmin} st=${st} who=${who} myPhone=${auth.phone} notify=${notify} onClose=${()=>setStaffSheet(false)} />`}
       </div>`;
   }
 
@@ -2491,7 +2718,7 @@ ${l}`
     };
   }
 
-  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify, who }){
+  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify, who, locked }){
     const [rep, setRep] = useState(null);
     const { tab, mgr } = ctl;
     const list = exceptions.filter(e => mgr === "all" || e.owner === mgr);
@@ -2525,7 +2752,7 @@ ${l}`
           <div class=${"kpi "+(subm < pilotSites.length ? "warn" : "")}><b>${subm}/${pilotSites.length}</b><span>דוח שבועי הוגש${PILOT.length ? " (פיילוט)" : ""}</span></div>
         </div>
 
-        ${PILOT.length > 0 && html`<div class="alert warn" style=${{margin:"10px 0 0"}}><span class="b"></span>פיילוט: ${PILOT.join(", ")} — חריגי דוח שבועי, מלאי ודיווח יומי נספרים רק להם.</div>`}
+        ${!locked && PILOT.length > 0 && html`<div class="alert warn" style=${{margin:"10px 0 0"}}><span class="b"></span>פיילוט: ${PILOT.join(", ")} — חריגי דוח שבועי, מלאי ודיווח יומי נספרים רק להם.</div>`}
 
         <div class="chips">
           ${T("ex", "חריגים (" + list.length + ")")}
@@ -2536,7 +2763,7 @@ ${l}`
           ${T("log", "יומן פעולות")}
         </div>
 
-        ${mgr !== "all" && tab !== "mgr" && tab !== "log" && html`<div class="alert warn" style=${{marginBottom:10}}><span class="b"></span>מסונן לפי מנהל: ${mgr}
+        ${!locked && mgr !== "all" && tab !== "mgr" && tab !== "log" && html`<div class="alert warn" style=${{marginBottom:10}}><span class="b"></span>מסונן לפי מנהל: ${mgr}
           <button class="chip" style=${{marginInlineStart:"auto"}} onClick=${()=>setCtl({...ctl, mgr:"all"})}>נקה סינון</button></div>`}
 
         ${tab === "ex" && html`
@@ -2593,7 +2820,7 @@ ${l}`
           <div class="hint">אין ציון יחיד בכוונה — כל מדד מוצג לבד כדי שלא ינסו "לשחק" אותו. ההתקדמות נמדדת מדוחות התוכנית השבועית של המנהלים, לצד כ״א, בטיחות ומלאי.</div>
         `}
 
-        ${tab === "att" && html`<${Attendance} st=${st} now=${now} mgr=${mgr} who=${who} notify=${notify} />`}
+        ${tab === "att" && html`<${Attendance} st=${st} now=${now} mgr=${mgr} who=${who} notify=${notify} office=${!locked} />`}
         ${tab === "plan" && html`<${PlanMatrix} st=${st} now=${now} mgr=${mgr} cards=${cards} exceptions=${exceptions} onOpen=${onOpen} />`}
         ${tab === "stock" && html`<${StockOverview} st=${st} now=${now} mgr=${mgr} cards=${cards} onOpen=${onOpen} />`}
 

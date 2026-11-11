@@ -1,0 +1,79 @@
+rules_version = '2';
+// חוקי האבטחה של הבקרה (ט.ש. מי-רון) — מדביקים ב-Firebase Console ← Firestore ← Rules ← Publish
+//
+// מי רשאי לעשות מה:
+//   משרד (staff.role == "office")  — קורא וכותב הכול.
+//   מנהל פרויקט (staff.role == "mgr") — קורא הכול (האפליקציה מציגה לו רק את שלו),
+//       אבל משנה רק אתרים שבהם הוא המנהל, ורק עובדים / תיקוני נוכחות / תמונות זיהוי של עובדים באתרים שלו.
+//   עובד (בלי כניסה, קישור אישי) — רק במרחב הנוכחות: קורא את הכרטיס שלו ואת רשימת האתרים,
+//       ויוצר רישום כניסה/יציאה עם שעת שרת. לא רואה תמונות, תיקונים או נתוני בקרה.
+//   כל השאר — אין גישה.
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function authed()   { return request.auth != null; }
+    function hasPhone() { return authed() && request.auth.token.get('phone_number', null) != null; }
+    function phone()    { return request.auth.token.phone_number; }
+    function staffRef() { return /databases/$(db)/documents/staff/$(phone()); }
+    function isStaff()  { return hasPhone() && exists(staffRef()) && get(staffRef()).data.get('active', true) != false; }
+    function isOffice() { return isStaff() && get(staffRef()).data.role == 'office'; }
+    function myName()   { return get(staffRef()).data.name; }
+    function isOwner()  { return hasPhone() && get(/databases/$(db)/documents/staffmeta/owner).data.phone == phone(); }
+
+    // מרחב נוכחות מסומן ב-meta/space (המשרד מסמן אותו אוטומטית)
+    function isAtt(space) { return get(/databases/$(db)/documents/t/$(space)/meta/space).data.kind == 'att'; }
+    // שם המנהל של אתר — בבקרה owner הוא {name}, במרחב הנוכחות owner הוא מחרוזת
+    function ownerOf(d)   { return d.owner is map ? d.owner.name : d.owner; }
+    function ownsSite(space, sid) { return ownerOf(get(/databases/$(db)/documents/t/$(space)/sites/$(sid)).data) == myName(); }
+    function ownsWorker(space, wid) { return ownsSite(space, get(/databases/$(db)/documents/t/$(space)/workers/$(wid)).data.site); }
+
+    // ── משתמשים ──
+    match /staffmeta/owner {
+      allow read: if hasPhone();
+      // נוצר פעם אחת בלבד, בכניסה הראשונה, ורק עם המספר של מי שנכנס
+      allow create: if hasPhone() && request.resource.data.phone == phone();
+    }
+    match /staff/{p} {
+      allow get: if hasPhone() && (p == phone() || isStaff());
+      allow list: if isOffice();
+      allow write: if isOffice() || isOwner();
+    }
+
+    // ── בקרה + נוכחות ──
+    match /t/{space}/{coll}/{id} {
+      allow read: if isStaff();
+      allow write: if isOffice();
+
+      // מנהל פרויקט — בקרה
+      allow update: if isStaff() && coll == 'sites'
+                    && ownerOf(resource.data) == myName() && ownerOf(request.resource.data) == myName();
+      allow write: if isStaff() && coll in ['requests', 'transfers', 'nudges', 'since'];
+      allow create: if isStaff() && coll == 'log';
+      allow create, update: if isStaff() && coll == 'photos' && ownsSite(space, request.resource.data.siteId);
+      allow delete: if isStaff() && coll == 'photos' && ownsSite(space, resource.data.siteId);
+
+      // מנהל פרויקט — נוכחות (רק עובדים באתרים שלו)
+      allow create: if isStaff() && coll == 'workers' && ownsSite(space, request.resource.data.site);
+      allow update: if isStaff() && coll == 'workers'
+                    && ownsSite(space, resource.data.site) && ownsSite(space, request.resource.data.site);
+      allow create: if isStaff() && coll == 'fix' && ownsWorker(space, request.resource.data.w);
+      allow write: if isStaff() && coll == 'ref' && ownsWorker(space, id);
+
+      // עובד (קישור אישי, בלי כניסה) — רק במרחב נוכחות
+      allow get: if authed() && coll == 'workers' && isAtt(space);
+      allow read: if authed() && coll in ['sites', 'punch'] && isAtt(space);
+      allow update: if authed() && coll == 'workers' && isAtt(space)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dev', 'devAt', 'hasRef']);
+      allow create: if authed() && coll == 'punch' && isAtt(space)
+                    && request.resource.data.ts == request.time
+                    && request.resource.data.type in ['in', 'out']
+                    && exists(/databases/$(db)/documents/t/$(space)/workers/$(request.resource.data.w));
+      allow create: if authed() && coll == 'pph' && isAtt(space);
+      allow create: if authed() && coll == 'ref' && isAtt(space)
+                    && exists(/databases/$(db)/documents/t/$(space)/workers/$(id));
+    }
+    match /t/{space}/{coll}/{id}/{rest=**} {
+      allow read, write: if isOffice();
+    }
+  }
+}
