@@ -1585,7 +1585,7 @@ ${l}`
       if(!B) return;
       const e = x => setErr(String(x.code || x.message || x));
       const u1 = B.collection("workers").onSnapshot(q => setWorkers(q.docs.map(d => d.data())), e);
-      const u2 = B.collection("sites").onSnapshot(q => { setAsites(q.docs.map(d => d.data())); if(!q.metadata.fromCache) setAsLoaded(true); }, e);
+      const u2 = B.collection("sites").onSnapshot(q => { setAsites(q.docs.map(d => d.data())); if(!q.metadata.fromCache || q.docs.length) setAsLoaded(true); }, e);
       return ()=>{ u1(); u2(); };
     }, [B]);
     // שמות האתרים והמנהלים עוברים מהבקרה למרחב הנוכחות (בלי לגעת במיקום שנקבע)
