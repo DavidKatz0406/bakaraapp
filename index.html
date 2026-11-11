@@ -489,7 +489,7 @@
     ["אשטרום · בסר ירושלים","קיים",1,"עץ החיים"],
     ["מנרב","קיים",2,"חצרים מכרז 4"],
     ["רוטשטיין","קיים",3,"חרמון לוד"],
-    ["רוטשטיין","אין",4,"כרמי הנדיב"],
+    ["רוטשטיין","קיים",4,"כרמי הנדיב"],
     ["רוטשטיין","קיים",5,"רמת השרון"],
     ["קבוצת אשטרום","קיים",6,"בת ים הרצל"],
     ["פורמה","קיים",7,"הפרדס יפו"],
@@ -522,15 +522,18 @@
   /* ---- מנהלי פרויקט אמיתיים — נלקחו מאפליקציית הרכש (שמות פרטיים בלבד, בלי טלפונים).
      מפתח = מספר אתר בתיק. co = מנהל בכיר/מורשה נוסף על הפרויקט (דרג 2). ---- */
   const MGR = {
-    1:{ name:"יזיד", co:["מג׳ד"] },  2:{ name:"אייל" },  3:{ name:"סאמר" },  4:{ name:"סאמר" },
-    5:{ name:"גיא" },  6:{ name:"יער", co:["ליאור"] },  7:{ name:"אלכס" },  8:{ name:"ראובן" },
+    1:{ name:"אלי" },  2:{ name:"אייל" },  3:{ name:"סאמר" },  4:{ name:"סאמר" },
+    5:{ name:"איתי" },  6:{ name:"יער", co:["ליאור"] },  7:{ name:"אלכס" },  8:{ name:"ראובן" },
     9:{ name:"סאמר" },  10:{ name:"באהה" },  11:{ name:"מוראר", co:["מג׳ד"] },  12:{ name:"אבו לאבן" },
     13:{ name:"אבו לאבן" },  14:{ name:"יער", co:["ליאור"] },  15:{ name:"וואהל" },  16:{ name:"וואהל" },
-    17:{ name:"באהה" },  18:{ name:"סאמר" },  19:{ name:"צביקה" },  20:{ name:"מג׳ד" },  21:{ name:"מג׳ד" },
-    23:{ name:"משה" },  25:{ name:"אולג" },  26:{ name:"באהה", co:["איתי"] },  27:{ name:"וואהל" },
+    17:{ name:"באהה" },  18:{ name:"סאמר" },  19:{ name:"צביקה" },  20:{ name:"יזיד" },  21:{ name:"מוראר" },
+    23:{ name:"משה" },  25:{ name:"אולג" },  26:{ name:"באהה" },  27:{ name:"וואהל" },
     28:{ name:"אולג" },  29:{ name:"אולג" },  30:{ name:"יניב" },  31:{ name:"כרובי" }
   };
+  // אתרים שנפתחו מחדש (עדכון 11/2026 לפי רשימת העובדים)
+  const REOPEN = [4];
   function applyRoster(site){
+    if(REOPEN.includes(site.num)) site.active = true;
     const m = MGR[site.num];
     site.owner = m
       ? { name:m.name, role:"מנהל פרויקט" }
@@ -554,7 +557,7 @@
     sites.forEach(applyRoster);
     const T = Date.now();
     return {
-      sites, rosterV: 2, cleanV: CLEAN_V,
+      sites, rosterV: 3, cleanV: CLEAN_V,
       log: [], nudges: {}, trackStart: T,
       since: {},
       requests: [], transfers: []
@@ -571,7 +574,7 @@
           site.checkinLog = site.checkinLog || [];
           (site.units || []).forEach(u => { if(!Array.isArray(u.photos)) u.photos = []; });
         });
-        if(st.rosterV !== 2){ (st.sites || []).forEach(applyRoster); st.rosterV = 2; }
+        if(st.rosterV !== 3){ (st.sites || []).forEach(applyRoster); st.rosterV = 3; }
         if(st.cleanV !== CLEAN_V){ (st.sites || []).forEach(applyClean); st.cleanV = CLEAN_V; }
         st.log = st.log || []; st.nudges = st.nudges || {}; st.since = st.since || {};
         st.trackStart = st.trackStart || Date.now();
@@ -640,7 +643,7 @@
 
   /* פיילוט: רק המנהלים האלה נספרים בחריגי "דוח חסר", "מלאי לא עודכן" ו"דיווח יומי חסר".
      כשמצטרפים עוד מנהלים — מוסיפים לכאן, או מרוקנים את הרשימה כדי לכלול את כולם. */
-  const PILOT = ["גיא", "יער", "סאמר", "יניב"];
+  const PILOT = ["יער", "סאמר", "יניב"];
   const inPilot = name => PILOT.length === 0 || PILOT.includes(name);
   const ownerName = s => (s.owner && s.owner.name) || "—";
 
@@ -950,7 +953,7 @@
     messagingSenderId: "316003592694",
     appId: "1:316003592694:web:e1dc8415b4f7ed1e073fd7"
   };
-  const ROSTER_V = 2;
+  const ROSTER_V = 3;
   const TEAM_KEY = "bakara_team";
   const Cloud = { on:false, db:null, base:null };
 
@@ -1216,7 +1219,8 @@
     he:{ dir:"rtl", name:"עברית", hello:"שלום", in:"כניסה לעבודה", out:"יציאה מהעבודה", notIn:"עוד לא נרשמת היום", since:"בעבודה מאז", left:"יצאת ב-", site:"אתר", snap:"צלם", retake:"צלם שוב", send:"אשר ושלח", cancel:"ביטול", saved:"נרשם", savedOff:"נשמר בטלפון — יישלח כשתחזור רשת", locating:"מאתר מיקום…", locOk:"מיקום התקבל", noLoc:"אין מיקום — אשר גישה למיקום בהגדרות הטלפון", camErr:"המצלמה לא נפתחה — לחץ כאן כדי לצלם", loading:"טוען…", bad:"הקישור לא תקין — בקש קישור חדש מהמנהל", off:"המשתמש הושבת — פנה למנהל", err:"אין חיבור למערכת — נסה שוב", face:"הפנים צריכות להיראות בבירור", hours:"שעות היום", net:"אין רשת — הרישום יישמר בטלפון", todayList:"הרישומים שלך היום", inL:"כניסה", outL:"יציאה", pending:"ממתין לשליחה" },
     ar:{ dir:"rtl", name:"العربية", hello:"مرحبا", in:"دخول للعمل", out:"خروج من العمل", notIn:"لم تسجّل اليوم بعد", since:"في العمل منذ", left:"خرجت الساعة ", site:"الموقع", snap:"صوّر", retake:"صوّر مرة أخرى", send:"تأكيد وإرسال", cancel:"إلغاء", saved:"تم التسجيل", savedOff:"حُفظ في الهاتف — سيُرسل عند عودة الإنترنت", locating:"جارٍ تحديد الموقع…", locOk:"تم تحديد الموقع", noLoc:"لا يوجد موقع — اسمح بالوصول للموقع في إعدادات الهاتف", camErr:"الكاميرا لم تفتح — اضغط هنا للتصوير", loading:"جارٍ التحميل…", bad:"الرابط غير صالح — اطلب رابطًا جديدًا من المدير", off:"الحساب موقوف — راجع المدير", err:"لا يوجد اتصال بالنظام — حاول مرة أخرى", face:"يجب أن يظهر وجهك بوضوح", hours:"ساعات اليوم", net:"لا يوجد إنترنت — سيُحفظ التسجيل في الهاتف", todayList:"تسجيلاتك اليوم", inL:"دخول", outL:"خروج", pending:"بانتظار الإرسال" },
     en:{ dir:"ltr", name:"English", hello:"Hello", in:"Clock in", out:"Clock out", notIn:"Not clocked in today", since:"Working since", left:"Clocked out at ", site:"Site", snap:"Take photo", retake:"Retake", send:"Confirm & send", cancel:"Cancel", saved:"Recorded", savedOff:"Saved on phone — will be sent when online", locating:"Getting location…", locOk:"Location received", noLoc:"No location — allow location access in phone settings", camErr:"Camera did not open — tap here to take a photo", loading:"Loading…", bad:"Invalid link — ask your manager for a new one", off:"Account disabled — contact your manager", err:"Cannot reach the system — try again", face:"Your face must be clearly visible", hours:"Hours today", net:"Offline — the record will be saved on the phone", todayList:"Your records today", inL:"In", outL:"Out", pending:"waiting to send" },
-    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" }
+    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" },
+    ru:{ dir:"ltr", name:"Русский", hello:"Здравствуйте", in:"Начало работы", out:"Конец работы", notIn:"Сегодня вы ещё не отметились", since:"На работе с", left:"Ушли в ", site:"Объект", snap:"Сфотографировать", retake:"Переснять", send:"Подтвердить и отправить", cancel:"Отмена", saved:"Записано", savedOff:"Сохранено в телефоне — отправится, когда появится интернет", locating:"Определяем местоположение…", locOk:"Местоположение получено", noLoc:"Нет местоположения — разрешите доступ к геолокации в настройках телефона", camErr:"Камера не открылась — нажмите здесь, чтобы сфотографироваться", loading:"Загрузка…", bad:"Ссылка недействительна — попросите новую у начальника", off:"Доступ отключён — обратитесь к начальнику", err:"Нет связи с системой — попробуйте ещё раз", face:"Лицо должно быть хорошо видно", hours:"Часы за сегодня", net:"Нет интернета — отметка сохранится в телефоне", todayList:"Ваши отметки сегодня", inL:"Приход", outL:"Уход", pending:"ожидает отправки" }
   };
 
   /* צילום ריבועי קטן (~20KB) עם חותמת תאריך ושעה */
@@ -1507,6 +1511,21 @@
         .catch(e => { setMdata(null); setErr(String(e.code || e.message || e)); });
     }
     useEffect(()=>{ if(view === "month" && B) loadMonth(); }, [view, month, B]);
+    // איתור מיקום אוטומטי: אתר בלי מיקום לומד אותו מרישומי העובדים
+    // (לפחות 3 רישומים עם GPS מדויק מ-2 עובדים שונים, ורובם קרובים זה לזה)
+    useEffect(()=>{
+      if(!B || !asLoaded || view === "month") return;
+      const med = a => { const x = a.slice().sort((p, q) => p - q); return x[Math.floor(x.length / 2)]; };
+      asites.filter(s => s.lat == null && s.active !== false).forEach(s => {
+        const pts = punches.filter(p => p.site === s.id && p.lat != null && (p.acc || 999) <= 100);
+        if(pts.length < 3 || new Set(pts.map(p => p.w)).size < 2) return;
+        const c = { lat: med(pts.map(p => p.lat)), lng: med(pts.map(p => p.lng)) };
+        const near = pts.filter(p => geoDist(p, c) <= 250);
+        if(near.length < 3 || near.length < pts.length * 0.6) return;
+        const pos = { lat: near.reduce((a, p) => a + p.lat, 0) / near.length, lng: near.reduce((a, p) => a + p.lng, 0) / near.length };
+        B.collection("sites").doc(docKey(s.id)).set({ ...pos, r: s.r || ATT_R, locBy:"איתור אוטומטי", locAt:Date.now(), locHow:"אוטומטי — " + near.length + " רישומי עובדים ב-" + dayLabel(day) }, { merge:true }).catch(()=>{});
+      });
+    }, [B, asLoaded, view, punches, asites]);
     function loadPhotos(ids){
       const need = ids.filter(id => !(id in photos));
       if(!need.length || !B) return;
@@ -1608,7 +1627,7 @@
               <div key=${s.id} class="card asite">
                 <div class="rowbet">
                   <div><b>${s.name}</b>
-                    <div class="sub2">${s.owner ? ownerName(s) + " · " : ""}${rs.filter(r => r.inside).length} בשטח · ${rs.length} נרשמו${ms.length ? " · " + ms.length + " לא נרשמו" : ""}${s.id !== "_none" && as.lat == null ? " · 📍 מיקום האתר לא הוגדר" : ""}</div>
+                    <div class="sub2">${s.owner ? ownerName(s) + " · " : ""}${rs.filter(r => r.inside).length} בשטח · ${rs.length} נרשמו${ms.length ? " · " + ms.length + " לא נרשמו" : ""}${s.id !== "_none" && as.lat == null ? " · 📍 המיקום יאותר אוטומטית מהרישומים הראשונים" : ""}</div>
                   </div>
                   <div style=${{ display:"flex", gap:6, flex:"none" }}>
                     ${sitePunchIds.length > 0 && html`<button class="chip" onClick=${()=>{ setGallery(g => ({ ...g, [s.id]: !g[s.id] })); loadPhotos(sitePunchIds); loadRefs(rs.map(r => r.w)); }}>🖼 ${gOpen ? "הסתר" : "תמונות"}</button>`}
@@ -1767,7 +1786,7 @@
           <div class="sheet" onClick=${e => e.stopPropagation()}>
             <h3>📍 מיקום האתר · ${s.name || ""}</h3>
             <div class="who">לפי המיקום הזה המערכת מסמנת רישום שנעשה רחוק מהאתר (מעל ${s.r || ATT_R} מ׳).
-              ${s.lat != null ? html`<br/>מוגדר כעת: <a href=${"https://maps.google.com/?q=" + s.lat + "," + s.lng} target="_blank" rel="noopener">פתח במפה</a>${s.locBy ? " · נקבע ע״י " + s.locBy : ""}` : html`<br/><b>עוד לא הוגדר מיקום.</b>`}</div>
+              ${s.lat != null ? html`<br/>מוגדר כעת: <a href=${"https://maps.google.com/?q=" + s.lat + "," + s.lng} target="_blank" rel="noopener">פתח במפה</a>${s.locBy ? " · נקבע ע״י " + s.locBy : ""}${s.locHow ? " (" + s.locHow + ")" : ""}` : html`<br/><b>עוד לא הוגדר מיקום.</b> המערכת תאתר אותו לבד ברגע שלפחות 3 רישומים של 2 עובדים יגיעו מהאתר עם GPS מדויק. אפשר גם לקבע אותו עכשיו:`}</div>
             <button class="opt" onClick=${here}><span class="e">📱</span>אני נמצא באתר עכשיו — קבע לפי המיקום שלי</button>
             <button class="opt" disabled=${pts.length < 3} onClick=${()=> save(med(pts.map(p => p.lat)), med(pts.map(p => p.lng)), "חציון רישומי " + day)}><span class="e">👷</span>לפי רישומי העובדים ביום הזה (${pts.length} רישומים עם מיקום מדויק)</button>
             <label class="afield">רדיוס האתר (מטר)
@@ -1858,7 +1877,7 @@
     const visIds = new Set(visSites.map(s => s.id));
     const siteName = id => { const s = visSites.find(x => x.id === id); return s ? s.name : "אתר אחר"; };
     // ברשימה: כל שורה "שם" או "שם, אתר, שפה" (גם הדבקה מאקסל — עמודות מופרדות בטאב)
-    const LANGS = { "עברית":"he", "ערבית":"ar", "אנגלית":"en", "הינדי":"hi", "הודית":"hi", he:"he", ar:"ar", en:"en", hi:"hi" };
+    const LANGS = { "עברית":"he", "ערבית":"ar", "אנגלית":"en", "הינדי":"hi", "הודית":"hi", "רוסית":"ru", he:"he", ar:"ar", en:"en", hi:"hi", ru:"ru" };
     Object.keys(WT).forEach(k => { LANGS[WT[k].name.toLowerCase()] = k; });
     const norm = s => String(s || "").replace(/["׳״']/g, "").replace(/\s+/g, " ").trim().toLowerCase();
     function matchSite(txt){
