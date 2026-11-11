@@ -1001,7 +1001,7 @@
     if(c.includes("invalid-verification-code")) return "הקוד שגוי — בדוק את ה-SMS ונסה שוב";
     if(c.includes("code-expired")) return "תוקף הקוד פג — בקש קוד חדש";
     if(c.includes("too-many-requests") || c.includes("quota")) return "יותר מדי ניסיונות — נסה שוב מאוחר יותר";
-    if(c.includes("operation-not-allowed") || c.includes("billing")) return "כניסה עם טלפון עוד לא הופעלה ב-Firebase — פנה לדוד";
+    if(c.includes("operation-not-allowed") || c.includes("billing")) return "שליחת SMS לא אושרה ב-Firebase — פנה לדוד (" + c + ": " + String((e && e.message) || "").replace(/^Firebase:\s*/, "").slice(0, 120) + ")";
     if(c.includes("unauthorized-domain") || c.includes("captcha") || c.includes("app-not-authorized")) return "בעיית אימות של האתר (" + c + ") — פנה לדוד";
     if(c.includes("network")) return "אין חיבור לרשת";
     return "הכניסה נכשלה: " + (c || (e && e.message) || e);
