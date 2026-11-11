@@ -357,6 +357,104 @@
     .screen{ padding:18px 14px 0; }
     .seg button{ padding:7px 10px; font-size:.78rem; }
   }
+
+  /* ───── נוכחות: מסך העובד ───── */
+  .wapp{ max-width:460px; margin:0 auto; padding:14px 16px 40px; min-height:100vh; display:flex; flex-direction:column; gap:14px; }
+  .wtop{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .wtop .plate{ display:inline-flex; background:#fff; border-radius:10px; padding:4px 8px; border:1px solid var(--line-2); }
+  .wtop .plate img{ height:34px; display:block; }
+  .wlang{ font-size:.9rem; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); }
+  .wmsg{ margin-top:30vh; text-align:center; font-size:1.05rem; color:var(--ink-2); padding:0 10px; }
+  .whello{ font-size:1.25rem; margin-top:6px; }
+  .wstat{ background:var(--surface); border:1px solid var(--line-2); border-radius:14px; padding:14px 16px; font-size:1.05rem; font-weight:600; display:flex; flex-direction:column; gap:4px; }
+  .wstat.in{ background:var(--ok-wash); border-color:var(--ok); color:var(--ok); }
+  .wstat small{ font-weight:500; font-size:.85rem; color:var(--ink-2); }
+  .wbig{ border:0; border-radius:22px; padding:34px 16px; font-size:1.6rem; font-weight:800; color:#fff; display:flex; flex-direction:column; align-items:center; gap:8px; box-shadow:var(--shadow); }
+  .wbig span{ font-size:2.4rem; }
+  .wbig.in{ background:var(--ok); } .wbig.out{ background:var(--crit); }
+  .wbig:active{ transform:scale(.98); }
+  .wlist{ background:var(--surface); border:1px solid var(--line-2); border-radius:14px; padding:12px 14px; }
+  .wrow{ padding:5px 0; font-size:.95rem; border-top:1px solid var(--line-2); }
+  .wrow:first-of-type{ border-top:0; }
+  .wrow small{ color:var(--warn); }
+  .wdone{ display:flex; gap:12px; align-items:center; background:var(--ok-wash); border:1px solid var(--ok); border-radius:14px; padding:10px; font-size:.95rem; }
+  .wdone img{ width:64px; height:64px; border-radius:10px; object-fit:cover; flex:none; }
+  .wdone b{ color:var(--ok); font-size:1.05rem; }
+  .wdone small{ color:var(--warn); }
+  .wflow{ display:flex; flex-direction:column; gap:12px; }
+  .wflowh{ font-size:1.3rem; font-weight:800; text-align:center; }
+  .wflow.in .wflowh{ color:var(--ok); } .wflow.out .wflowh{ color:var(--crit); }
+  .wcam{ display:flex; flex-direction:column; gap:10px; }
+  .wvid{ position:relative; width:100%; aspect-ratio:1; border-radius:18px; overflow:hidden; background:#000; }
+  .wvid video{ width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
+  .wface{ position:absolute; inset:14% 22%; border:3px dashed rgba(255,255,255,.7); border-radius:50%; pointer-events:none; }
+  .wcamerr{ width:100%; aspect-ratio:1; border-radius:18px; border:2px dashed var(--line); background:var(--surface-2); color:var(--ink); font-size:1.05rem; font-weight:600; padding:20px; }
+  .wcamerr::first-line{ font-size:3rem; }
+  .whint{ text-align:center; color:var(--ink-2); font-size:.9rem; }
+  .wshot{ width:100%; aspect-ratio:1; object-fit:cover; border-radius:18px; }
+  .wfield{ display:flex; flex-direction:column; gap:5px; font-weight:600; font-size:.9rem; }
+  .wfield select{ font-size:1rem; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); }
+  .wloc{ font-size:.9rem; color:var(--ink-2); background:var(--surface-2); border-radius:10px; padding:9px 12px; }
+  .wloc.ok{ color:var(--ok); background:var(--ok-wash); } .wloc.bad{ color:var(--warn); background:var(--warn-wash); }
+  .wflow .btn{ padding:15px 12px; font-size:1rem; }
+
+  /* ───── נוכחות: מסך המנהלים ───── */
+  .adate{ margin:4px 0; }
+  .adate input[type=date]{ font-family:inherit; font-size:.9rem; padding:7px 10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); }
+  .adate .chip:disabled{ opacity:.4; }
+  .asites{ display:flex; flex-direction:column; gap:12px; margin-top:14px; }
+  .asites .card + .card{ margin-top:0; }
+  .card.asite{ padding:12px 14px; }
+  .card.asite + .card.asite{ margin-top:12px; }
+  .asites .card.asite + .card.asite{ margin-top:0; }
+  .arows{ display:flex; flex-direction:column; margin-top:6px; }
+  .arow{ display:grid; grid-template-columns:minmax(90px,1.3fr) 104px 48px minmax(0,1.6fr); gap:8px; align-items:center; width:100%; text-align:start; background:none; border:0; border-top:1px solid var(--line-2); padding:9px 2px; font-family:"Heebo",sans-serif; font-size:.84rem; color:var(--ink); }
+  .arow.head{ border-top:0; font-size:.68rem; font-weight:700; color:var(--ink-3); padding-top:6px; }
+  .arow .an{ font-weight:600; overflow:hidden; text-overflow:ellipsis; }
+  .arow .an small{ display:block; font-weight:400; font-size:.7rem; color:var(--ink-3); }
+  .arow .at{ direction:ltr; text-align:end; font-variant-numeric:tabular-nums; }
+  .arow .ah{ font-weight:700; text-align:end; font-variant-numeric:tabular-nums; }
+  .arow.crit{ background:linear-gradient(90deg, transparent, var(--crit-wash)); }
+  .arow.warn{ background:linear-gradient(90deg, transparent, var(--warn-wash)); }
+  .arow.miss{ color:var(--ink-3); }
+  .arow.miss .at{ direction:rtl; text-align:start; }
+  .arow.sm{ font-size:.78rem; padding:7px 2px; }
+  .af{ display:flex; flex-wrap:wrap; gap:4px; }
+  .aflag{ font-size:.66rem; font-weight:600; border-radius:999px; padding:2px 7px; white-space:nowrap; }
+  .aflag.crit{ background:var(--crit-wash); color:var(--crit); } .aflag.warn{ background:var(--warn-wash); color:var(--warn); } .aflag.ok{ background:var(--ok-wash); color:var(--ok); }
+  .afix{ font-style:normal; color:var(--accent); font-size:.8rem; }
+  .amon summary{ list-style:none; cursor:pointer; }
+  .amon summary::-webkit-details-marker{ display:none; }
+  .amon[open] summary{ background:var(--surface-2); }
+  .agrid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:8px; margin:10px 0 4px; }
+  .agph{ position:relative; border:1px solid var(--line-2); border-radius:10px; overflow:hidden; background:var(--surface-2); padding:0; display:flex; flex-direction:column; }
+  .agph img.agref{ position:absolute; top:4px; inset-inline-start:4px; width:34%; aspect-ratio:1; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); }
+  .aref{ display:flex; gap:10px; align-items:center; background:var(--surface-2); border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:.86rem; }
+  .aref .thumb{ width:64px; height:64px; border-radius:50%; }
+  .linkbtn{ background:none; border:0; padding:4px 0 0; color:var(--accent); font-family:"Heebo",sans-serif; font-size:.74rem; text-decoration:underline; cursor:pointer; }
+  .agph img{ width:100%; aspect-ratio:1; object-fit:cover; display:block; }
+  .agph span{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:.7rem; }
+  .agph small{ font-family:"Heebo",sans-serif; font-size:.64rem; padding:3px 4px; color:var(--ink-2); }
+  .asheet{ max-height:88vh; overflow:auto; }
+  .apunch{ display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-2); font-size:.86rem; }
+  .apunch small{ color:var(--ink-3); font-size:.7rem; }
+  .apunch .thumb{ width:72px; height:72px; }
+  .afix2{ display:flex; gap:8px; }
+  .afield{ display:flex; flex-direction:column; gap:4px; font-family:"Heebo",sans-serif; font-size:.74rem; font-weight:600; color:var(--ink-2); flex:1; margin-top:8px; }
+  .afield input{ font-family:inherit; font-size:.92rem; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); }
+  .acheck{ display:flex; gap:8px; align-items:center; font-size:.84rem; margin-top:10px; }
+  .awk{ display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--line-2); padding:9px 0; margin-top:6px; }
+  .awk.off{ opacity:.55; }
+  .awk .an{ font-weight:600; font-size:.9rem; }
+  .awk .an small{ display:block; font-weight:400; font-size:.7rem; color:var(--ink-3); }
+  .awkb{ display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; }
+  .newunit textarea{ font-family:inherit; font-size:.88rem; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); width:100%; }
+  @media (max-width:520px){
+    .arow{ grid-template-columns:minmax(0,1fr) 96px 42px; }
+    .arow .af{ grid-column:1 / -1; }
+    .arow .af:empty{ display:none; }
+    .arow.head .af{ display:none; }
+  }
 </style>
 
 <div id="root"></div>
@@ -936,6 +1034,929 @@
   const cloudPhotoPut = p => Cloud.on && Cloud.base.collection("photos").doc(p.id).set(p).catch(e => console.warn("photo write failed", e));
   const cloudPhotoDel = id => Cloud.on && Cloud.base.collection("photos").doc(id).delete().catch(()=>{});
 
+  /* ═════════════ נוכחות עובדים — סלפי בכניסה וביציאה ═════════════
+     מרחב נפרד במסד: t/{קוד נוכחות}/...  (הקוד נשמר אצל המנהלים ב-meta/att)
+     העובד מקבל קישור אישי (#a=קוד נוכחות&w=מזהה עובד) — הוא לא מקבל את קוד הצוות של הבקרה.
+     הסלפי עצמו יוצר את הרישום: שעת שרת + GPS + מזהה מכשיר, כך שאין "תמונה בצד ודוח בצד".
+       workers/{id}  שם, אתר קבוע, פעיל, מכשיר שנקשר
+       sites/{id}    שם, מנהל, מיקום ורדיוס (נקבע ע״י מנהל)
+       punch/{id}    רישום: עובד, אתר, כניסה/יציאה, שעת שרת ושעת מכשיר, GPS, מכשיר, אופליין
+       pph/{id}      התמונה של הרישום (מסמך נפרד כדי שהדוחות לא יורידו תמונות)
+       fix/{id}      תיקון/אישור של מנהל — לא דורס את הרישום המקורי, נשמר כהיסטוריה */
+  const ATT_R = 300;              // רדיוס אתר ברירת מחדל (מטר)
+  const ATT_SKEW = 5 * 60000;     // פער שעון טלפון/שרת שנחשב חשוד
+  const ATT_LONG = 13;            // משמרת ארוכה מזה (שעות) = חריג
+  const ATT_NOOUT_H = 20;         // מהשעה הזו כניסה בלי יציאה של היום = חריג
+  const FV = () => firebase.firestore.FieldValue.serverTimestamp();
+  const tsMs = x => x && typeof x.toMillis === "function" ? x.toMillis() : (typeof x === "number" ? x : null);
+  function rid(n){
+    const c = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789", a = new Uint8Array(n);
+    crypto.getRandomValues(a);
+    return Array.from(a, x => c[x % c.length]).join("");
+  }
+  function geoDist(a, b){
+    const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+    const h = Math.sin(dLat/2) ** 2 + Math.cos(a.lat*r) * Math.cos(b.lat*r) * Math.sin(dLng/2) ** 2;
+    return 2 * 6371000 * Math.asin(Math.sqrt(h));
+  }
+  const fmtDist = d => d < 1000 ? Math.round(d) + " מ׳" : (d / 1000).toFixed(1) + " ק״מ";
+  const hm = ms => ms == null ? "—" : hhmm(ms);
+  const hrs = ms => (Math.round((ms || 0) / 36e5 * 100) / 100);
+  const WDAY = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const dayDate = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDay = (s, n) => { const d = dayDate(s); d.setDate(d.getDate() + n); return dstr(d.getTime()); };
+  const dayLabel = s => { const d = dayDate(s); return "יום " + WDAY[d.getDay()] + " " + pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear(); };
+  const atTime = (day, hhmmStr) => { if(!hhmmStr) return null; const [h, m] = hhmmStr.split(":").map(Number); const d = dayDate(day); d.setHours(h, m, 0, 0); return d.getTime(); };
+  const workerLink = (code, w) => location.origin + location.pathname + "#a=" + code + "&w=" + w.id;
+
+  function readWorker(){
+    try{
+      const h = location.hash || "";
+      if(/[#&?]k=/.test(h)){ localStorage.removeItem("att_worker"); return null; }
+      const a = /[#&?]a=([A-Za-z0-9]{16,64})/.exec(h), w = /[#&?]w=([A-Za-z0-9]{6,40})/.exec(h);
+      if(a && w){ const v = { a:a[1], w:w[1] }; localStorage.setItem("att_worker", JSON.stringify(v)); return v; }
+      const s = JSON.parse(localStorage.getItem("att_worker") || "null");
+      return s && s.a && s.w ? s : null;
+    }catch(e){ return null; }
+  }
+  function deviceId(){
+    try{ let d = localStorage.getItem("att_dev"); if(!d){ d = rid(12); localStorage.setItem("att_dev", d); } return d; }
+    catch(e){ return "nostore"; }
+  }
+
+  /* השעה שנספרת לשכר: שעת השרת. אם הרישום נעשה בלי רשת ונשלח מאוחר — שעת הטלפון, עם סימון לבדיקה */
+  function punchTime(p){
+    const ts = tsMs(p.ts);
+    if(ts == null) return { t:p.dts, src:"dev" };
+    if(p.off && ts - p.dts > ATT_SKEW) return { t:p.dts, src:"late" };
+    return { t:ts, src:"srv" };
+  }
+  function punchFlags(p, site, worker){
+    const f = [], ts = tsMs(p.ts);
+    if(p.lat == null) f.push({ k:"nogps", t:"בלי מיקום", sev:"warn" });
+    else if(site && site.lat != null){
+      const d = geoDist(p, site);
+      if(d - Math.min(p.acc || 0, 500) > (site.r || ATT_R)) f.push({ k:"far", t:"רחוק מהאתר " + fmtDist(d), sev:"crit" });
+    }
+    if(ts != null && !p.off && Math.abs(ts - p.dts) > ATT_SKEW) f.push({ k:"skew", t:"שעון הטלפון לא תואם (" + Math.round((p.dts - ts) / 60000) + " דק׳)", sev:"crit" });
+    if(ts != null && p.off && ts - p.dts > ATT_SKEW) f.push({ k:"late", t:"נרשם בלי רשת · הגיע " + hhmm(ts), sev:"warn" });
+    if(worker && worker.dev && p.dev && p.dev !== worker.dev) f.push({ k:"dev", t:"מטלפון אחר", sev:"warn" });
+    if(p.cam === "file") f.push({ k:"file", t:"צילום לא חי", sev:"warn" });
+    return f;
+  }
+
+  /* מרכיב שורת עובד-יום מכל הרישומים + התיקון האחרון של המנהל */
+  function dayRows(punches, fixes, workers, sitesById, nowMs){
+    const today = dstr(nowMs), lateHour = new Date(nowMs).getHours() >= ATT_NOOUT_H;
+    const groups = new Map(), fixBy = new Map(), wById = new Map(workers.map(w => [w.id, w]));
+    punches.forEach(p => { const k = p.w + "|" + p.day; if(!groups.has(k)) groups.set(k, []); groups.get(k).push(p); });
+    fixes.slice().sort((a, b) => (tsMs(a.at) || 0) - (tsMs(b.at) || 0)).forEach(f => { fixBy.set(f.w + "|" + f.day, f); if(!groups.has(f.w + "|" + f.day)) groups.set(f.w + "|" + f.day, []); });
+    const rows = [];
+    groups.forEach((list, key) => {
+      const [wid, day] = key.split("|"), w = wById.get(wid);
+      const ps = list.map(p => ({ ...p, _t:punchTime(p), _f:punchFlags(p, sitesById[p.site], w) })).sort((a, b) => a._t.t - b._t.t);
+      const spans = [], flags = [];
+      let open = null;
+      ps.forEach(p => {
+        if(p.type === "in"){ if(!open) open = p; }
+        else if(open){ spans.push([open._t.t, p._t.t]); open = null; }
+        else if(spans.length) spans[spans.length - 1][1] = p._t.t;
+        else flags.push({ k:"noin", t:"יציאה בלי כניסה", sev:"crit" });
+      });
+      const firstIn = ps.find(p => p.type === "in"), lastOut = [...ps].reverse().find(p => p.type === "out");
+      let inT = firstIn ? firstIn._t.t : null;
+      let outT = open || !lastOut ? null : lastOut._t.t;
+      let ms = spans.reduce((s, [a, b]) => s + (b - a), 0);
+      if(open){
+        if(day < today || (day === today && lateHour)) flags.push({ k:"noout", t:"אין יציאה", sev:"crit" });
+        else if(day === today) flags.push({ k:"inside", t:"בעבודה עכשיו", sev:"ok" });
+      }
+      const seen = new Set();
+      ps.forEach(p => p._f.forEach(f => { if(!seen.has(f.k)){ seen.add(f.k); flags.push(f); } }));
+      const fx = fixBy.get(key) || null;
+      if(fx){
+        if(fx.absent){ inT = null; outT = null; ms = 0; }
+        else{
+          if(fx.inT != null) inT = fx.inT;
+          if(fx.outT != null) outT = fx.outT;
+          if(fx.inT != null || fx.outT != null) ms = inT != null && outT != null ? Math.max(0, outT - inT) : ms;
+        }
+      }
+      if(ms > ATT_LONG * 36e5) flags.push({ k:"long", t:"משמרת של " + hrs(ms) + " שעות", sev:"warn" });
+      if(!ps.length) flags.push({ k:"manual", t:"נוסף ידנית ע״י מנהל", sev:"warn" });
+      const stillOpen = fx ? (open && outT == null && !fx.absent && (day < today || lateHour)) : false;
+      const openFlags = fx ? (stillOpen ? [{ k:"noout", t:"אין יציאה", sev:"crit" }] : []) : flags.filter(f => f.sev !== "ok");
+      const site = (ps.length ? ps[ps.length - 1].site : "") || (w && w.site) || "";
+      rows.push({ key, w:wid, day, name: w ? w.name : (ps[0] && ps[0].name) || "?", site,
+        sites:[...new Set(ps.map(p => p.site))], inT, outT, ms, flags, openFlags, ps, fix:fx,
+        inside: !!open && day === today && !(fx && (fx.absent || fx.outT != null)) });
+    });
+    return rows.sort((a, b) => a.name.localeCompare(b.name, "he") || a.day.localeCompare(b.day));
+  }
+
+  /* ───── קובץ אקסל אמיתי (xlsx) בלי ספריות: zip בלי דחיסה + XML ───── */
+  function zipStore(files){
+    const enc = new TextEncoder();
+    const T = zipStore.t || (zipStore.t = (()=>{ const t = new Uint32Array(256); for(let n = 0; n < 256; n++){ let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })());
+    const crc = d => { let c = 0xFFFFFFFF; for(let i = 0; i < d.length; i++) c = T[(c ^ d[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+    const parts = [], cen = [];
+    let off = 0;
+    files.forEach(f => {
+      const nm = enc.encode(f.name), d = enc.encode(f.data), c = crc(d);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true);
+      h.setUint16(12, 0x21, true); h.setUint32(14, c, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, nm.length, true);
+      parts.push(new Uint8Array(h.buffer), nm, d);
+      const z = new DataView(new ArrayBuffer(46));
+      z.setUint32(0, 0x02014b50, true); z.setUint16(4, 20, true); z.setUint16(6, 20, true); z.setUint16(8, 0x0800, true);
+      z.setUint16(14, 0x21, true); z.setUint32(16, c, true); z.setUint32(20, d.length, true); z.setUint32(24, d.length, true); z.setUint16(28, nm.length, true); z.setUint32(42, off, true);
+      cen.push(new Uint8Array(z.buffer), nm);
+      off += 30 + nm.length + d.length;
+    });
+    const cenLen = cen.reduce((s, a) => s + a.length, 0), e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cenLen, true); e.setUint32(16, off, true);
+    return new Blob([...parts, ...cen, new Uint8Array(e.buffer)], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+  function xlsxBlob(sheets){
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+    const col = i => { let s = ""; i++; while(i){ const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+    const X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    const sheetXml = sh => X + '<worksheet ' + NS + '><sheetViews><sheetView workbookViewId="0" rightToLeft="1"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      (sh.widths ? '<cols>' + sh.widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join("") + '</cols>' : "") +
+      '<sheetData>' + sh.rows.map((r, ri) => '<row r="' + (ri + 1) + '">' + r.map((v, ci) => {
+        if(v == null || v === "") return "";
+        const ref = col(ci) + (ri + 1), s = ri === 0 ? ' s="1"' : "";
+        return typeof v === "number" ? '<c r="' + ref + '"' + s + '><v>' + v + '</v></c>' : '<c r="' + ref + '"' + s + ' t="inlineStr"><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
+      }).join("") + '</row>').join("") + '</sheetData></worksheet>';
+    const files = [
+      { name:"[Content_Types].xml", data: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        sheets.map((_, i) => '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join("") + '</Types>' },
+      { name:"_rels/.rels", data: X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name:"xl/workbook.xml", data: X + '<workbook ' + NS + '><bookViews><workbookView/></bookViews><sheets>' + sheets.map((s, i) => '<sheet name="' + esc(s.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join("") + '</sheets></workbook>' },
+      { name:"xl/_rels/workbook.xml.rels", data: X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + sheets.map((_, i) => '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join("") +
+        '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
+      { name:"xl/styles.xml", data: X + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F7"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
+      ...sheets.map((s, i) => ({ name:"xl/worksheets/sheet" + (i + 1) + ".xml", data: sheetXml(s) }))
+    ];
+    return zipStore(files);
+  }
+  async function saveFile(blob, name){
+    try{
+      const f = new File([blob], name, { type: blob.type });
+      if(/iPhone|iPad|Android/i.test(navigator.userAgent) && navigator.canShare && navigator.canShare({ files:[f] })){ await navigator.share({ files:[f], title:name }); return; }
+    }catch(e){ if(e && e.name === "AbortError") return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+
+  /* ═════════════ מסך העובד (קישור אישי) ═════════════ */
+  const WT = {
+    he:{ dir:"rtl", name:"עברית", hello:"שלום", in:"כניסה לעבודה", out:"יציאה מהעבודה", notIn:"עוד לא נרשמת היום", since:"בעבודה מאז", left:"יצאת ב-", site:"אתר", snap:"צלם", retake:"צלם שוב", send:"אשר ושלח", cancel:"ביטול", saved:"נרשם", savedOff:"נשמר בטלפון — יישלח כשתחזור רשת", locating:"מאתר מיקום…", locOk:"מיקום התקבל", noLoc:"אין מיקום — אשר גישה למיקום בהגדרות הטלפון", camErr:"המצלמה לא נפתחה — לחץ כאן כדי לצלם", loading:"טוען…", bad:"הקישור לא תקין — בקש קישור חדש מהמנהל", off:"המשתמש הושבת — פנה למנהל", err:"אין חיבור למערכת — נסה שוב", face:"הפנים צריכות להיראות בבירור", hours:"שעות היום", net:"אין רשת — הרישום יישמר בטלפון", todayList:"הרישומים שלך היום", inL:"כניסה", outL:"יציאה", pending:"ממתין לשליחה" },
+    ar:{ dir:"rtl", name:"العربية", hello:"مرحبا", in:"دخول للعمل", out:"خروج من العمل", notIn:"لم تسجّل اليوم بعد", since:"في العمل منذ", left:"خرجت الساعة ", site:"الموقع", snap:"صوّر", retake:"صوّر مرة أخرى", send:"تأكيد وإرسال", cancel:"إلغاء", saved:"تم التسجيل", savedOff:"حُفظ في الهاتف — سيُرسل عند عودة الإنترنت", locating:"جارٍ تحديد الموقع…", locOk:"تم تحديد الموقع", noLoc:"لا يوجد موقع — اسمح بالوصول للموقع في إعدادات الهاتف", camErr:"الكاميرا لم تفتح — اضغط هنا للتصوير", loading:"جارٍ التحميل…", bad:"الرابط غير صالح — اطلب رابطًا جديدًا من المدير", off:"الحساب موقوف — راجع المدير", err:"لا يوجد اتصال بالنظام — حاول مرة أخرى", face:"يجب أن يظهر وجهك بوضوح", hours:"ساعات اليوم", net:"لا يوجد إنترنت — سيُحفظ التسجيل في الهاتف", todayList:"تسجيلاتك اليوم", inL:"دخول", outL:"خروج", pending:"بانتظار الإرسال" },
+    en:{ dir:"ltr", name:"English", hello:"Hello", in:"Clock in", out:"Clock out", notIn:"Not clocked in today", since:"Working since", left:"Clocked out at ", site:"Site", snap:"Take photo", retake:"Retake", send:"Confirm & send", cancel:"Cancel", saved:"Recorded", savedOff:"Saved on phone — will be sent when online", locating:"Getting location…", locOk:"Location received", noLoc:"No location — allow location access in phone settings", camErr:"Camera did not open — tap here to take a photo", loading:"Loading…", bad:"Invalid link — ask your manager for a new one", off:"Account disabled — contact your manager", err:"Cannot reach the system — try again", face:"Your face must be clearly visible", hours:"Hours today", net:"Offline — the record will be saved on the phone", todayList:"Your records today", inL:"In", outL:"Out", pending:"waiting to send" },
+    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" }
+  };
+
+  /* צילום ריבועי קטן (~20KB) עם חותמת תאריך ושעה */
+  function selfieFrame(src, w, h){
+    const S = 360, side = Math.min(w, h), c = document.createElement("canvas");
+    c.width = S; c.height = S;
+    const g = c.getContext("2d");
+    g.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, S, S);
+    const t = Date.now();
+    g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(0, S - 26, S, 26);
+    g.fillStyle = "#fff"; g.font = "bold 15px sans-serif"; g.textAlign = "center";
+    g.fillText(dmy(t) + "/" + new Date(t).getFullYear() + "  " + hhmm(t), S / 2, S - 8);
+    return c.toDataURL("image/jpeg", 0.62);
+  }
+  function SelfieCam({ L, onShot, onCancel }){
+    const vid = useRef(null), fileRef = useRef(null);
+    const [err, setErr] = useState(false);
+    useEffect(()=>{
+      let stream = null, dead = false;
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ setErr(true); return; }
+      navigator.mediaDevices.getUserMedia({ video:{ facingMode:"user", width:{ ideal:720 }, height:{ ideal:720 } }, audio:false })
+        .then(s => {
+          if(dead){ s.getTracks().forEach(t => t.stop()); return; }
+          stream = s;
+          const v = vid.current; if(!v) return;
+          v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = s; v.play().catch(()=>{});
+        })
+        .catch(()=> setErr(true));
+      return ()=>{ dead = true; if(stream) stream.getTracks().forEach(t => t.stop()); };
+    }, []);
+    function shoot(){
+      const v = vid.current;
+      if(!v || !v.videoWidth) return;
+      onShot(selfieFrame(v, v.videoWidth, v.videoHeight), "live");
+    }
+    function fromFile(e){
+      const file = e.target.files && e.target.files[0]; if(!file) return;
+      const img = new Image();
+      img.onload = ()=>{ onShot(selfieFrame(img, img.naturalWidth, img.naturalHeight), "file"); URL.revokeObjectURL(img.src); };
+      img.src = URL.createObjectURL(file);
+    }
+    return html`
+      <div class="wcam">
+        ${err
+          ? html`<button class="wcamerr" onClick=${()=>fileRef.current && fileRef.current.click()}>📷<br/>${L.camErr}</button>`
+          : html`<div class="wvid"><video ref=${vid} playsInline=${true} muted=${true} autoPlay=${true}></video><i class="wface"></i></div>`}
+        <input ref=${fileRef} type="file" accept="image/*" capture="user" style=${{ display:"none" }} onChange=${fromFile} />
+        <div class="whint">${L.face}</div>
+        <div class="btnrow">
+          <button class="btn" onClick=${onCancel}>${L.cancel}</button>
+          ${!err && html`<button class="btn pri" onClick=${shoot}>📸 ${L.snap}</button>`}
+        </div>
+      </div>`;
+  }
+
+  function WorkerApp({ id }){
+    const [phase, setPhase] = useState("load");
+    const [worker, setWorker] = useState(null);
+    // שפה: מה שהעובד בחר בטלפון, אחרת מה שהמנהל קבע לו, אחרת עברית
+    const [pick, setPick] = useState(()=>{ try{ return localStorage.getItem("att_lang"); }catch(e){ return null; } });
+    const lang = WT[pick] ? pick : (worker && WT[worker.lang] ? worker.lang : "he");
+    const L = WT[lang];
+    const setLang = v => { setPick(v); try{ localStorage.setItem("att_lang", v); }catch(e){} };
+    useEffect(()=>{ document.documentElement.dir = L.dir; document.documentElement.lang = lang; }, [lang]);
+    const [sites, setSites] = useState([]);
+    const [punches, setPunches] = useState([]);
+    const [now, setNow] = useState(Date.now());
+    const [flow, setFlow] = useState(null);
+    const [done, setDone] = useState(null);
+    const [online, setOnline] = useState(navigator.onLine);
+    const base = useRef(null);
+    const dev = useMemo(deviceId, []);
+    const today = dstr(now);
+
+    useEffect(()=>{
+      const t = setInterval(()=> setNow(Date.now()), 30000);
+      const on = ()=> setOnline(navigator.onLine);
+      window.addEventListener("online", on); window.addEventListener("offline", on);
+      return ()=>{ clearInterval(t); window.removeEventListener("online", on); window.removeEventListener("offline", on); };
+    }, []);
+    useEffect(()=>{
+      if(typeof firebase === "undefined"){ setPhase("err"); return; }
+      if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+      const db = firebase.firestore();
+      try{ db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
+      const b = db.collection("t").doc(id.a);
+      base.current = b;
+      const uns = [];
+      let stop = false;
+      firebase.auth().signInAnonymously().then(()=>{
+        if(stop) return;
+        uns.push(b.collection("workers").doc(id.w).onSnapshot(d => {
+          if(d.exists){ const w = d.data(); setWorker(w); setPhase(w.active === false ? "off" : "ok"); }
+          else if(!d.metadata.fromCache) setPhase("bad");
+        }, ()=> setPhase("err")));
+        uns.push(b.collection("sites").onSnapshot(q => setSites(q.docs.map(d => d.data()).filter(s => s.active !== false)
+          .sort((x, y) => String(x.name).localeCompare(String(y.name), "he"))), ()=>{}));
+      }).catch(()=> setPhase("err"));
+      return ()=>{ stop = true; uns.forEach(u => { try{ u(); }catch(e){} }); };
+    }, []);
+    useEffect(()=>{
+      if(phase !== "ok" || !base.current) return;
+      return base.current.collection("punch").where("w", "==", id.w).where("day", "==", today)
+        .onSnapshot(q => setPunches(q.docs.map(d => ({ ...d.data({ serverTimestamps:"estimate" }), _pending: d.metadata.hasPendingWrites }))), ()=>{});
+    }, [phase, today]);
+    // קושרים את העובד לטלפון הראשון שבו פתח את הקישור — רישום מטלפון אחר יסומן למנהל
+    useEffect(()=>{
+      if(phase === "ok" && worker && !worker.dev && base.current)
+        base.current.collection("workers").doc(id.w).set({ dev, devAt: FV() }, { merge:true }).catch(()=>{});
+    }, [phase, worker && worker.dev]);
+
+    const mine = punches.map(p => ({ ...p, _t: punchTime(p) })).sort((a, b) => a._t.t - b._t.t);
+    const last = mine[mine.length - 1];
+    const next = last && last.type === "in" ? "out" : "in";
+    let workedMs = 0, openAt = null;
+    mine.forEach(p => { if(p.type === "in"){ if(openAt == null) openAt = p._t.t; } else if(openAt != null){ workedMs += p._t.t - openAt; openAt = null; } });
+    if(openAt != null) workedMs += Math.max(0, Date.now() - openAt);
+    const siteName = sid => { const s = sites.find(x => x.id === sid); return s ? s.name : ""; };
+
+    function start(type){
+      setDone(null);
+      setFlow({ type, step:"cam", photo:null, cam:"live", pos:null, posErr:null, site:null });
+      if(!navigator.geolocation){ setFlow(f => f && { ...f, posErr:"na" }); return; }
+      navigator.geolocation.getCurrentPosition(
+        p => setFlow(f => f && { ...f, pos:{ lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy) } }),
+        e => setFlow(f => f && { ...f, posErr: String(e.code || "err") }),
+        { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+    }
+    // אתר: מה שהעובד בחר, אחרת האתר הקרוב (אם מוגדר מיקום), אחרת האתר האחרון היום, אחרת האתר הקבוע
+    function autoSite(f){
+      if(f.site) return f.site;
+      if(f.pos){
+        const near = sites.filter(s => s.lat != null).map(s => ({ s, d: geoDist(f.pos, s) })).sort((a, b) => a.d - b.d)[0];
+        if(near && near.d < 1000) return near.s.id;
+      }
+      return (last && last.site) || (worker && worker.site) || (sites[0] && sites[0].id) || "";
+    }
+    function send(){
+      const f = flow, b = base.current;
+      if(!f || !f.photo || !b) return;
+      const sid = autoSite(f), t = Date.now();
+      const pid = today.replace(/-/g, "") + "_" + id.w + "_" + rid(5);
+      const off = !navigator.onLine;
+      const p = {
+        id:pid, w:id.w, name:worker.name, site:sid, siteName:siteName(sid), type:f.type, day:today, dts:t, ts:FV(),
+        lat: f.pos ? f.pos.lat : null, lng: f.pos ? f.pos.lng : null, acc: f.pos ? f.pos.acc : null, gpsErr: f.pos ? null : (f.posErr || "pending"),
+        dev, off, cam:f.cam, ua:navigator.userAgent.slice(0, 160), v:1
+      };
+      const batch = firebase.firestore().batch();
+      batch.set(b.collection("punch").doc(pid), p);
+      batch.set(b.collection("pph").doc(pid), { id:pid, w:id.w, day:today, site:sid, url:f.photo });
+      // הסלפי הראשון נשמר כתמונת הזיהוי של העובד (לא נמחקת במחיקה החודשית; מנהל יכול להחליף)
+      if(!worker.hasRef && f.cam === "live"){
+        batch.set(b.collection("ref").doc(id.w), { w:id.w, url:f.photo, pid, at:FV(), by:"auto" });
+        batch.set(b.collection("workers").doc(id.w), { hasRef:true }, { merge:true });
+      }
+      batch.commit().catch(e => setDone({ err: String(e.code || e.message || e) }));
+      setFlow(null);
+      setDone({ type:f.type, at:t, off, photo:f.photo, site:siteName(sid) });
+    }
+
+    const wrap = inner => html`
+      <div class="wapp">
+        <div class="wtop">
+          <span class="plate"><img src=${LOGO} alt="ט.ש. מי רון" /></span>
+          <select class="wlang" value=${lang} onChange=${e => setLang(e.target.value)}>
+            ${Object.keys(WT).map(k => html`<option key=${k} value=${k}>${WT[k].name}</option>`)}
+          </select>
+        </div>
+        ${inner}
+      </div>`;
+    if(phase !== "ok") return wrap(html`<div class="wmsg">${phase === "load" ? L.loading : L[phase]}</div>`);
+
+    if(flow){
+      const sid = autoSite(flow);
+      return wrap(html`
+        <div class=${"wflow " + flow.type}>
+          <div class="wflowh">${flow.type === "in" ? L.in : L.out}</div>
+          ${flow.step === "cam"
+            ? html`<${SelfieCam} L=${L} onCancel=${()=>setFlow(null)} onShot=${(photo, cam)=> setFlow(f => f && { ...f, photo, cam, step:"review" })} />`
+            : html`
+              <img class="wshot" src=${flow.photo} alt="" />
+              <label class="wfield">${L.site}
+                <select value=${sid} onChange=${e => setFlow(f => ({ ...f, site:e.target.value }))}>
+                  ${sites.map(s => html`<option key=${s.id} value=${s.id}>${s.name}</option>`)}
+                </select>
+              </label>
+              <div class=${"wloc " + (flow.pos ? "ok" : flow.posErr ? "bad" : "")}>📍 ${flow.pos ? L.locOk + " (±" + flow.pos.acc + "m)" : flow.posErr ? L.noLoc : L.locating}</div>
+              ${!online && html`<div class="wloc bad">${L.net}</div>`}
+              <div class="btnrow">
+                <button class="btn" onClick=${()=>setFlow(f => ({ ...f, step:"cam", photo:null }))}>${L.retake}</button>
+                <button class=${"btn " + (flow.type === "in" ? "ok" : "pri")} disabled=${!flow.pos && !flow.posErr} onClick=${send}>${!flow.pos && !flow.posErr ? L.locating : L.send}</button>
+              </div>`}
+        </div>`);
+    }
+
+    return wrap(html`
+      <div class="whello">${L.hello}, <b>${worker.name}</b></div>
+      <div class=${"wstat " + (openAt != null ? "in" : last ? "out" : "")}>
+        ${openAt != null ? L.since + " " + hhmm(openAt) : last ? L.left + hhmm(last._t.t) : L.notIn}
+        ${mine.length > 0 && html`<small>${L.hours}: ${Math.floor(workedMs / 36e5)}:${pad2(Math.floor(workedMs % 36e5 / 60000))}</small>`}
+      </div>
+      ${!online && html`<div class="wloc bad">${L.net}</div>`}
+      ${done && !done.err && html`
+        <div class="wdone">
+          <img src=${done.photo} alt="" />
+          <div><b>✓ ${L.saved}</b><br/>${done.type === "in" ? L.inL : L.outL} · ${hhmm(done.at)}${done.site ? " · " + done.site : ""}${done.off ? html`<br/><small>${L.savedOff}</small>` : null}</div>
+        </div>`}
+      ${done && done.err && html`<div class="wloc bad">${L.err} (${done.err})</div>`}
+      <button class=${"wbig " + next} onClick=${()=>start(next)}>
+        <span>📸</span>${next === "in" ? L.in : L.out}
+      </button>
+      ${mine.length > 0 && html`
+        <div class="wlist">
+          <div class="lbl">${L.todayList}</div>
+          ${mine.map(p => html`<div key=${p.id} class="wrow"><b>${hhmm(p._t.t)}</b> ${p.type === "in" ? L.inL : L.outL}${p.siteName ? " · " + p.siteName : ""}${p._pending ? html` <small>(${L.pending})</small>` : null}</div>`)}
+        </div>`}
+    `);
+  }
+
+  /* ═════════════ נוכחות — מסך המנהלים / המשרד ═════════════ */
+  function Attendance({ st, now, mgr, who, notify }){
+    const [code, setCode] = useState(null);
+    const [err, setErr] = useState("");
+    const [view, setView] = useState("day");
+    const [day, setDay] = useState(()=> dstr(Date.now()));
+    const [month, setMonth] = useState(()=> dstr(Date.now()).slice(0, 7));
+    const [workers, setWorkers] = useState([]);
+    const [asites, setAsites] = useState([]);
+    const [asLoaded, setAsLoaded] = useState(false);
+    const [punches, setPunches] = useState([]);
+    const [fixes, setFixes] = useState([]);
+    const [mdata, setMdata] = useState(null);
+    const [sheet, setSheet] = useState(null);
+    const [gallery, setGallery] = useState({});
+    const [photos, setPhotos] = useState({});
+    const [big, setBig] = useState(null);
+    const [refs, setRefs] = useState({});
+    const [mstat, setMstat] = useState(null);
+    const [delRun, setDelRun] = useState(null);
+    const B = useMemo(()=> code && Cloud.db ? Cloud.db.collection("t").doc(code) : null, [code]);
+
+    // קוד הנוכחות נוצר פעם אחת ונשמר במסד הבקרה — כל המנהלים רואים את אותו מרחב
+    useEffect(()=>{
+      if(!Cloud.on) return;
+      const ref = Cloud.base.collection("meta").doc("att");
+      return ref.onSnapshot(d => {
+        if(d.exists && d.data().code) setCode(d.data().code);
+        else if(!d.metadata.fromCache)
+          Cloud.db.runTransaction(tx => tx.get(ref).then(x => { if(!x.exists || !x.data().code) tx.set(ref, { code: rid(24), at: Date.now(), by: who }); }))
+            .catch(e => setErr(String(e.code || e.message || e)));
+      }, e => setErr(String(e.code || e.message || e)));
+    }, []);
+    useEffect(()=>{
+      if(!B) return;
+      const e = x => setErr(String(x.code || x.message || x));
+      const u1 = B.collection("workers").onSnapshot(q => setWorkers(q.docs.map(d => d.data())), e);
+      const u2 = B.collection("sites").onSnapshot(q => { setAsites(q.docs.map(d => d.data())); if(!q.metadata.fromCache) setAsLoaded(true); }, e);
+      return ()=>{ u1(); u2(); };
+    }, [B]);
+    // שמות האתרים והמנהלים עוברים מהבקרה למרחב הנוכחות (בלי לגעת במיקום שנקבע)
+    useEffect(()=>{
+      if(!B || !asLoaded) return;
+      const have = new Map(asites.map(s => [s.id, s]));
+      const batch = Cloud.db.batch();
+      let n = 0;
+      st.sites.forEach(s => {
+        const a = have.get(s.id), want = { id:s.id, name:s.name, num:s.num || 0, owner:ownerName(s), active:!!s.active };
+        if(!a || a.name !== want.name || a.owner !== want.owner || a.active !== want.active || a.num !== want.num){ batch.set(B.collection("sites").doc(docKey(s.id)), want, { merge:true }); n++; }
+      });
+      if(n) batch.commit().catch(()=>{});
+    }, [B, asLoaded, st.sites]);
+    useEffect(()=>{
+      if(!B || view === "month") return;
+      const e = x => setErr(String(x.code || x.message || x));
+      const u1 = B.collection("punch").where("day", "==", day).onSnapshot(q => setPunches(q.docs.map(d => d.data({ serverTimestamps:"estimate" }))), e);
+      const u2 = B.collection("fix").where("day", "==", day).onSnapshot(q => setFixes(q.docs.map(d => d.data({ serverTimestamps:"estimate" }))), e);
+      return ()=>{ u1(); u2(); };
+    }, [B, day, view]);
+    function loadMonth(){
+      if(!B) return;
+      setMdata({ loading:true });
+      const lo = month + "-01", hi = month + "-31";
+      Promise.all([
+        B.collection("punch").where("day", ">=", lo).where("day", "<=", hi).get(),
+        B.collection("fix").where("day", ">=", lo).where("day", "<=", hi).get()
+      ]).then(([p, f]) => setMdata({ month, punches: p.docs.map(d => d.data({ serverTimestamps:"estimate" })), fixes: f.docs.map(d => d.data({ serverTimestamps:"estimate" })) }))
+        .catch(e => { setMdata(null); setErr(String(e.code || e.message || e)); });
+    }
+    useEffect(()=>{ if(view === "month" && B) loadMonth(); }, [view, month, B]);
+    function loadPhotos(ids){
+      const need = ids.filter(id => !(id in photos));
+      if(!need.length || !B) return;
+      setPhotos(m => { const n = { ...m }; need.forEach(id => { n[id] = null; }); return n; });
+      need.forEach(id => B.collection("pph").doc(id).get().then(d => setPhotos(m => ({ ...m, [id]: d.exists ? d.data().url : "" }))).catch(()=>{}));
+    }
+    // תמונת זיהוי לכל עובד — להשוואה מול הסלפי של היום
+    function loadRefs(wids){
+      const need = [...new Set(wids)].filter(w => !(w in refs));
+      if(!need.length || !B) return;
+      setRefs(m => { const n = { ...m }; need.forEach(w => { n[w] = null; }); return n; });
+      need.forEach(w => B.collection("ref").doc(w).get().then(d => setRefs(m => ({ ...m, [w]: d.exists ? d.data().url : "" }))).catch(()=>{}));
+    }
+    function setRef(wid, pid){
+      const url = photos[pid];
+      if(!url) return;
+      const batch = Cloud.db.batch();
+      batch.set(B.collection("ref").doc(wid), { w:wid, url, pid, at:FV(), by:who });
+      batch.set(B.collection("workers").doc(wid), { hasRef:true }, { merge:true });
+      batch.commit().then(()=> notify("תמונת הזיהוי עודכנה")).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+      setRefs(m => ({ ...m, [wid]: url }));
+    }
+    // מצב החודש: מתי הופק האקסל ומה נמחק
+    useEffect(()=>{
+      if(!B || view !== "month") return;
+      setMstat(null);
+      return B.collection("months").doc(month).onSnapshot(d => setMstat(d.exists ? d.data() : {}), ()=> setMstat({}));
+    }, [B, view, month]);
+    // מחיקת תמונות החודש אחרי הפקת האקסל — בקבוצות, וממשיכה מאיפה שנעצרה (מגבלת מחיקות יומית במסלול החינמי)
+    async function deletePhotos(ids){
+      const ref = B.collection("months").doc(month);
+      let done = (mstat && mstat.phDone) || 0;
+      setDelRun({ done, total:ids.length });
+      try{
+        while(done < ids.length){
+          const chunk = ids.slice(done, done + 400), batch = Cloud.db.batch();
+          chunk.forEach(id => batch.delete(B.collection("pph").doc(id)));
+          await batch.commit();
+          done += chunk.length;
+          await ref.set({ phDone:done, phTotal:ids.length }, { merge:true });
+          setDelRun({ done, total:ids.length });
+        }
+        await ref.set({ phDeletedAt:FV(), phDeletedBy:who }, { merge:true });
+        setPhotos(m => { const n = { ...m }; ids.forEach(id => { n[id] = ""; }); return n; });
+        notify("התמונות של החודש נמחקו — השעות והרישומים נשמרו");
+        setDelRun(null);
+      }catch(e){
+        const quota = String(e.code || "").includes("resource-exhausted");
+        setDelRun({ done, total:ids.length, err: quota ? "הגעתם למגבלת המחיקות היומית של המסלול החינמי — לחצו שוב מחר והמחיקה תמשיך מאיפה שנעצרה." : "המחיקה נעצרה: " + (e.code || e.message) + ". אפשר ללחוץ שוב כדי להמשיך." });
+      }
+    }
+
+    if(!Cloud.on) return html`<div class="alert warn"><span class="b"></span>רישום נוכחות דורש חיבור למסד המשותף (קוד צוות).</div>`;
+    if(err && !code) return html`<div class="alert crit"><span class="b"></span>שגיאה בפתיחת מרחב הנוכחות: ${err}</div>`;
+    if(!code) return html`<div class="empty">פותח את מרחב הנוכחות…</div>`;
+
+    const sitesById = {};
+    st.sites.forEach(s => { sitesById[s.id] = { id:s.id, name:s.name, owner:ownerName(s), active:s.active }; });
+    asites.forEach(a => { sitesById[a.id] = { ...(sitesById[a.id] || {}), ...a }; });
+    const visSites = st.sites.filter(s => mgr === "all" || ownerName(s) === mgr);
+    const visIds = new Set(visSites.map(s => s.id));
+    const T = (k, label) => html`<button class=${"chip " + (view === k ? "on" : "")} onClick=${()=>setView(k)}>${label}</button>`;
+    const flagChips = (fl, small) => fl.filter(f => !small || f.sev !== "ok").map(f => html`<span key=${f.k} class=${"aflag " + f.sev}>${f.t}</span>`);
+
+    let content = null;
+    if(view === "day"){
+      const rows = dayRows(punches, fixes, workers, sitesById, now);
+      const isPast = day < dstr(now), isFuture = day > dstr(now);
+      const rowsBySite = new Map();
+      rows.forEach(r => { const k = visIds.has(r.site) ? r.site : (mgr === "all" ? "_none" : null); if(k == null) return; if(!rowsBySite.has(k)) rowsBySite.set(k, []); rowsBySite.get(k).push(r); });
+      const withRow = new Set(rows.map(r => r.w));
+      const missingBy = new Map();
+      if(!isFuture) workers.filter(w => w.active !== false && visIds.has(w.site) && !withRow.has(w.id)).forEach(w => { if(!missingBy.has(w.site)) missingBy.set(w.site, []); missingBy.get(w.site).push(w); });
+      const shown = visSites.filter(s => rowsBySite.has(s.id) || missingBy.has(s.id));
+      const vrows = [...rowsBySite.values()].flat();
+      const inside = vrows.filter(r => r.inside).length;
+      const flagged = vrows.filter(r => r.openFlags.length).length;
+      const missing = [...missingBy.values()].reduce((s, a) => s + a.length, 0);
+      content = html`
+        <div class="rowbet adate">
+          <button class="chip" onClick=${()=>setDay(addDay(day, -1))}>‹ אתמול</button>
+          <input type="date" value=${day} max=${dstr(now)} onChange=${e => e.target.value && setDay(e.target.value)} />
+          <button class="chip" disabled=${day >= dstr(now)} onClick=${()=>setDay(addDay(day, 1))}>מחר ›</button>
+        </div>
+        <div class="sub2" style=${{ textAlign:"center" }}>${dayLabel(day)}</div>
+        <div class="kpis">
+          <div class="kpi"><b>${isPast ? "—" : inside}</b><span>בשטח עכשיו</span></div>
+          <div class="kpi"><b>${vrows.length}</b><span>נרשמו</span></div>
+          <div class=${"kpi " + (flagged ? "crit" : "")}><b>${flagged}</b><span>לבדיקה</span></div>
+          <div class=${"kpi " + (missing ? "warn" : "")}><b>${missing}</b><span>לא נרשמו</span></div>
+        </div>
+        ${workers.length === 0 && html`<div class="alert warn" style=${{ marginTop:12 }}><span class="b"></span>עוד אין עובדים רשומים. הוסיפו עובדים בלשונית "עובדים" ושלחו לכל אחד את הקישור האישי שלו.</div>`}
+        <div class="asites">
+          ${[...shown, ...(rowsBySite.has("_none") ? [{ id:"_none", name:"ללא אתר / אתר לא פעיל" }] : [])].map(s => {
+            const rs = rowsBySite.get(s.id) || [], ms = missingBy.get(s.id) || [], as = sitesById[s.id] || {};
+            const gOpen = gallery[s.id];
+            const sitePunchIds = rs.flatMap(r => r.ps.map(p => p.id));
+            return html`
+              <div key=${s.id} class="card asite">
+                <div class="rowbet">
+                  <div><b>${s.name}</b>
+                    <div class="sub2">${s.owner ? ownerName(s) + " · " : ""}${rs.filter(r => r.inside).length} בשטח · ${rs.length} נרשמו${ms.length ? " · " + ms.length + " לא נרשמו" : ""}${s.id !== "_none" && as.lat == null ? " · 📍 מיקום האתר לא הוגדר" : ""}</div>
+                  </div>
+                  <div style=${{ display:"flex", gap:6, flex:"none" }}>
+                    ${sitePunchIds.length > 0 && html`<button class="chip" onClick=${()=>{ setGallery(g => ({ ...g, [s.id]: !g[s.id] })); loadPhotos(sitePunchIds); loadRefs(rs.map(r => r.w)); }}>🖼 ${gOpen ? "הסתר" : "תמונות"}</button>`}
+                    ${s.id !== "_none" && html`<button class="chip" title="מיקום האתר" onClick=${()=>setSheet({ kind:"loc", site:s.id })}>📍</button>`}
+                  </div>
+                </div>
+                ${gOpen && html`<div class="agrid">${rs.flatMap(r => r.ps.map(p => html`
+                  <button key=${p.id} class="agph" onClick=${()=> photos[p.id] && setBig(photos[p.id])}>
+                    ${photos[p.id] ? html`<img src=${photos[p.id]} alt="" />` : html`<span>${photos[p.id] === "" ? "אין תמונה" : "…"}</span>`}
+                    ${refs[r.w] && html`<img class="agref" src=${refs[r.w]} alt="" title="תמונת הזיהוי" />`}
+                    <small>${r.name} · ${p.type === "in" ? "כניסה" : "יציאה"} ${hhmm(p._t.t)}</small>
+                  </button>`))}</div>`}
+                <div class="arows">
+                  ${rs.map(r => html`
+                    <button key=${r.key} class=${"arow " + (r.openFlags.some(f => f.sev === "crit") ? "crit" : r.openFlags.length ? "warn" : "")} onClick=${()=>{ setSheet({ kind:"row", key:r.key }); loadPhotos(r.ps.map(p => p.id)); loadRefs([r.w]); }}>
+                      <span class="an">${r.name}${r.fix ? html` <i class="afix">✎</i>` : null}</span>
+                      <span class="at">${hm(r.inT)} – ${r.inside ? "…" : hm(r.outT)}</span>
+                      <span class="ah">${r.ms ? hrs(r.ms).toFixed(2) : "—"}</span>
+                      <span class="af">${flagChips(r.fix ? r.openFlags : r.flags, true)}</span>
+                    </button>`)}
+                  ${ms.map(w => html`
+                    <button key=${w.id} class="arow miss" onClick=${()=>setSheet({ kind:"row", key:w.id + "|" + day })}>
+                      <span class="an">${w.name}</span><span class="at">לא נרשם</span><span class="ah"></span><span class="af"></span>
+                    </button>`)}
+                </div>
+              </div>`;
+          })}
+          ${shown.length === 0 && !rowsBySite.has("_none") && workers.length > 0 && html`<div class="empty">אין רישומים ביום הזה${mgr !== "all" ? " באתרים של " + mgr : ""}.</div>`}
+        </div>`;
+    }
+
+    if(view === "month"){
+      const rows = mdata && mdata.punches ? dayRows(mdata.punches, mdata.fixes, workers, sitesById, now) : [];
+      const wById = new Map(workers.map(w => [w.id, w]));
+      const per = new Map();
+      rows.forEach(r => {
+        const w = wById.get(r.w);
+        const home = (w && w.site) || r.site;
+        if(mgr !== "all" && !visIds.has(home) && !r.sites.some(x => visIds.has(x))) return;
+        if(!per.has(r.w)) per.set(r.w, { w:r.w, name:r.name, home, days:0, ms:0, open:0, fixed:0, rows:[] });
+        const a = per.get(r.w);
+        a.rows.push(r); a.ms += r.ms; if(r.ms > 0) a.days++; if(r.openFlags.length) a.open++; if(r.fix) a.fixed++;
+      });
+      const list = [...per.values()].sort((a, b) => a.name.localeCompare(b.name, "he"));
+      const totalOpen = list.reduce((s, a) => s + a.open, 0);
+      const [y, m] = month.split("-").map(Number);
+      const shiftMonth = n => { const d = new Date(y, m - 1 + n, 1); setMonth(d.getFullYear() + "-" + pad2(d.getMonth() + 1)); };
+      function exportX(){
+        const sName = id => (sitesById[id] && sitesById[id].name) || "";
+        const summary = [["עובד", "אתר קבוע", "ימי עבודה", "סה״כ שעות", "ימים לבדיקה", "ימים שתוקנו"]];
+        const detail = [["תאריך", "יום", "עובד", "אתר", "כניסה", "יציאה", "שעות", "מקור", "תוקן ע״י", "סיבת תיקון", "הערות לבדיקה"]];
+        list.forEach(a => {
+          summary.push([a.name, sName(a.home), a.days, hrs(a.ms), a.open, a.fixed]);
+          a.rows.forEach(r => {
+            const d = dayDate(r.day);
+            detail.push([pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear(), WDAY[d.getDay()], r.name, r.sites.map(sName).filter(Boolean).join(" + ") || sName(r.site),
+              hm(r.inT), r.outT == null ? "" : hm(r.outT), hrs(r.ms), r.fix ? (r.fix.absent ? "סומן כהיעדרות" : r.ps.length ? "תוקן/אושר ע״י מנהל" : "הוזן ידנית") : "סלפי",
+              r.fix ? r.fix.by || "" : "", r.fix ? r.fix.reason || "" : "", r.openFlags.map(f => f.t).join(", ")]);
+          });
+        });
+        const tag = mgr === "all" ? "" : " - " + mgr;
+        saveFile(xlsxBlob([
+          { name:"סיכום", rows:summary, widths:[22, 24, 11, 11, 13, 13] },
+          { name:"פירוט יומי", rows:detail, widths:[12, 6, 22, 26, 9, 9, 8, 18, 12, 28, 34] }
+        ]), "נוכחות " + pad2(m) + "-" + y + tag + ".xlsx");
+        if(mgr === "all") B.collection("months").doc(month).set({ exportedAt:FV(), exportedBy:who }, { merge:true }).catch(()=>{});
+        notify("קובץ האקסל הופק");
+      }
+      // מחיקת תמונות: רק מהמשרד (כל האתרים), רק לחודש שהסתיים, ורק אחרי הפקת האקסל
+      const phIds = mdata && mdata.punches ? [...new Set(mdata.punches.map(p => p.id))].sort() : [];
+      const ended = month < dstr(now).slice(0, 7);
+      const ms = mstat || {};
+      let photoCard = null;
+      if(mgr === "all" && mdata && mdata.punches){
+        const when = x => tsMs(x) ? dmy(tsMs(x)) + " " + hhmm(tsMs(x)) : "";
+        let body;
+        if(ms.phDeletedAt) body = html`<div class="sub2">✓ התמונות של החודש נמחקו ב-${when(ms.phDeletedAt)} ע״י ${ms.phDeletedBy || ""}. השעות, הרישומים, המיקומים והתיקונים נשמרו, וכך גם תמונות הזיהוי של העובדים.</div>`;
+        else if(!phIds.length) body = html`<div class="sub2">אין תמונות בחודש הזה.</div>`;
+        else if(!ended) body = html`<div class="sub2">אפשר למחוק את התמונות רק אחרי שהחודש נגמר והאקסל לשכר הופק.</div>`;
+        else if(!ms.exportedAt) body = html`<div class="sub2">קודם מפיקים את קובץ האקסל לשכר (למעלה), ורק אז אפשר למחוק את התמונות.</div>`;
+        else body = html`
+          <div class="sub2">האקסל הופק ב-${when(ms.exportedAt)} ע״י ${ms.exportedBy || ""}. ${totalOpen > 0 ? html`<b style=${{ color:"var(--crit)" }}>שימו לב: ${totalOpen} ימים עוד לא נבדקו — אחרי המחיקה לא תהיה תמונה לבדוק לפיה.</b>` : ""}</div>
+          ${delRun && html`<div class="sub2" style=${{ marginTop:6 }}>נמחקו ${delRun.done} מתוך ${delRun.total}${delRun.err ? "" : "…"}</div>`}
+          ${delRun && delRun.err && html`<div class="alert warn" style=${{ marginTop:8 }}><span class="b"></span>${delRun.err}</div>`}
+          <button class="btn wide" style=${{ marginTop:10, color:"var(--crit)" }} disabled=${delRun && !delRun.err}
+            onClick=${()=> confirm("למחוק " + (phIds.length - (ms.phDone || 0)) + " תמונות של " + pad2(m) + "/" + y + "?\n\nאי אפשר לשחזר אותן. השעות, הרישומים והתיקונים נשארים, וגם תמונות הזיהוי של העובדים.") && deletePhotos(phIds)}>
+            🗑 ${ms.phDone ? "המשך מחיקה (" + ms.phDone + " מתוך " + phIds.length + " כבר נמחקו)" : "מחיקת " + phIds.length + " התמונות של החודש"}
+          </button>`;
+        photoCard = html`<div class="card" style=${{ marginTop:12 }}><div class="lbl">תמונות החודש</div>${body}</div>`;
+      }
+      content = html`
+        <div class="rowbet adate">
+          <button class="chip" onClick=${()=>shiftMonth(-1)}>‹ הקודם</button>
+          <b>${pad2(m)}/${y}</b>
+          <button class="chip" disabled=${month >= dstr(now).slice(0, 7)} onClick=${()=>shiftMonth(1)}>הבא ›</button>
+        </div>
+        ${!mdata || mdata.loading ? html`<div class="empty">טוען את החודש…</div>` : html`
+          ${totalOpen > 0
+            ? html`<div class="alert crit" style=${{ margin:"12px 0" }}><span class="b"></span>${totalOpen} ימי עבודה עם חריגים שלא נבדקו — כדאי לאשר או לתקן אותם לפני העברה לשכר.</div>`
+            : list.length > 0 && html`<div class="alert empty" style=${{ margin:"12px 0" }}><span class="b"></span>כל הימים בחודש נבדקו — מוכן להעברה לשכר.</div>`}
+          <button class="btn pri wide" disabled=${!list.length} onClick=${exportX}>⬇ ייצוא לאקסל לשכר${mgr !== "all" ? " (" + mgr + ")" : ""}</button>
+          <div class="card" style=${{ marginTop:12, padding:"6px 12px" }}>
+            <div class="arow head"><span class="an">עובד</span><span class="at">ימים</span><span class="ah">שעות</span><span class="af">לבדיקה</span></div>
+            ${list.map(a => html`
+              <details key=${a.w} class="amon">
+                <summary class="arow">
+                  <span class="an">${a.name}<small>${(sitesById[a.home] && sitesById[a.home].name) || ""}</small></span>
+                  <span class="at">${a.days}</span><span class="ah">${hrs(a.ms).toFixed(2)}</span>
+                  <span class="af">${a.open ? html`<span class="aflag crit">${a.open}</span>` : html`<span class="aflag ok">✓</span>`}</span>
+                </summary>
+                ${a.rows.map(r => html`
+                  <button key=${r.key} class=${"arow sm " + (r.openFlags.length ? "warn" : "")} onClick=${()=>{ setSheet({ kind:"row", key:r.key, month:true }); loadPhotos(r.ps.map(p => p.id)); loadRefs([r.w]); }}>
+                    <span class="an">${dayLabel(r.day).replace(/\/\d{4}$/, "")}</span>
+                    <span class="at">${hm(r.inT)}–${hm(r.outT)}</span><span class="ah">${hrs(r.ms).toFixed(2)}</span>
+                    <span class="af">${flagChips(r.openFlags, true)}${r.fix ? html`<i class="afix">✎</i>` : null}</span>
+                  </button>`)}
+              </details>`)}
+            ${list.length === 0 && html`<div class="empty" style=${{ padding:"20px 0" }}>אין רישומים בחודש הזה.</div>`}
+          </div>
+          ${photoCard}`}`;
+    }
+
+    if(view === "workers")
+      content = html`<${AttWorkers} B=${B} code=${code} workers=${workers} visSites=${visSites} mgr=${mgr} who=${who} notify=${notify} />`;
+
+    // ── חלוניות ──
+    let sheetEl = null;
+    if(sheet && sheet.kind === "row"){
+      const src = sheet.month && mdata && mdata.punches ? mdata : { punches, fixes };
+      const [wid, sday] = sheet.key.split("|");
+      const r = dayRows(src.punches.filter(p => p.w === wid && p.day === sday), src.fixes.filter(f => f.w === wid && f.day === sday), workers, sitesById, now)[0];
+      const w = workers.find(x => x.id === wid);
+      const hist = src.fixes.filter(f => f.w === wid && f.day === sday).sort((a, b) => (tsMs(b.at) || 0) - (tsMs(a.at) || 0));
+      sheetEl = html`<${AttRowSheet} key=${sheet.key} r=${r} w=${w} day=${sday} hist=${hist} photos=${photos} sitesById=${sitesById} onBig=${setBig}
+        refUrl=${refs[wid]} onSetRef=${pid => setRef(wid, pid)}
+        onClose=${()=>setSheet(null)}
+        onSave=${fx => {
+          const id = sday.replace(/-/g, "") + "_" + wid + "_" + rid(5);
+          B.collection("fix").doc(id).set({ id, w:wid, day:sday, ...fx, by:who, at:FV() })
+            .then(()=>{ if(sheet.month) loadMonth(); }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+          setSheet(null); notify(fx.approved ? "סומן כנבדק" : "התיקון נשמר — הרישום המקורי נשאר ביומן");
+        }} />`;
+    }
+    if(sheet && sheet.kind === "loc"){
+      const s = sitesById[sheet.site] || {};
+      const pts = punches.filter(p => p.site === sheet.site && p.lat != null && (p.acc || 999) < 150);
+      const med = a => { const x = a.slice().sort((p, q) => p - q); return x[Math.floor(x.length / 2)]; };
+      const save = (lat, lng, how) => {
+        B.collection("sites").doc(docKey(sheet.site)).set({ lat, lng, r: s.r || ATT_R, locBy:who, locAt:Date.now(), locHow:how }, { merge:true });
+        setSheet(null); notify("מיקום האתר נשמר");
+      };
+      const here = ()=> navigator.geolocation ? navigator.geolocation.getCurrentPosition(
+        p => save(p.coords.latitude, p.coords.longitude, "מיקום המנהל"), ()=> notify("לא התקבל מיקום מהמכשיר"), { enableHighAccuracy:true, timeout:20000 }) : notify("המכשיר לא תומך במיקום");
+      sheetEl = html`
+        <div class="scrim" onClick=${()=>setSheet(null)}>
+          <div class="sheet" onClick=${e => e.stopPropagation()}>
+            <h3>📍 מיקום האתר · ${s.name || ""}</h3>
+            <div class="who">לפי המיקום הזה המערכת מסמנת רישום שנעשה רחוק מהאתר (מעל ${s.r || ATT_R} מ׳).
+              ${s.lat != null ? html`<br/>מוגדר כעת: <a href=${"https://maps.google.com/?q=" + s.lat + "," + s.lng} target="_blank" rel="noopener">פתח במפה</a>${s.locBy ? " · נקבע ע״י " + s.locBy : ""}` : html`<br/><b>עוד לא הוגדר מיקום.</b>`}</div>
+            <button class="opt" onClick=${here}><span class="e">📱</span>אני נמצא באתר עכשיו — קבע לפי המיקום שלי</button>
+            <button class="opt" disabled=${pts.length < 3} onClick=${()=> save(med(pts.map(p => p.lat)), med(pts.map(p => p.lng)), "חציון רישומי " + day)}><span class="e">👷</span>לפי רישומי העובדים ביום הזה (${pts.length} רישומים עם מיקום מדויק)</button>
+            <label class="afield">רדיוס האתר (מטר)
+              <input type="number" min="50" max="3000" step="50" value=${s.r || ATT_R} onChange=${e => { const v = Math.max(50, Math.min(3000, +e.target.value || ATT_R)); B.collection("sites").doc(docKey(sheet.site)).set({ r:v }, { merge:true }); }} />
+            </label>
+            <button class="btn wide" style=${{ marginTop:10 }} onClick=${()=>setSheet(null)}>סגור</button>
+          </div>
+        </div>`;
+    }
+
+    return html`
+      <div class="att">
+        <div class="chips" style=${{ marginTop:0 }}>
+          ${T("day", "יומי")}
+          ${T("month", "חודשי ושכר")}
+          ${T("workers", "עובדים (" + workers.filter(w => w.active !== false && (mgr === "all" || visIds.has(w.site))).length + ")")}
+        </div>
+        ${err && html`<div class="alert crit" style=${{ marginBottom:10 }}><span class="b"></span>${err}</div>`}
+        ${content}
+        <div class="hint">כל עובד נרשם מהטלפון שלו עם סלפי. השעה נלקחת מהשרת (לא מהטלפון), ונשמרים גם המיקום והטלפון שממנו נרשם. תיקון של מנהל לא מוחק את הרישום המקורי: הוא נשמר עם שם המתקן והסיבה.</div>
+        ${sheetEl}
+        ${big && html`<div class="lightbox" onClick=${()=>setBig(null)}><img src=${big} alt="" /><button class="x">✕</button></div>`}
+      </div>`;
+  }
+
+  function AttRowSheet({ r, w, day, hist, photos, sitesById, onBig, onClose, onSave, refUrl, onSetRef }){
+    const [inV, setInV] = useState(r && r.inT != null ? hhmm(r.inT) : "");
+    const [outV, setOutV] = useState(r && r.outT != null ? hhmm(r.outT) : "");
+    const [absent, setAbsent] = useState(false);
+    const [reason, setReason] = useState("");
+    const name = (w && w.name) || (r && r.name) || "";
+    const ps = r ? r.ps : [];
+    const inT = atTime(day, inV), outT = atTime(day, outV);
+    const valid = absent || (inT != null && (outT == null || outT > inT));
+    return html`
+      <div class="scrim" onClick=${onClose}>
+        <div class="sheet asheet" onClick=${e => e.stopPropagation()}>
+          <h3>${name}</h3>
+          <div class="who">${dayLabel(day)}${r && r.ms ? " · " + hrs(r.ms).toFixed(2) + " שעות" : ""}</div>
+          ${r && r.flags.filter(f => f.sev !== "ok").length > 0 && html`<div class="af" style=${{ marginBottom:10 }}>${r.flags.filter(f => f.sev !== "ok").map(f => html`<span key=${f.k} class=${"aflag " + f.sev}>${f.t}</span>`)}</div>`}
+          ${ps.length === 0 && html`<div class="alert warn" style=${{ marginBottom:10 }}><span class="b"></span>אין רישום סלפי ביום הזה.</div>`}
+          <div class="aref">
+            <button class="thumb" onClick=${()=> refUrl && onBig(refUrl)}>${refUrl ? html`<img src=${refUrl} alt="" />` : html`<span class="ph">${refUrl === "" ? "אין" : "…"}</span>`}</button>
+            <div><b>תמונת הזיהוי</b><div class="sub2">${refUrl === "" ? "עוד אין תמונת זיהוי — היא נשמרת אוטומטית מהסלפי הראשון של העובד." : "השוו אותה לתמונות של היום. אם מישהו אחר מצטלם במקום העובד — רואים את זה כאן."}</div></div>
+          </div>
+          ${ps.map(p => {
+            const s = sitesById[p.site] || {};
+            const d = p.lat != null && s.lat != null ? geoDist(p, s) : null;
+            return html`
+              <div key=${p.id} class="apunch">
+                <button class="thumb" onClick=${()=> photos[p.id] && onBig(photos[p.id])}>${photos[p.id] ? html`<img src=${photos[p.id]} alt="" />` : html`<span class="ph">${photos[p.id] === "" ? "אין" : "…"}</span>`}</button>
+                <div>
+                  <b>${p.type === "in" ? "כניסה" : "יציאה"} ${hhmm(p._t.t)}</b> <small>${p._t.src === "srv" ? "שעת שרת" : p._t.src === "late" ? "שעת טלפון (נשלח מאוחר)" : "ממתין לשרת"}</small>
+                  <div class="sub2">${s.name || p.siteName || "—"}${d != null ? " · " + fmtDist(d) + " מהאתר" : ""}${p.lat != null ? html` · <a href=${"https://maps.google.com/?q=" + p.lat + "," + p.lng} target="_blank" rel="noopener">מפה</a> (±${p.acc}מ׳)` : " · בלי מיקום"} · טלפון ${String(p.dev || "").slice(0, 4)}</div>
+                  ${p._f.length > 0 && html`<div class="af">${p._f.map(f => html`<span key=${f.k} class=${"aflag " + f.sev}>${f.t}</span>`)}</div>`}
+                  ${photos[p.id] && photos[p.id] !== refUrl && html`<button class="linkbtn" onClick=${()=> confirm("להחליף את תמונת הזיהוי של " + name + " בתמונה הזו?") && onSetRef(p.id)}>קבע כתמונת זיהוי</button>`}
+                </div>
+              </div>`;
+          })}
+          ${hist.length > 0 && html`
+            <div class="lbl" style=${{ marginTop:12 }}>היסטוריית תיקונים</div>
+            ${hist.map(f => html`<div key=${f.id} class="logrow"><span class="tm">${tsMs(f.at) ? dmy(tsMs(f.at)) + " " + hhmm(tsMs(f.at)) : ""}</span> · <b>${f.by}</b> · ${f.absent ? "סימן היעדרות" : f.approved ? "אישר כמו שהוא" : "כניסה " + hm(f.inT) + " · יציאה " + hm(f.outT)}${f.reason ? " — " + f.reason : ""}</div>`)}`}
+          <div class="lbl" style=${{ marginTop:14 }}>תיקון או אישור</div>
+          <div class="afix2">
+            <label class="afield">כניסה<input type="time" value=${inV} disabled=${absent} onInput=${e => setInV(e.target.value)} /></label>
+            <label class="afield">יציאה<input type="time" value=${outV} disabled=${absent} onInput=${e => setOutV(e.target.value)} /></label>
+          </div>
+          <label class="acheck"><input type="checkbox" checked=${absent} onChange=${e => setAbsent(e.target.checked)} /> לא עבד ביום הזה (לא ייספר לשכר)</label>
+          <label class="afield">סיבה (חובה לתיקון)<input type="text" value=${reason} placeholder="למשל: שכח לצלם ביציאה, אישר מנהל העבודה" onInput=${e => setReason(e.target.value)} /></label>
+          <div class="btnrow" style=${{ marginTop:10 }}>
+            <button class="btn" onClick=${onClose}>סגור</button>
+            ${ps.length > 0 && html`<button class="btn ok" onClick=${()=>onSave({ approved:true, inT:null, outT:null, absent:false, reason: reason.trim() || "נבדק ואושר" })}>✓ אשר כמו שהוא</button>`}
+            <button class="btn pri" disabled=${!valid || !reason.trim()} onClick=${()=>onSave({ approved:false, absent, inT: absent ? null : inT, outT: absent ? null : outT, reason: reason.trim() })}>שמור תיקון</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function AttWorkers({ B, code, workers, visSites, mgr, who, notify }){
+    const [name, setName] = useState("");
+    const pickSites = visSites.filter(s => s.active);
+    const [site, setSite] = useState(pickSites[0] ? pickSites[0].id : "");
+    const [lang, setLang] = useState("he");
+    const [bulk, setBulk] = useState(false);
+    const [q, setQ] = useState("");
+    const [edit, setEdit] = useState(null);
+    const [showOff, setShowOff] = useState(false);
+    const visIds = new Set(visSites.map(s => s.id));
+    const siteName = id => { const s = visSites.find(x => x.id === id); return s ? s.name : "אתר אחר"; };
+    // ברשימה: כל שורה "שם" או "שם, אתר, שפה" (גם הדבקה מאקסל — עמודות מופרדות בטאב)
+    const LANGS = { "עברית":"he", "ערבית":"ar", "אנגלית":"en", "הינדי":"hi", "הודית":"hi", he:"he", ar:"ar", en:"en", hi:"hi" };
+    Object.keys(WT).forEach(k => { LANGS[WT[k].name.toLowerCase()] = k; });
+    const norm = s => String(s || "").replace(/["׳״']/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+    function matchSite(txt){
+      const t = norm(txt);
+      if(!t) return null;
+      return visSites.find(s => norm(s.name) === t) || visSites.find(s => String(s.num || "") === t)
+        || visSites.find(s => norm(s.name).includes(t) || t.includes(norm(s.name))) || null;
+    }
+    function add(){
+      const lines = (bulk ? name.split(/\n+/) : [name]).map(s => s.trim()).filter(Boolean);
+      if(!lines.length || !site) return;
+      const have = new Set(workers.filter(w => w.active !== false).map(w => norm(w.name)));
+      const batch = Cloud.db.batch();
+      let added = 0, dup = [], nosite = 0;
+      lines.forEach(line => {
+        const cols = bulk ? line.split(/\t|[,;|]/).map(s => s.trim()) : [line];
+        const n = cols[0];
+        if(!n) return;
+        if(have.has(norm(n))){ dup.push(n); return; }
+        let s = site, l = lang;
+        cols.slice(1).forEach(c => {
+          if(!c) return;
+          if(LANGS[norm(c)]) l = LANGS[norm(c)];
+          else { const ms = matchSite(c); if(ms) s = ms.id; else nosite++; }
+        });
+        have.add(norm(n));
+        const id = rid(10);
+        batch.set(B.collection("workers").doc(id), { id, name:n, site:s, lang:l, active:true, at:Date.now(), by:who });
+        added++;
+      });
+      if(added) batch.commit().catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+      setName("");
+      const msg = [added === 1 && lines.length === 1 ? lines[0].split(/\t|[,;|]/)[0].trim() + " נוסף — שלח לו את הקישור" : added + " עובדים נוספו"];
+      if(dup.length) msg.push(dup.length + " כבר קיימים ודולגו (" + dup.slice(0, 3).join(", ") + (dup.length > 3 ? "…" : "") + ")");
+      if(nosite) msg.push(nosite + " אתרים לא זוהו — שויכו ל" + siteName(site));
+      notify(msg.join(" · "));
+    }
+    async function share(w){
+      const link = workerLink(code, w);
+      const text = "שלום " + w.name + ", זה הקישור האישי שלך לרישום נוכחות בט.ש. מי-רון.\nבכל כניסה ויציאה מהאתר: פותחים את הקישור, לוחצים על הכפתור ומצלמים סלפי.\n" + link;
+      try{ if(navigator.share){ await navigator.share({ text }); return; } }catch(e){ if(e && e.name === "AbortError") return; }
+      try{ await navigator.clipboard.writeText(text); notify("ההודעה עם הקישור הועתקה — הדבק בוואטסאפ"); }
+      catch(e){ window.prompt("העתק את הקישור:", link); }
+    }
+    const upd = (w, patch, m) => { B.collection("workers").doc(w.id).set(patch, { merge:true }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message))); if(m) notify(m); };
+    const list = workers.filter(w => (mgr === "all" || visIds.has(w.site)) && (showOff || w.active !== false) && (!q || w.name.includes(q)))
+      .sort((a, b) => siteName(a.site).localeCompare(siteName(b.site), "he") || a.name.localeCompare(b.name, "he"));
+    const groups = [];
+    list.forEach(w => { const g = groups[groups.length - 1]; if(g && g.site === w.site) g.ws.push(w); else groups.push({ site:w.site, ws:[w] }); });
+    return html`
+      <div class="card">
+        <div class="lbl">הוספת עובד</div>
+        <div class="newunit" style=${{ display:"flex", flexDirection:"column", gap:8 }}>
+          ${bulk
+            ? html`<textarea rows="5" value=${name} placeholder=${"עובד בכל שורה. אפשר להדביק מאקסל:\nשם מלא, אתר, שפה\nלמשל: ראג׳ קומאר, " + (visSites[0] ? visSites[0].name : "שם האתר") + ", הינדי\n(בלי אתר — ישויך לאתר שנבחר למטה)"} onInput=${e => setName(e.target.value)}></textarea>`
+            : html`<input type="text" value=${name} placeholder="שם מלא" onInput=${e => setName(e.target.value)} onKeyDown=${e => e.key === "Enter" && add()} />`}
+          <div style=${{ display:"flex", gap:8 }}>
+            <select value=${site} onChange=${e => setSite(e.target.value)}>${pickSites.map(s => html`<option key=${s.id} value=${s.id}>${s.name}</option>`)}</select>
+            <select value=${lang} style=${{ width:110, flex:"none" }} onChange=${e => setLang(e.target.value)}>${Object.keys(WT).map(k => html`<option key=${k} value=${k}>${WT[k].name}</option>`)}</select>
+          </div>
+          <div class="btnrow">
+            <button class="btn" onClick=${()=>setBulk(!bulk)}>${bulk ? "עובד אחד" : "רשימה"}</button>
+            <button class="btn pri" disabled=${!name.trim() || !site} onClick=${add}>הוסף</button>
+          </div>
+        </div>
+      </div>
+      <div class="rowbet" style=${{ margin:"14px 0 6px" }}>
+        <input class="tin" style=${{ fontFamily:"inherit" }} type="search" value=${q} placeholder="חיפוש עובד" onInput=${e => setQ(e.target.value)} />
+        <button class=${"chip " + (showOff ? "on" : "")} style=${{ flex:"none" }} onClick=${()=>setShowOff(!showOff)}>כולל מושבתים</button>
+      </div>
+      ${groups.map(g => html`
+        <div key=${g.site} class="card asite">
+          <b>${siteName(g.site)}</b> <span class="sub2">· ${g.ws.length} עובדים</span>
+          ${g.ws.map(w => edit && edit.id === w.id
+            ? html`<div key=${w.id} class="newunit" style=${{ display:"flex", gap:6, flexWrap:"wrap", margin:"8px 0" }}>
+                <input type="text" value=${edit.name} onInput=${e => setEdit({ ...edit, name:e.target.value })} />
+                <select value=${edit.site} onChange=${e => setEdit({ ...edit, site:e.target.value })}>${pickSites.map(s => html`<option key=${s.id} value=${s.id}>${s.name}</option>`)}</select>
+                <select value=${edit.lang || "he"} onChange=${e => setEdit({ ...edit, lang:e.target.value })}>${Object.keys(WT).map(k => html`<option key=${k} value=${k}>${WT[k].name}</option>`)}</select>
+                <div class="btnrow" style=${{ width:"100%" }}>
+                  <button class="btn" onClick=${()=>setEdit(null)}>ביטול</button>
+                  <button class="btn pri" disabled=${!edit.name.trim()} onClick=${()=>{ upd(w, { name:edit.name.trim(), site:edit.site, lang:edit.lang || "he" }, "נשמר"); setEdit(null); }}>שמור</button>
+                </div>
+              </div>`
+            : html`<div key=${w.id} class=${"awk " + (w.active === false ? "off" : "")}>
+                <div class="an">${w.name}<small>${WT[w.lang || "he"] ? WT[w.lang || "he"].name : ""} · ${w.dev ? "📱 טלפון נקשר" : "עוד לא פתח את הקישור"}${w.active === false ? " · מושבת" : ""}</small></div>
+                <div class="awkb">
+                  <button class="chip" onClick=${()=>share(w)}>🔗 שלח קישור</button>
+                  <button class="chip" onClick=${()=>setEdit({ id:w.id, name:w.name, site:w.site, lang:w.lang })}>✎</button>
+                  ${w.dev && html`<button class="chip" title="העובד החליף טלפון" onClick=${()=> confirm("לנתק את הטלפון של " + w.name + "? הטלפון הבא שיפתח את הקישור ייקשר אליו.") && upd(w, { dev:null }, "הטלפון נותק")}>📱✕</button>`}
+                  <button class="chip" onClick=${()=> w.active === false ? upd(w, { active:true }, "הופעל") : confirm("להשבית את " + w.name + "? הקישור שלו יפסיק לעבוד. הרישומים הקודמים נשמרים.") && upd(w, { active:false }, "הושבת")}>${w.active === false ? "הפעל" : "השבת"}</button>
+                </div>
+              </div>`)}
+        </div>`)}
+      ${list.length === 0 && html`<div class="empty">${q ? "לא נמצא עובד בשם הזה" : "עוד אין עובדים" + (mgr !== "all" ? " באתרים של " + mgr : "")}.</div>`}
+    `;
+  }
+
+
   function App(){
     const cloudCode = useState(readTeamCode)[0];
     const [st, setSt] = useState(()=> cloudCode ? emptyState() : load());
@@ -1235,7 +2256,7 @@
           </div></div>`;
     else if(nav.screen === "ctl.home")
       body = html`<${Control} st=${st} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctl} setCtl=${setCtl}
-        onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} />`;
+        onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} who=${who} />`;
     else if(nav.screen === "ctl.site")
       body = html`<${SiteDetail} site=${bySite(nav.id)} st=${st} now=${now} ex=${exOfSite(exceptions, nav.id)}
         log=${(st.log||[]).filter(l=>l.siteId===nav.id).slice(0,8)}
@@ -1328,7 +2349,7 @@
     };
   }
 
-  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify }){
+  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify, who }){
     const [rep, setRep] = useState(null);
     const { tab, mgr } = ctl;
     const list = exceptions.filter(e => mgr === "all" || e.owner === mgr);
@@ -1366,6 +2387,7 @@
 
         <div class="chips">
           ${T("ex", "חריגים (" + list.length + ")")}
+          ${T("att", "נוכחות")}
           ${T("mgr", "מנהלים")}
           ${T("plan", "תוכנית שבועית")}
           ${T("stock", "מלאי")}
@@ -1429,6 +2451,7 @@
           <div class="hint">אין ציון יחיד בכוונה — כל מדד מוצג לבד כדי שלא ינסו "לשחק" אותו. ההתקדמות נמדדת מדוחות התוכנית השבועית של המנהלים, לצד כ״א, בטיחות ומלאי.</div>
         `}
 
+        ${tab === "att" && html`<${Attendance} st=${st} now=${now} mgr=${mgr} who=${who} notify=${notify} />`}
         ${tab === "plan" && html`<${PlanMatrix} st=${st} now=${now} mgr=${mgr} cards=${cards} exceptions=${exceptions} onOpen=${onOpen} />`}
         ${tab === "stock" && html`<${StockOverview} st=${st} now=${now} mgr=${mgr} cards=${cards} onOpen=${onOpen} />`}
 
@@ -2015,7 +3038,8 @@
       </div>`;
   }
 
-  ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} />`);
+  const WK = readWorker();
+  ReactDOM.createRoot(document.getElementById("root")).render(WK ? html`<${WorkerApp} id=${WK} />` : html`<${App} />`);
 })();
 </script>
 <script>
