@@ -487,37 +487,42 @@
   /* ---- real project roster (contractor · engagement · # · name) ---- */
   const RAW = [
     ["אשטרום · בסר ירושלים","קיים",1,"עץ החיים"],
-    ["מנרב","קיים",2,"חצרים מכרז 4"],
-    ["רוטשטיין","קיים",3,"חרמון לוד"],
-    ["רוטשטיין","קיים",4,"כרמי הנדיב"],
+    ["מנרב","קיים",2,"חצרים"],
+    ["רוטשטיין","קיים",3,"רוטשטיין לוד"],
+    ["רוטשטיין","קיים",4,"כרמי הנדיב ק.מלאכי"],
     ["רוטשטיין","קיים",5,"רמת השרון"],
-    ["קבוצת אשטרום","קיים",6,"בת ים הרצל"],
-    ["פורמה","קיים",7,"הפרדס יפו"],
-    ["אשטרום הנדסה","קיים",8,"מרים החשמונאית"],
-    ["יעקבי יוניברסל","קיים",9,"לוד"],
-    ["יעקבי יוניברסל","קיים",10,'פ"ת'],
+    ["קבוצת אשטרום","קיים",6,"הרצל 66"],
+    ["פורמה","קיים",7,"הפרדס"],
+    ["אשטרום הנדסה","קיים",8,"מרים החשמונאים"],
+    ["יעקבי יוניברסל","קיים",9,"יעקבי לוד"],
+    ["יעקבי יוניברסל","קיים",10,"יעקבי פתח תקווה"],
     ["דניה סיבוס","קיים",11,"קרסו חולון"],
-    ["אלקטרה","קיים",12,"כפר אזר 116"],
+    ["אלקטרה","קיים",12,"כפר אזר"],
     ["אלקטרה","קיים",13,"כפר אזר 123"],
-    ["לוינשטיין נתיב","קיים",14,"בת ים עצמאות"],
+    ["לוינשטיין נתיב","קיים",14,"עצמאות 28 בת ים"],
     ["הר סוף","קיים",15,"הר סוף קוטג'ים"],
     ["הר סוף","קיים",16,"הר סוף 105"],
-    ["הר סוף","קיים",17,"הר סוף 19-20"],
+    ["הר סוף","קיים",17,"מזכרת בתיה 19-20"],
     ["הר סוף","קיים",18,"הר סוף 504"],
     ["פורמה","קיים",19,"הברון הירש"],
     ["דניה סיבוס","קיים",20,"הולצברג בת ים"],
     ["דניה סיבוס","קיים",21,"שנקר חולון"],
     ["דניה סיבוס","אין",22,"חנקין חולון"],
-    ["דניה סיבוס","קיים",23,"גליל ים"],
+    ["דניה סיבוס","קיים",23,"גליל ים הרצליה"],
     ["דניה סיבוס","קיים",24,"מרינה הרצליה"],
     ["יצחקי מלונאות","אין",25,'לאון ת"א'],
-    ["אשטרום","קיים",26,'מז"ה ת"א'],
-    ["דניה סיבוס","קיים",27,"מרלוג פוקס"],
-    ["קבוצת גבאי","קיים",28,"לידו מגורים"],
+    ["אשטרום","קיים",26,"מזאה תל אביב"],
+    ["דניה סיבוס","קיים",27,"פוקס בית שמש"],
+    ["קבוצת גבאי","קיים",28,"לידו אשדוד"],
     ["קבוצת גבאי","קיים",29,"מלון אשדוד"],
     ["דניה סיבוס","קיים",30,"הר נוף"],
-    ["דניה סיבוס","קיים",31,"עיר עולם"]
+    ["דניה סיבוס","קיים",31,"עיר עולם"],
+    ["—","קיים",32,"גדרה"],
+    ["—","קיים",33,"גן יבנה"],
+    ["—","קיים",34,"מזכרת בתיה"]
   ];
+  // שמות הפרויקטים לפי רשימת העובדים המעודכנת (11/2026) — RAW הוא המקור היחיד לשם ולמספר
+  const RAWBY = {}; RAW.forEach(r => { RAWBY[r[2]] = r; });
 
   /* ---- מנהלי פרויקט אמיתיים — נלקחו מאפליקציית הרכש (שמות פרטיים בלבד, בלי טלפונים).
      מפתח = מספר אתר בתיק. co = מנהל בכיר/מורשה נוסף על הפרויקט (דרג 2). ---- */
@@ -528,17 +533,29 @@
     13:{ name:"אבו לאבן" },  14:{ name:"יער", co:["ליאור"] },  15:{ name:"וואהל" },  16:{ name:"וואהל" },
     17:{ name:"באהה" },  18:{ name:"סאמר" },  19:{ name:"צביקה" },  20:{ name:"יזיד" },  21:{ name:"מוראר" },
     23:{ name:"משה" },  25:{ name:"אולג" },  26:{ name:"באהה" },  27:{ name:"וואהל" },
-    28:{ name:"אולג" },  29:{ name:"אולג" },  30:{ name:"יניב" },  31:{ name:"כרובי" }
+    28:{ name:"אולג" },  29:{ name:"אולג" },  30:{ name:"יניב" },  31:{ name:"כרובי" },
+    32:{ name:"סאמר" },  33:{ name:"וואהל" },  34:{ name:"וואהל" }
   };
   // אתרים שנפתחו מחדש (עדכון 11/2026 לפי רשימת העובדים)
   const REOPEN = [4];
   function applyRoster(site){
     if(REOPEN.includes(site.num)) site.active = true;
+    if(RAWBY[site.num]) site.name = RAWBY[site.num][3];
     const m = MGR[site.num];
     site.owner = m
       ? { name:m.name, role:"מנהל פרויקט" }
       : { name:"לא משויך", role:"דרוש שיוך מנהל" };
     site.senior = (m && m.co) ? m.co.join(", ") : "";
+  }
+
+  // עדכון רשימת הפרויקטים: מוסיף פרויקטים חדשים מ-RAW, מעדכן שמות ומנהלים
+  function rosterSync(d){
+    RAW.forEach(([contractor, exists, n, name]) => {
+      if(!d.sites.some(x => x.num === n)) d.sites.push({ id:"s"+n, num:n, name, contractor, active: exists !== "אין", materials:[], units:[], owner:null });
+    });
+    d.sites.sort((a, b) => (a.num || 0) - (b.num || 0));
+    d.sites.forEach(applyRoster);
+    return d;
   }
 
   /* ניקוי נתוני הדגמה ישנים (שלבי שחור/לחץ/לבן, יחידות עבודה, מלאי שלא נספר) — פעם אחת */
@@ -557,7 +574,7 @@
     sites.forEach(applyRoster);
     const T = Date.now();
     return {
-      sites, rosterV: 3, cleanV: CLEAN_V,
+      sites, rosterV: 4, cleanV: CLEAN_V,
       log: [], nudges: {}, trackStart: T,
       since: {},
       requests: [], transfers: []
@@ -574,7 +591,7 @@
           site.checkinLog = site.checkinLog || [];
           (site.units || []).forEach(u => { if(!Array.isArray(u.photos)) u.photos = []; });
         });
-        if(st.rosterV !== 3){ (st.sites || []).forEach(applyRoster); st.rosterV = 3; }
+        if(st.rosterV !== 4){ st.sites = st.sites || []; rosterSync(st); st.rosterV = 4; }
         if(st.cleanV !== CLEAN_V){ (st.sites || []).forEach(applyClean); st.cleanV = CLEAN_V; }
         st.log = st.log || []; st.nudges = st.nudges || {}; st.since = st.since || {};
         st.trackStart = st.trackStart || Date.now();
@@ -953,7 +970,7 @@
     messagingSenderId: "316003592694",
     appId: "1:316003592694:web:e1dc8415b4f7ed1e073fd7"
   };
-  const ROSTER_V = 3;
+  const ROSTER_V = 4;
   const TEAM_KEY = "bakara_team";
   const Cloud = { on:false, db:null, base:null };
 
@@ -1530,6 +1547,8 @@ ${l}`
   }
 
   /* ═════════════ נוכחות — מסך המנהלים / המשרד ═════════════ */
+  // עובד יכול לעבוד בכמה פרויקטים של הצוות: site = אתר הבית, sites = כל הפרויקטים
+  const wSites = w => [...new Set([w.site, ...(w.sites || [])].filter(Boolean))];
   function Attendance({ st, now, mgr, who, notify }){
     const [code, setCode] = useState(null);
     const [err, setErr] = useState("");
@@ -1686,8 +1705,13 @@ ${l}`
       rows.forEach(r => { const k = visIds.has(r.site) ? r.site : (mgr === "all" ? "_none" : null); if(k == null) return; if(!rowsBySite.has(k)) rowsBySite.set(k, []); rowsBySite.get(k).push(r); });
       const withRow = new Set(rows.map(r => r.w));
       const missingBy = new Map();
-      if(!isFuture) workers.filter(w => w.active !== false && visIds.has(w.site) && !withRow.has(w.id)).forEach(w => { if(!missingBy.has(w.site)) missingBy.set(w.site, []); missingBy.get(w.site).push(w); });
+      // מי לא נרשם — מופיע פעם אחת: באתר הבית, או בפרויקט הראשון שלו שהמנהל רואה
+      if(!isFuture) workers.filter(w => w.active !== false && !withRow.has(w.id) && wSites(w).some(x => visIds.has(x))).forEach(w => {
+        const k = visIds.has(w.site) ? w.site : wSites(w).find(x => visIds.has(x));
+        if(!missingBy.has(k)) missingBy.set(k, []); missingBy.get(k).push(w);
+      });
       const shown = visSites.filter(s => rowsBySite.has(s.id) || missingBy.has(s.id));
+      const quiet = visSites.filter(s => s.active && !rowsBySite.has(s.id) && !missingBy.has(s.id));
       const vrows = [...rowsBySite.values()].flat();
       const inside = vrows.filter(r => r.inside).length;
       const flagged = vrows.filter(r => r.openFlags.length).length;
@@ -1744,6 +1768,7 @@ ${l}`
               </div>`;
           })}
           ${shown.length === 0 && !rowsBySite.has("_none") && workers.length > 0 && html`<div class="empty">אין רישומים ביום הזה${mgr !== "all" ? " באתרים של " + mgr : ""}.</div>`}
+          ${quiet.length > 0 && html`<div class="card" style=${{ padding:"10px 14px" }}><div class="lbl">פרויקטים בלי רישומים ${isFuture ? "" : "היום"} (${quiet.length})</div><div class="sub2" style=${{ lineHeight:1.7 }}>${quiet.map(s => s.name).join(" · ")}</div></div>`}
         </div>`;
     }
 
@@ -1890,7 +1915,7 @@ ${l}`
         <div class="chips" style=${{ marginTop:0 }}>
           ${T("day", "יומי")}
           ${T("month", "חודשי ושכר")}
-          ${T("workers", "עובדים (" + workers.filter(w => w.active !== false && (mgr === "all" || visIds.has(w.site))).length + ")")}
+          ${T("workers", "עובדים (" + workers.filter(w => w.active !== false && (mgr === "all" || wSites(w).some(x => visIds.has(x)))).length + ")")}
         </div>
         ${err && html`<div class="alert crit" style=${{ marginBottom:10 }}><span class="b"></span>${err}</div>`}
         ${content}
@@ -1985,15 +2010,16 @@ ${l}`
         const n = cols[0];
         if(!n) return;
         if(have.has(norm(n))){ dup.push(n); return; }
-        let s = site, l = lang;
+        let l = lang; const ss = [];
         cols.slice(1).forEach(c => {
           if(!c) return;
           if(LANGS[norm(c)]) l = LANGS[norm(c)];
-          else { const ms = matchSite(c); if(ms) s = ms.id; else nosite++; }
+          else { const ms = matchSite(c); if(ms){ if(!ss.includes(ms.id)) ss.push(ms.id); } else nosite++; }
         });
+        const s = ss[0] || site;
         have.add(norm(n));
         const id = rid(10);
-        batch.set(B.collection("workers").doc(id), { id, name:n, site:s, lang:l, active:true, at:Date.now(), by:who });
+        batch.set(B.collection("workers").doc(id), { id, name:n, site:s, sites: ss.length ? ss : [s], lang:l, active:true, at:Date.now(), by:who });
         added++;
       });
       if(added) batch.commit().catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
@@ -2011,7 +2037,7 @@ ${l}`
       catch(e){ window.prompt("העתק את הקישור:", link); }
     }
     const upd = (w, patch, m) => { B.collection("workers").doc(w.id).set(patch, { merge:true }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message))); if(m) notify(m); };
-    const list = workers.filter(w => (mgr === "all" || visIds.has(w.site)) && (showOff || w.active !== false) && (!q || w.name.includes(q)))
+    const list = workers.filter(w => (mgr === "all" || wSites(w).some(x => visIds.has(x))) && (showOff || w.active !== false) && (!q || w.name.includes(q)))
       .sort((a, b) => siteName(a.site).localeCompare(siteName(b.site), "he") || a.name.localeCompare(b.name, "he"));
     const groups = [];
     list.forEach(w => { const g = groups[groups.length - 1]; if(g && g.site === w.site) g.ws.push(w); else groups.push({ site:w.site, ws:[w] }); });
@@ -2050,7 +2076,7 @@ ${l}`
                 </div>
               </div>`
             : html`<div key=${w.id} class=${"awk " + (w.active === false ? "off" : "")}>
-                <div class="an">${w.name}<small>${WT[w.lang || "he"] ? WT[w.lang || "he"].name : ""} · ${w.dev ? "📱 טלפון נקשר" : "עוד לא פתח את הקישור"}${w.active === false ? " · מושבת" : ""}</small></div>
+                <div class="an">${w.name}<small>${WT[w.lang || "he"] ? WT[w.lang || "he"].name : ""}${wSites(w).length > 1 ? " · גם: " + wSites(w).filter(x => x !== w.site).map(siteName).join(", ") : ""} · ${w.dev ? "📱 טלפון נקשר" : "עוד לא פתח את הקישור"}${w.active === false ? " · מושבת" : ""}</small></div>
                 <div class="awkb">
                   <button class="chip" onClick=${()=>share(w)}>🔗 שלח קישור</button>
                   <button class="chip" onClick=${()=>setEdit({ id:w.id, name:w.name, site:w.site, lang:w.lang })}>✎</button>
@@ -2127,7 +2153,7 @@ ${l}`
     // מעבר מרשימת מנהלים ישנה לחדשה גם במסד המשותף
     useEffect(()=>{
       if(cloudCode && cloud.ready && !cloud.empty && st.rosterV !== ROSTER_V)
-        update(d => { d.sites.forEach(applyRoster); d.rosterV = ROSTER_V; return d; });
+        update(d => { rosterSync(d); d.rosterV = ROSTER_V; return d; });
     }, [cloud.ready, cloud.empty, st.rosterV]);
 
     // ניקוי חד־פעמי של נתוני ההדגמה הישנים גם במסד המשותף
@@ -2167,6 +2193,14 @@ ${l}`
       if(!/^[A-Za-z0-9]{16,64}$/.test(v)) return;
       try{ localStorage.setItem(TEAM_KEY, v); sessionStorage.removeItem("bakara_local"); }catch(e){}
       location.reload();
+    }
+    // שיתוף קישור הצוות (רק ממכשיר מחובר) — לכל מי שיש את הקישור יש גישה מלאה לבקרה
+    async function shareTeam(){
+      const link = location.origin + location.pathname + "#k=" + cloudCode;
+      const text = "קישור לבקרה של ט.ש. מי-רון (אישי — לא להעביר הלאה):\n" + link;
+      try{ if(navigator.share){ await navigator.share({ text }); return; } }catch(e){ if(e && e.name === "AbortError") return; }
+      try{ await navigator.clipboard.writeText(text); notify("קישור הצוות הועתק — הדבק בוואטסאפ"); }
+      catch(e){ window.prompt("העתק את קישור הצוות:", link); }
     }
     function disconnectTeam(){ try{ localStorage.removeItem(TEAM_KEY); }catch(e){} location.reload(); }
     function pickMe(m){
@@ -2354,8 +2388,8 @@ ${l}`
         ? html`<div class="screen narrow"><div class="card">
             <div class="lbl">המסד המשותף ריק</div>
             <div class="val">עדיין אין נתונים בצוות הזה.</div>
-            <div class="hint" style=${{textAlign:"start"}}>הלחיצה תעלה את 31 הפרויקטים ואת המנהלים אל המסד, ומאותו רגע כל מי שמחובר רואה אותם.</div>
-            <button class="btn pri wide" style=${{marginTop:12}} onClick=${seedCloud}>טען נתוני בסיס (31 פרויקטים)</button>
+            <div class="hint" style=${{textAlign:"start"}}>הלחיצה תעלה את ${RAW.length} הפרויקטים ואת המנהלים אל המסד, ומאותו רגע כל מי שמחובר רואה אותם.</div>
+            <button class="btn pri wide" style=${{marginTop:12}} onClick=${seedCloud}>טען נתוני בסיס (${RAW.length} פרויקטים)</button>
           </div></div>`
         : html`<div class="screen narrow"><div class="empty">
             ${cloud.status === "error" ? "שגיאת חיבור: " + (cloud.err || "לא ידועה") : navigator.onLine ? "טוען נתונים משותפים…" : "אין חיבור — מחכה לרשת"}
@@ -2417,10 +2451,11 @@ ${l}`
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
               <h3>קוד צוות</h3>
               <div class="who">${cloudCode ? "מחובר למסד המשותף. מצב: " + cloud.status : "מצב מקומי — הנתונים נשמרים רק במכשיר הזה."} את הקוד מקבלים מההנהלה, בדרך כלל כקישור שפותח את האפליקציה כבר מחוברת.</div>
-              <input class="tin" type="text" dir="ltr" value=${teamInput} onInput=${e=>setTeamInput(e.target.value)} placeholder="הדבק כאן קוד צוות" autocapitalize="off" autocomplete="off" />
+              ${cloudCode && html`<button class="opt" onClick=${shareTeam}><span class="e">📤</span>שתף קישור צוות למנהל (וואטסאפ) — רק לאנשים שמנהלים את הבקרה</button>`}
+              ${!cloudCode && html`<input class="tin" type="text" dir="ltr" value=${teamInput} onInput=${e=>setTeamInput(e.target.value)} placeholder="הדבק כאן קוד צוות" autocapitalize="off" autocomplete="off" />`}
               <div class="btnrow" style=${{marginTop:10}}>
                 ${cloudCode ? html`<button class="btn danger" onClick=${disconnectTeam}>נתק מהמסד</button>` : html`<button class="btn" onClick=${()=>setTeamSheet(false)}>ביטול</button>`}
-                <button class="btn pri" disabled=${!/^[A-Za-z0-9]{16,64}$/.test(teamInput.trim())} onClick=${saveTeam}>התחבר</button>
+                ${!cloudCode && html`<button class="btn pri" disabled=${!/^[A-Za-z0-9]{16,64}$/.test(teamInput.trim())} onClick=${saveTeam}>התחבר</button>`}
               </div>
             </div>
           </div>`}
