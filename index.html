@@ -431,6 +431,10 @@
   .agph img.agref{ position:absolute; top:4px; inset-inline-start:4px; width:34%; aspect-ratio:1; border-radius:50%; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.35); }
   .aref{ display:flex; gap:10px; align-items:center; background:var(--surface-2); border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:.86rem; }
   .aref .thumb{ width:64px; height:64px; border-radius:50%; }
+  .rkline{ font-family:"Heebo",sans-serif; font-size:.74rem; font-weight:600; color:var(--accent); margin-top:6px; }
+  .rkbtn{ display:block; text-align:center; text-decoration:none; margin-top:8px; font-size:.85rem; }
+  .rkord{ font-family:"Heebo",sans-serif; font-size:.8rem; padding:7px 0; border-top:1px solid var(--line-2); }
+  .rkord div{ color:var(--ink-2); font-size:.76rem; margin-top:2px; }
   .linkbtn{ background:none; border:0; padding:4px 0 0; color:var(--accent); font-family:"Heebo",sans-serif; font-size:.74rem; text-decoration:underline; cursor:pointer; }
   .agph img{ width:100%; aspect-ratio:1; object-fit:cover; display:block; }
   .agph span{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:.7rem; }
@@ -730,7 +734,7 @@
   const stockLast = s => Math.max(s.stockAt || 0, ...(s.materials || []).map(m => m.at || 0));
 
   /* חריגים מחושבים מהמצב עצמו (לא נשמרים), ו"מאז מתי" נשמר ב-st.since */
-  function deriveExceptions(st, now){
+  function deriveExceptions(st, now, rk){
     const out = [];
     const today = dstr(now), hour = new Date(now).getHours(), wk = weekKey(now);
     const since = st.since || {};
@@ -808,12 +812,14 @@
         const donor = st.sites.filter(o => o.active && o.id !== s.id)
           .map(o => ({ o, d: (o.materials || []).find(x => x.at && x.item.trim() === m.item.trim() && x.need > 0 && x.onSite - x.need > 0) }))
           .filter(x => x.d).sort((a, b) => (b.d.onSite - b.d.need) - (a.d.onSite - a.d.need))[0];
+        const oo = rkOnOrder(rk, s.id, m.item), covered = oo.q >= lack;
         add({ ...base, key: s.id + ":material:" + m.item, kind: "material",
-          sev: m.blocksTomorrow ? "crit" : "warn",
-          title: "חוסר " + lack + " " + m.unit + " " + m.item,
+          sev: m.blocksTomorrow && !covered ? "crit" : "warn",
+          title: "חוסר " + lack + " " + m.unit + " " + m.item + (oo.q ? " · 🚚 הוזמן " + oo.q : ""),
           detail: "במלאי " + m.onSite + " מתוך מינימום " + m.need + (m.blocksTomorrow ? " · יעכב את העבודה" : "") +
+            (oo.q ? " · בדרך " + oo.q + " " + m.unit + (oo.sup.length ? " מ" + oo.sup.join(", ") : "") + (covered ? " — מכסה את החוסר" : " — עדיין חסר " + (lack - oo.q)) : "") +
             (donor ? " · אפשר לנייד מ" + donor.o.name + " (" + ((donor.o.owner && donor.o.owner.name) || "—") + "): עודף " + (donor.d.onSite - donor.d.need) + " " + donor.d.unit : ""),
-          waitingOn: "מנהל הפרויקט — השלמת החומר (ניוד מאתר אחר או הזמנה ברכש)" });
+          waitingOn: covered ? "קבלת ההזמנה מהספק (ולסמן קבלה ברכש)" : "מנהל הפרויקט — השלמת החומר (ניוד מאתר אחר או הזמנה ברכש)" });
       });
 
       if(s.checkin && s.checkin.status === "issue" && !s.checkin.resolvedAt){
@@ -983,14 +989,18 @@
      (עם אסימון הכניסה של המשתמש — השרת מוודא שהוא רשום בבקרה) ומוסיפה אותן למלאי של האתר.
      כל קבלה נרשמת באתר (rcptIds) כדי שלא תיספר פעמיים. פריט פגום או חסר לא נוסף. */
   const RAKESH_URL = "https://script.google.com/macros/s/AKfycbz9ylijHc1QFxPMXzKv0bD-zwniJ2AlKmAv5SIDoifpy_NTU2hqSTAMPj3Uzs01AI4mkg/exec";
-  // שם הפרויקט באפליקציית הרכש ← מספר האתר בבקרה
-  const RAKESH_PROJ = {
-    "עץ החיים ירושלים":1, "חצרים":2, "מרים החשמונאית":8, "פרויקט לוד":9, 'פרויקט פ"ת':10, "הרצל 66 בת ים":6,
-    "בת ים הפרדס פורמה":7, "מתחם 5 כפר אזר":12, "קרסו וייצמן 55-57 חולון דניה":11, "עצמאות 28 בת ים לוינשטיין":14,
-    'הברון הירש ת"א פורמה':19, "הולצברג בת ים דניה":20, "מלון לידו אשדוד":28, "מגרש 105 מזכרת בתיה":16, "קוטגים":15,
-    "מגרש 19-20 מזכרת בתיה":17, "מגרש 504 גדרה":18, "שנקר חולון":21, 'מרלו"ג פוקס בית שמש':27, "הר נוף":30,
-    "רמת השרון":5, "גליל ים":23, "עיר עולם":31, "מלון תל אביב":25, 'מאז"ה':26, "כרמי הנדיב":4, "רוטשטיין לוד":3, "בית הידידות":35
-  };
+  // כתובת אפליקציית הרכש (לכפתור "להזמין" מהמלאי). ריק = הכפתור מוסתר
+  const RAKESH_APP = "https://davidkatz0406.github.io/rechesh-tsron/";
+  // פרויקט ברכש: [מזהה, שם ברכש, מספר האתר בבקרה]
+  const RAKESH_PROJECTS = [
+    ["p1","עץ החיים ירושלים",1], ["p2","חצרים",2], ["p3","מרים החשמונאית",8], ["p4","פרויקט לוד",9], ["p5",'פרויקט פ"ת',10],
+    ["p6","הרצל 66 בת ים",6], ["p7","בת ים הפרדס פורמה",7], ["p8","מתחם 5 כפר אזר",12], ["p9","קרסו וייצמן 55-57 חולון דניה",11],
+    ["p10","עצמאות 28 בת ים לוינשטיין",14], ["p11",'הברון הירש ת"א פורמה',19], ["p12","הולצברג בת ים דניה",20], ["p13","מלון לידו אשדוד",28],
+    ["p14","מגרש 105 מזכרת בתיה",16], ["p15","קוטגים",15], ["p16","מגרש 19-20 מזכרת בתיה",17], ["p17","מגרש 504 גדרה",18],
+    ["p18","שנקר חולון",21], ["p19",'מרלו"ג פוקס בית שמש',27], ["p20","הר נוף",30], ["p21","רמת השרון",5], ["p22","גליל ים",23],
+    ["p23","עיר עולם",31], ["p24","מלון תל אביב",25], ["p25",'מאז"ה',26], ["p26","כרמי הנדיב",4], ["p27","רוטשטיין לוד",3], ["p28","בית הידידות",35]
+  ];
+  const RAKESH_PID = {}; RAKESH_PROJECTS.forEach(([pid, , num]) => { RAKESH_PID[num] = pid; });
   // שמות הפריטים בקטלוג הרכש — מוצעים בטופס המלאי כדי שהקבלה תתאים לפריט הקיים
   const RAKESH_ITEMS = ['זוית 90° מגולוונת הברגה 1"', 'זוית 90° ח.פ מגולוונת הברגה 1"', 'זוית 45° מגולוונת הברגה 1"', 'טי מגולוון הברגה 1"',
     'מופה מגולוונת הברגה 1"', 'כפה מגולוונת הברגה 1"', 'פקק מגולוון הברגה 1"', 'ניפל כפול מגולוון 3/4"', 'מחבר קל מחורץ אדום 2"',
@@ -998,13 +1008,33 @@
     'מגוף פרפר כיבוי אש מחווט 2" מחורץ PSI 300', 'אלחוזר כיבוי אש למערכת קומתית 2" יציקה מחורץ', 'צינור ביוב עבה 110 מ״מ SN8',
     'חבק תקרה 4" עם גומי', 'מתלה אגס 2" תקן ULFM', 'טפלון 1/2"', "פישתן (צמה 100 גר')"];
   const itemKey = s => String(s || "").replace(/["׳״'`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const rakeshSiteMap = ()=>{ const m = {}; RAKESH_PROJECTS.forEach(([, name, num]) => { m[itemKey(name)] = "s" + num; }); return m; };
+  const RK_STAGE = { approval:"ממתין לאישור טל", waiting:"אצל שרון", forwarded:"הועבר לספק" };
+  // כמה מפריט מסוים הוזמן לאתר ועוד לא התקבל
+  function rkOnOrder(rk, siteId, item){
+    let q = 0; const sup = new Set();
+    ((rk || {})[siteId] || []).forEach(o => (o.items || []).forEach(it => {
+      if(itemKey(it.n) === itemKey(item)){ q += Number(it.q) || 0; if(o.supplier) sup.add(o.supplier); }
+    }));
+    return { q, sup:[...sup] };
+  }
+  // הזמנות פתוחות (בוטלו/התקבלו לא נכללות) לפי אתר — לתצוגת "בדרך"
+  async function fetchOpenOrders(siteIds){
+    if(!Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) return null;
+    const token = await firebase.auth().currentUser.getIdToken();
+    const j = await (await fetch(RAKESH_URL + "?action=open_orders&token=" + encodeURIComponent(token))).json();
+    if(!j || !Array.isArray(j.orders)) return null;
+    const proj = rakeshSiteMap(), out = {};
+    j.orders.forEach(o => { const sid = proj[itemKey(o.project)]; if(sid && siteIds.has(sid)) (out[sid] = out[sid] || []).push(o); });
+    return out;
+  }
   async function syncReceipts(siteIds, who){
     if(!Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) return 0;
     const token = await firebase.auth().currentUser.getIdToken();
     const res = await fetch(RAKESH_URL + "?action=receipts&token=" + encodeURIComponent(token));
     const j = await res.json();
     if(!j || !Array.isArray(j.receipts)) return 0;
-    const proj = {}; Object.keys(RAKESH_PROJ).forEach(k => { proj[itemKey(k)] = "s" + RAKESH_PROJ[k]; });
+    const proj = rakeshSiteMap();
     let applied = 0;
     for(const r of j.receipts){
       const sid = proj[itemKey(r.project)];
@@ -2343,6 +2373,7 @@ ${l}`
     // כניסה אישית: מי מחובר ומה התפקיד שלו (משרד / מנהל פרויקט)
     const [auth, setAuth] = useState(()=> ({ s: cloudCode ? "checking" : "off" }));
     const [staffSheet, setStaffSheet] = useState(false);
+    const [rkOpen, setRkOpen] = useState({});      // הזמנות פתוחות מהרכש לפי אתר ("בדרך")
     const signedIn = cloudCode && auth.s === "in";
     const who = signedIn ? auth.staff.name : me.name;
     const myMgr = signedIn && auth.staff.role !== "office" ? auth.staff.name : null;
@@ -2490,7 +2521,7 @@ ${l}`
     const sites = vst.sites;
     const bySite = useCallback((id)=> sites.find(s=>s.id===id), [sites]);
 
-    const exAll = useMemo(()=> deriveExceptions(st, now), [st.sites, st.since, st.trackStart, now]);
+    const exAll = useMemo(()=> deriveExceptions(st, now, rkOpen), [st.sites, st.since, st.trackStart, now, rkOpen]);
     const exceptions = useMemo(()=> myMgr ? exAll.filter(e => e.owner === myMgr) : exAll, [exAll, myMgr]);
     const cards = useMemo(()=> scorecards(vst, exceptions, now), [vst, st.trackStart, exceptions, now]);
     const ctlV = myMgr ? { ...ctl, mgr: myMgr } : ctl;
@@ -2501,7 +2532,10 @@ ${l}`
       if(!signedIn || !cloud.ready || cloud.empty) return;
       const ids = new Set(siteKey.split(",").filter(Boolean));
       let dead = false;
-      const run = ()=> syncReceipts(ids, who).then(n => { if(!dead && n) notify("המלאי עודכן מ-" + n + (n === 1 ? " קבלת סחורה" : " קבלות סחורה") + " ברכש"); }).catch(e => console.warn("receipts sync", e));
+      const run = ()=>{
+        syncReceipts(ids, who).then(n => { if(!dead && n) notify("המלאי עודכן מ-" + n + (n === 1 ? " קבלת סחורה" : " קבלות סחורה") + " ברכש"); }).catch(e => console.warn("receipts sync", e));
+        fetchOpenOrders(ids).then(o => { if(!dead && o) setRkOpen(o); }).catch(e => console.warn("open orders", e));
+      };
       run(); const t = setInterval(run, 15 * 60000);
       return ()=>{ dead = true; clearInterval(t); };
     }, [signedIn, cloud.ready, cloud.empty, siteKey]);
@@ -2727,7 +2761,7 @@ ${l}`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
     else if(nav.screen === "stock.home")
-      body = html`<${StockHome} st=${vst} now=${now} who=${who} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
+      body = html`<${StockHome} st=${vst} now=${now} who=${who} rk=${rkOpen} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
 
     return html`
       <div class="app">
@@ -3422,7 +3456,7 @@ ${l}`
       </form>`;
   }
 
-  function StockEditor({ st, now, who, onSave, onDelete, onConfirm }){
+  function StockEditor({ st, now, who, rk, onSave, onDelete, onConfirm }){
     const actives = st.sites.filter(s => s.active);
     const mine = actives.filter(s => s.owner && s.owner.name === who);
     const [all, setAll] = useState(false);
@@ -3434,6 +3468,13 @@ ${l}`
     if(!site) return html`<div class="empty">אין אתרים פעילים</div>`;
     const info = stockInfo(site, st, now);
     const mats = site.materials || [];
+    // רכש: מה בדרך, כמה עוד צריך להזמין, וקישור שפותח סל מוכן באפליקציית הרכש
+    const open = (rk || {})[site.id] || [];
+    const toOrder = m => Math.max(0, (Number(m.need) || 0) - (Number(m.onSite) || 0) - rkOnOrder(rk, site.id, m.item).q);
+    const short = mats.filter(m => toOrder(m) > 0);
+    const pid = RAKESH_PID[site.num];
+    const canOrder = !!(RAKESH_APP && pid);
+    const orderLink = items => RAKESH_APP + "#order=" + encodeURIComponent(JSON.stringify({ p:pid, items }));
 
     return html`
       <div>
@@ -3454,6 +3495,12 @@ ${l}`
             <button class="btn ok" onClick=${()=>onConfirm(site.id)}>✓ המלאי מעודכן להיום</button>
           </div>
         </div>
+        ${open.length > 0 && html`<div class="card" style=${{marginBottom:12}}>
+          <div class="lbl">🚚 הזמנות בדרך לאתר (${open.length})</div>
+          ${open.map(o => html`<div key=${o.id} class="rkord"><b>${o.supplier || "ספק"}</b> · ${RK_STAGE[o.stage] || ""} · ${dmy(o.created)}<div>${o.items.map(it => it.n + " × " + it.q).join(" · ")}</div></div>`)}
+          <div class="hint" style=${{textAlign:"start", marginTop:6}}>כשהסחורה מגיעה — מסמנים "קבלה" באפליקציית הרכש, והמלאי כאן מתעדכן לבד.</div>
+        </div>`}
+        ${canOrder && short.length > 1 && html`<a class="btn pri wide rkbtn" style=${{marginBottom:12}} href=${orderLink(short.map(m => ({ n:m.item, q:toOrder(m), u:m.unit })))} target="_blank" rel="noopener">🛒 להזמין את כל החוסרים (${short.length}) ברכש</a>`}
 
         <div style=${{display:"flex", flexDirection:"column", gap:9}}>
           ${mats.map(m => editing === m.item
@@ -3475,6 +3522,9 @@ ${l}`
                   <${QtyCell} value=${m.onSite} onCommit=${n => onSave(site.id, m.item, { onSite:n })} />
                   <span class="unit">${m.unit}</span>
                 </div>
+                ${(()=>{ const oo = rkOnOrder(rk, site.id, m.item), q = toOrder(m); return html`
+                  ${oo.q > 0 && html`<div class="rkline">🚚 בדרך: ${oo.q} ${m.unit}${oo.sup.length ? " · " + oo.sup.join(", ") : ""}</div>`}
+                  ${canOrder && q > 0 && html`<a class="btn rkbtn" href=${orderLink([{ n:m.item, q, u:m.unit }])} target="_blank" rel="noopener">🛒 להזמין ${q} ${m.unit} ברכש</a>`}`; })()}
               </div>`)}
           ${mats.length === 0 && !adding && html`<div class="empty" style=${{padding:"22px 0"}}>עדיין לא הוזן מלאי באתר הזה</div>`}
           ${adding
@@ -3485,12 +3535,12 @@ ${l}`
       </div>`;
   }
 
-  function StockHome({ st, now, who, onStockSave, onStockDelete, onStockConfirm }){
+  function StockHome({ st, now, who, rk, onStockSave, onStockDelete, onStockConfirm }){
     return html`
       <div class="screen narrow">
         <div class="shead"><h2>מלאי באתר</h2><span class="sub">כל מנהל מנהל את המלאי של האתרים שלו · ההנהלה רואה בזמן אמת</span></div>
         <div style=${{marginTop:12}}>
-          <${StockEditor} st=${st} now=${now} who=${who} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} />
+          <${StockEditor} st=${st} now=${now} who=${who} rk=${rk} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} />
         </div>
       </div>`;
   }
