@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מדריך הבקרה והרכש — ט.ש. מי-רון</title>
+<meta name="robots" content="noindex">
+<style>
+  :root{ --ink:#16202b; --ink2:#4a5563; --line:#e3e8ef; --bg:#f3f6fa; --card:#fff; --brand:#1d3557; --accent:#2563c9; --warn:#b26a00; }
+  @media (prefers-color-scheme: dark){ :root{ --ink:#e8edf3; --ink2:#a9b4c2; --line:#2b3644; --bg:#0f151c; --card:#17202a; --brand:#0d1b2e; --accent:#6aa3ff; } }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:"Heebo",-apple-system,"Segoe UI",Arial,sans-serif; font-size:17px; line-height:1.6; }
+  header{ background:var(--brand); color:#fff; padding:22px 16px 18px; }
+  header h1{ margin:0; font-size:1.45rem; }
+  header p{ margin:6px 0 0; opacity:.85; font-size:.95rem; }
+  main{ max-width:760px; margin:0 auto; padding:14px 16px 60px; }
+  nav.roles{ display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin:4px 0 18px; }
+  nav.roles a{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 12px; text-decoration:none; color:var(--ink); font-weight:700; display:flex; gap:10px; align-items:center; }
+  nav.roles a span{ font-size:1.5rem; }
+  section{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 16px 10px; margin:0 0 16px; scroll-margin-top:10px; }
+  h2{ margin:0 0 6px; font-size:1.2rem; }
+  h3{ margin:16px 0 4px; font-size:1.02rem; color:var(--accent); }
+  p{ margin:6px 0; }
+  ol, ul{ margin:6px 0 10px; padding-inline-start:22px; }
+  li{ margin:4px 0; }
+  .path{ display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:0 7px; font-weight:600; font-size:.92rem; }
+  .tip{ background:rgba(37,99,201,.10); border-radius:10px; padding:9px 12px; margin:10px 0; font-size:.95rem; }
+  .warn{ background:rgba(178,106,0,.13); border-radius:10px; padding:9px 12px; margin:10px 0; font-size:.95rem; }
+  .flow div{ border:1px solid var(--line); border-radius:12px; padding:9px 12px; background:var(--bg); }
+  .flow i{ display:block; text-align:center; font-style:normal; color:var(--ink2); line-height:1.4; }
+  .links a{ display:block; background:var(--accent); color:#fff; text-decoration:none; text-align:center; padding:12px; border-radius:12px; font-weight:700; margin:8px 0; }
+  table{ width:100%; border-collapse:collapse; font-size:.93rem; margin:8px 0; }
+  td, th{ border-bottom:1px solid var(--line); padding:7px 4px; text-align:start; vertical-align:top; }
+  th{ color:var(--ink2); font-weight:600; }
+  footer{ text-align:center; color:var(--ink2); font-size:.85rem; padding:10px; }
+  @media (max-width:420px){ nav.roles{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>מדריך הבקרה והרכש</h1>
+  <p>ט.ש. מי-רון · איך עובדים עם האפליקציות — בקצרה ובפשטות</p>
+</header>
+<main>
+
+  <nav class="roles">
+    <a href="#login"><span>🔐</span>כניסה לבקרה</a>
+    <a href="#mgr"><span>👷‍♂️</span>אני מנהל פרויקט</a>
+    <a href="#rakesh"><span>🛒</span>רכש ומלאי</a>
+    <a href="#office"><span>🏢</span>אני במשרד</a>
+    <a href="#worker"><span>📸</span>עובדים — נוכחות</a>
+    <a href="#faq"><span>❓</span>תקלות ושאלות</a>
+  </nav>
+
+  <section>
+    <h2>📱 שתי אפליקציות, עובדות יחד</h2>
+    <p><b>בקרה</b> — כל מה שקורה באתר: דיווח יומי, דוח שבועי, מלאי, נוכחות עובדים וחריגים.</p>
+    <p><b>רכש</b> — הזמנת חומרים מהקטלוג, אישור, העברה לספק וקבלת הסחורה.</p>
+    <p>הן מחוברות: מה שמזמינים מופיע במלאי כ<b>"בדרך"</b>, וכשמסמנים <b>קבלה</b> ברכש — המלאי בבקרה מתעדכן לבד.</p>
+    <div class="links">
+      <a href="https://davidkatz0406.github.io/rechesh-tsron/">פתח את הרכש</a>
+    </div>
+    <p>את <b>הקישור לבקרה</b> מקבלים בוואטסאפ מהמשרד (קישור אישי לכניסה). שמרו אותו.</p>
+  </section>
+
+  <section id="login">
+    <h2>🔐 כניסה לבקרה — פעם אחת</h2>
+    <ol>
+      <li>פותחים את הקישור לבקרה שקיבלתם בוואטסאפ מהמשרד.</li>
+      <li>מקלידים את <b>מספר הטלפון שלך</b> ← לוחצים "שלח קוד ב-SMS".</li>
+      <li>מקלידים את הקוד שהגיע ← "כניסה". מעכשיו הטלפון זוכר אותך.</li>
+    </ol>
+    <p>מנהל פרויקט רואה ומשנה <b>רק את האתרים שלו</b>. המשרד רואה הכול.</p>
+    <div class="tip">כדאי להוסיף את הבקרה למסך הבית: בתפריט הדפדפן ← "הוסף למסך הבית".</div>
+  </section>
+
+  <section id="mgr">
+    <h2>👷‍♂️ מנהל פרויקט — היום שלך באפליקציה</h2>
+    <p>למעלה יש שלוש לשוניות: <span class="path">בקרה</span> <span class="path">שטח</span> <span class="path">מלאי</span>.</p>
+
+    <h3>☀️ כל בוקר — עד 08:00</h3>
+    <ol>
+      <li><span class="path">בקרה ← נוכחות ← יומי</span> — מי מהעובדים בשטח ומי <b>לא נרשם</b>. מי שלא נרשם — מטפלים מיד, עד 08:00.</li>
+      <li><span class="path">שטח</span> ← בוחרים אתר ← <b>"✓ אין חריגים"</b> או <b>"⚠ יש חריגה"</b> + משפט קצר. זה הדיווח היומי — עד 08:00. אחרי 08:00 נפתח חריג, ואחרי 10:00 הוא עולה לדוד.</li>
+    </ol>
+
+    <h3>📅 פעם בשבוע (עד יום א׳ 12:00)</h3>
+    <p><span class="path">שטח</span> ← אתר ← <b>"📅 מלא דוח שבועי"</b> — התקדמות לפי נושאים, כוח אדם ובטיחות.</p>
+
+    <h3>📦 מלאי (לפחות פעם ב-3 ימים)</h3>
+    <ul>
+      <li><span class="path">מלאי</span> ← בוחרים אתר ← מעדכנים כמויות עם + / −, ולוחצים <b>"✓ המלאי מעודכן להיום"</b>.</li>
+      <li>לכל פריט אפשר להגדיר <b>מינימום</b>. ירידה מתחתיו פותחת חריג — ומופיע כפתור <b>"🛒 להזמין"</b>.</li>
+      <li>פריט חדש: <b>"＋ הוסף פריט"</b> — עדיף לבחור את השם מהרשימה שמוצעת (שמות מהקטלוג של הרכש), כדי שהקבלות יתווספו לאותו פריט.</li>
+    </ul>
+
+    <h3>🚨 חריגים</h3>
+    <p><span class="path">בקרה ← חריגים</span> — מה חסר או באיחור באתרים שלך. חריג שלא מטופל עולה בדרג (אליך ← למנהל הבכיר ← לדוד). מטפלים — והחריג נסגר לבד.</p>
+
+    <h3>🕒 נוכחות העובדים שלך</h3>
+    <ul>
+      <li><b>חיבור עובד (פעם אחת):</b> <span class="path">בקרה ← נוכחות ← עובדים</span> ← "🔗 שלח קישור" — נפתחת הודעת וואטסאפ בשפה של העובד. מיד אחריה שלח לו את סרטון ההדרכה.</li>
+      <li><b>שורה צבועה = לבדוק:</b> רחוק מהאתר, אין יציאה, טלפון אחר, שעון לא תקין, משמרת ארוכה. לוחצים עליה ← <b>"✓ אשר כמו שהוא"</b> או מתקנים שעה — <b>עם סיבה</b>. הרישום המקורי נשמר.</li>
+      <li><b>שכח לצלם?</b> מתקנים לו את השעה באותו יום, עם סיבה.</li>
+      <li><b>החליף טלפון?</b> ליד השם ← 📱✕ ← שולחים שוב קישור.</li>
+      <li><b>עובד חדש?</b> עובדים ← הוספה ← שולחים קישור.</li>
+      <li>את מיקום האתר המערכת לומדת לבד מהרישומים הראשונים.</li>
+    </ul>
+    <div class="warn">בלי סלפי אין שעות — וזה הבסיס לשכר. ימים לא סגורים מעכבים את התשלום לעובדים, לכן סוגרים חריגי נוכחות כל יום.</div>
+  </section>
+
+  <section id="rakesh">
+    <h2>🛒 רכש ומלאי — איך הם מדברים</h2>
+    <div class="flow">
+      <div><b>1. חסר משהו באתר</b> — בבקרה במלאי מופיע "🛒 להזמין X" (מינימום − מלאי − מה שכבר בדרך).</div>
+      <i>↓</i>
+      <div><b>2. לוחצים</b> — הרכש נפתח על הפרויקט שלך עם העגלה מוכנה. בודקים כמויות ושולחים. (אפשר גם להזמין ישר מהרכש כרגיל.)</div>
+      <i>↓</i>
+      <div><b>3. אישור טל</b> (כשנדרש) ← <b>שרון מעבירה לספק</b>.</div>
+      <i>↓</i>
+      <div><b>4. בבקרה</b> רואים את ההזמנה כ<b>"🚚 בדרך"</b> ליד הפריט, והחוסר לא נצבע באדום.</div>
+      <i>↓</i>
+      <div><b>5. הסחורה מגיעה</b> — ברכש ← "ההזמנות שלי" ← <b>קבלה</b>: מצלמים תעודת משלוח ורושמים כמה הגיע מכל פריט (חסר / עודף / פגום).</div>
+      <i>↓</i>
+      <div><b>6. המלאי בבקרה מתעדכן לבד</b> בכמות שהתקבלה, ונרשם ביומן הפעולות. פריט פגום לא נספר. חריגה בקבלה הולכת לשרון לזיכוי.</div>
+    </div>
+    <div class="tip">השימוש באתר לא מוריד מהמלאי אוטומטית — מעדכנים ספירה מדי פעם (לשונית מלאי).</div>
+  </section>
+
+  <section id="office">
+    <h2>🏢 משרד (דוד · טל · שרון)</h2>
+    <ul>
+      <li><b>משתמשים והרשאות:</b> העיגול עם האות שלך (למעלה) ← "👥 משתמשים והרשאות" ← טלפון + תפקיד (משרד / מנהל פרויקט) + שם ← הוסף ← "🔗 שלח" שולח לו קישור כניסה בוואטסאפ. להוציא מישהו — "השבת".</li>
+      <li><b>תמונה מלאה:</b> המשרד רואה את כל האתרים; אפשר לסנן לפי מנהל דרך <span class="path">בקרה ← מנהלים</span>.</li>
+      <li><b>שכר:</b> <span class="path">בקרה ← נוכחות ← חודשי ושכר</span> ← בודקים שאין ימים פתוחים ← <b>"⬇ ייצוא לאקסל לשכר"</b> (סיכום + פירוט יומי).</li>
+      <li><b>תמונות:</b> אחרי הפקת האקסל של חודש שהסתיים — "🗑 מחיקת התמונות של החודש" (השעות והתיקונים נשמרים).</li>
+      <li><b>רכש:</b> טל מאשר, שרון ממלאת "ספק בפועל" ומסמנת "הועבר לספק" בגיליון; חריגות בקבלה מסומנות לזיכוי.</li>
+      <li><b>יומן פעולות:</b> <span class="path">בקרה ← יומן פעולות</span> — מי עשה מה ומתי.</li>
+    </ul>
+  </section>
+
+  <section id="worker">
+    <h2>📸 עובדים — נוכחות בסלפי</h2>
+    <ol>
+      <li>כל עובד מקבל <b>קישור אישי</b> בוואטסאפ (בשפה שלו: עברית, ערבית, הינדי, רוסית) + סרטון הדרכה.</li>
+      <li>מגיע לאתר ← פותח את הקישור ← <b>כפתור ירוק</b> ← סלפי ← "אשר ושלח".</li>
+      <li>יוצא מהאתר ← אותו קישור ← <b>כפתור אדום</b> ← סלפי.</li>
+    </ol>
+    <p>אין רשת? הרישום נשמר בטלפון ונשלח לבד. העובד לא צריך סיסמה ולא SMS.</p>
+  </section>
+
+  <section id="faq">
+    <h2>❓ תקלות ושאלות</h2>
+    <table>
+      <tr><th>מה קורה</th><th>מה עושים</th></tr>
+      <tr><td>"המספר לא רשום"</td><td>המשרד צריך להוסיף אותך ב"משתמשים והרשאות".</td></tr>
+      <tr><td>לא מגיע SMS / "יותר מדי ניסיונות"</td><td>מחכים שעה ומנסים שוב. אם לא עובר — פונים לדוד.</td></tr>
+      <tr><td>האפליקציה נראית ישנה / לא מתעדכנת</td><td>סוגרים לגמרי ופותחים שוב (לפעמים פעמיים).</td></tr>
+      <tr><td>לא רואה אתר שלי</td><td>האתר רשום על מנהל אחר — לפנות למשרד.</td></tr>
+      <tr><td>קבלה לא עדכנה את המלאי</td><td>פותחים את הבקרה (היא בודקת קבלות בכל פתיחה ואחר כך כל רבע שעה). אם עדיין לא — פונים לדוד.</td></tr>
+      <tr><td>עובד לא מצליח להירשם</td><td>לבדוק שפתח את <b>הקישור האישי שלו</b> מהוואטסאפ. החליף טלפון — 📱✕ ושולחים קישור מחדש.</td></tr>
+    </table>
+  </section>
+
+  <footer>ט.ש. מי-רון · אנשים עושים הנדסה</footer>
+</main>
+</body>
+</html>
