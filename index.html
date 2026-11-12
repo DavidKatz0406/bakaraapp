@@ -501,9 +501,9 @@
     ["אלקטרה","קיים",13,"כפר אזר 123"],
     ["לוינשטיין נתיב","קיים",14,"עצמאות 28 בת ים"],
     ["הר סוף","קיים",15,"הר סוף קוטג'ים"],
-    ["הר סוף","קיים",16,"הר סוף 105"],
+    ["הר סוף","קיים",16,"מזכרת בתיה (מגרש 105)"],
     ["הר סוף","קיים",17,"מזכרת בתיה 19-20"],
-    ["הר סוף","קיים",18,"הר סוף 504"],
+    ["הר סוף","קיים",18,"גדרה (מגרש 504)"],
     ["פורמה","קיים",19,"הברון הירש"],
     ["דניה סיבוס","קיים",20,"הולצברג בת ים"],
     ["דניה סיבוס","קיים",21,"שנקר חולון"],
@@ -517,10 +517,13 @@
     ["קבוצת גבאי","קיים",29,"מלון אשדוד"],
     ["דניה סיבוס","קיים",30,"הר נוף"],
     ["דניה סיבוס","קיים",31,"עיר עולם"],
-    ["—","קיים",32,"גדרה"],
+    ["—","אין",32,"גדרה — כפול, אוחד עם מגרש 504"],
     ["—","קיים",33,"גן יבנה"],
-    ["—","קיים",34,"מזכרת בתיה"]
+    ["—","אין",34,"מזכרת בתיה — כפול, אוחד עם מגרש 105"],
+    ["אשטרום","קיים",35,"בית הידידות"]
   ];
+  // כפילויות שנוצרו ב-11/2026 ואוחדו: האתר הכפול נסגר והעובדים עוברים לאתר האמיתי
+  const MERGED = { s32:"s18", s34:"s16" };
   // שמות הפרויקטים לפי רשימת העובדים המעודכנת (11/2026) — RAW הוא המקור היחיד לשם ולמספר
   const RAWBY = {}; RAW.forEach(r => { RAWBY[r[2]] = r; });
 
@@ -534,12 +537,13 @@
     17:{ name:"באהה" },  18:{ name:"סאמר" },  19:{ name:"צביקה" },  20:{ name:"יזיד" },  21:{ name:"מוראר" },
     23:{ name:"משה" },  25:{ name:"אולג" },  26:{ name:"באהה" },  27:{ name:"וואהל" },
     28:{ name:"אולג" },  29:{ name:"אולג" },  30:{ name:"יניב" },  31:{ name:"כרובי" },
-    32:{ name:"סאמר" },  33:{ name:"וואהל" },  34:{ name:"וואהל" }
+    32:{ name:"סאמר" },  33:{ name:"וואהל" },  34:{ name:"וואהל" },  35:{ name:"אלי" }
   };
   // אתרים שנפתחו מחדש (עדכון 11/2026 לפי רשימת העובדים)
   const REOPEN = [4];
   function applyRoster(site){
     if(REOPEN.includes(site.num)) site.active = true;
+    if(MERGED["s" + site.num]) site.active = false;
     if(RAWBY[site.num]) site.name = RAWBY[site.num][3];
     const m = MGR[site.num];
     site.owner = m
@@ -574,7 +578,7 @@
     sites.forEach(applyRoster);
     const T = Date.now();
     return {
-      sites, rosterV: 4, cleanV: CLEAN_V,
+      sites, rosterV: 5, cleanV: CLEAN_V,
       log: [], nudges: {}, trackStart: T,
       since: {},
       requests: [], transfers: []
@@ -591,7 +595,7 @@
           site.checkinLog = site.checkinLog || [];
           (site.units || []).forEach(u => { if(!Array.isArray(u.photos)) u.photos = []; });
         });
-        if(st.rosterV !== 4){ st.sites = st.sites || []; rosterSync(st); st.rosterV = 4; }
+        if(st.rosterV !== 5){ st.sites = st.sites || []; rosterSync(st); st.rosterV = 5; }
         if(st.cleanV !== CLEAN_V){ (st.sites || []).forEach(applyClean); st.cleanV = CLEAN_V; }
         st.log = st.log || []; st.nudges = st.nudges || {}; st.since = st.since || {};
         st.trackStart = st.trackStart || Date.now();
@@ -970,9 +974,70 @@
     messagingSenderId: "316003592694",
     appId: "1:316003592694:web:e1dc8415b4f7ed1e073fd7"
   };
-  const ROSTER_V = 4;
+  const ROSTER_V = 5;
   const TEAM_KEY = "bakara_team";
   const Cloud = { on:false, db:null, base:null, mgr:null };
+
+  /* ───── חיבור לאפליקציית הרכש: קבלת סחורה מעדכנת את המלאי באתר ─────
+     הרכש (Google Apps Script) שומר כל קבלה עם הכמויות שהתקבלו. הבקרה מושכת את הקבלות
+     (עם אסימון הכניסה של המשתמש — השרת מוודא שהוא רשום בבקרה) ומוסיפה אותן למלאי של האתר.
+     כל קבלה נרשמת באתר (rcptIds) כדי שלא תיספר פעמיים. פריט פגום או חסר לא נוסף. */
+  const RAKESH_URL = "https://script.google.com/macros/s/AKfycbz9ylijHc1QFxPMXzKv0bD-zwniJ2AlKmAv5SIDoifpy_NTU2hqSTAMPj3Uzs01AI4mkg/exec";
+  // שם הפרויקט באפליקציית הרכש ← מספר האתר בבקרה
+  const RAKESH_PROJ = {
+    "עץ החיים ירושלים":1, "חצרים":2, "מרים החשמונאית":8, "פרויקט לוד":9, 'פרויקט פ"ת':10, "הרצל 66 בת ים":6,
+    "בת ים הפרדס פורמה":7, "מתחם 5 כפר אזר":12, "קרסו וייצמן 55-57 חולון דניה":11, "עצמאות 28 בת ים לוינשטיין":14,
+    'הברון הירש ת"א פורמה':19, "הולצברג בת ים דניה":20, "מלון לידו אשדוד":28, "מגרש 105 מזכרת בתיה":16, "קוטגים":15,
+    "מגרש 19-20 מזכרת בתיה":17, "מגרש 504 גדרה":18, "שנקר חולון":21, 'מרלו"ג פוקס בית שמש':27, "הר נוף":30,
+    "רמת השרון":5, "גליל ים":23, "עיר עולם":31, "מלון תל אביב":25, 'מאז"ה':26, "כרמי הנדיב":4, "רוטשטיין לוד":3, "בית הידידות":35
+  };
+  // שמות הפריטים בקטלוג הרכש — מוצעים בטופס המלאי כדי שהקבלה תתאים לפריט הקיים
+  const RAKESH_ITEMS = ['זוית 90° מגולוונת הברגה 1"', 'זוית 90° ח.פ מגולוונת הברגה 1"', 'זוית 45° מגולוונת הברגה 1"', 'טי מגולוון הברגה 1"',
+    'מופה מגולוונת הברגה 1"', 'כפה מגולוונת הברגה 1"', 'פקק מגולוון הברגה 1"', 'ניפל כפול מגולוון 3/4"', 'מחבר קל מחורץ אדום 2"',
+    'זוית 90° מחורצת אדום 3"', 'ארון כיבוי אש 80×30×80 פח', 'גלגלון כיבוי אש 3/4"×30 + מזנק', 'מתז תלוי תגובה מהירה 1/2"',
+    'מגוף פרפר כיבוי אש מחווט 2" מחורץ PSI 300', 'אלחוזר כיבוי אש למערכת קומתית 2" יציקה מחורץ', 'צינור ביוב עבה 110 מ״מ SN8',
+    'חבק תקרה 4" עם גומי', 'מתלה אגס 2" תקן ULFM', 'טפלון 1/2"', "פישתן (צמה 100 גר')"];
+  const itemKey = s => String(s || "").replace(/["׳״'`]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  async function syncReceipts(siteIds, who){
+    if(!Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) return 0;
+    const token = await firebase.auth().currentUser.getIdToken();
+    const res = await fetch(RAKESH_URL + "?action=receipts&token=" + encodeURIComponent(token));
+    const j = await res.json();
+    if(!j || !Array.isArray(j.receipts)) return 0;
+    const proj = {}; Object.keys(RAKESH_PROJ).forEach(k => { proj[itemKey(k)] = "s" + RAKESH_PROJ[k]; });
+    let applied = 0;
+    for(const r of j.receipts){
+      const sid = proj[itemKey(r.project)];
+      if(!sid || !siteIds.has(sid)) continue;
+      const ref = Cloud.base.collection("sites").doc(docKey(sid));
+      try{
+        const ok = await Cloud.db.runTransaction(async tx => {
+          const d = await tx.get(ref);
+          if(!d.exists) return false;
+          const site = d.data(), done = site.rcptIds || [];
+          if(done.includes(r.id)) return false;
+          const mats = (site.materials || []).map(m => ({ ...m })), parts = [];
+          (r.items || []).forEach(it => {
+            const q = Number(it.q) || 0;
+            if(it.d || q <= 0 || !String(it.n || "").trim()) return;
+            let m = mats.find(x => itemKey(x.item) === itemKey(it.n));
+            if(!m){ m = { item:String(it.n).trim().slice(0, 50), onSite:0, unit:it.u || "יח׳", need:0, blocksTomorrow:false }; mats.push(m); }
+            m.onSite = (Number(m.onSite) || 0) + q; m.at = r.at || Date.now(); m.by = "קבלה מרכש";
+            parts.push(m.item + " +" + q);
+          });
+          const ids = [...done, r.id].slice(-300);
+          if(!parts.length){ tx.update(ref, { rcptIds: ids }); return false; }
+          tx.update(ref, { materials: mats, rcptIds: ids });
+          const lid = "l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          tx.set(Cloud.base.collection("log").doc(lid), { id:lid, ts:Date.now(), who, siteId:sid,
+            text:"קבלה מרכש" + (r.supplier ? " · " + r.supplier : "") + (r.noteNo ? " · ת.מ " + r.noteNo : "") + (r.by ? " · קיבל " + r.by : "") + ": " + parts.join(", ") });
+          return true;
+        });
+        if(ok) applied++;
+      }catch(e){ console.warn("receipt apply failed", r.id, e); }
+    }
+    return applied;
+  }
 
   /* ───── כניסה אישית עם מספר טלפון (SMS) ─────
      staff/{+9725…}   { name, role:"office"|"mgr", active }  — מי מורשה ומה תפקידו (במסד, לא בקוד)
@@ -1626,6 +1691,18 @@ ${l}`
       return ()=>{ u1(); u2(); };
     }, [B]);
     // שמות האתרים והמנהלים עוברים מהבקרה למרחב הנוכחות (בלי לגעת במיקום שנקבע)
+    // עובדים שמשויכים לאתר כפול שאוחד — עוברים לאתר האמיתי (משרד, פעם אחת)
+    useEffect(()=>{
+      if(!B || !office || !workers.length) return;
+      const fix = workers.filter(w => MERGED[w.site] || (w.sites || []).some(x => MERGED[x]));
+      if(!fix.length) return;
+      const batch = Cloud.db.batch();
+      fix.forEach(w => {
+        const sites = [...new Set((w.sites || [w.site]).map(x => MERGED[x] || x))];
+        batch.set(B.collection("workers").doc(w.id), { site: MERGED[w.site] || w.site, sites }, { merge:true });
+      });
+      batch.commit().catch(()=>{});
+    }, [B, office, workers]);
     // סימון המרחב כמרחב נוכחות — חוקי המסד מאפשרים לעובדים (בלי כניסה) לגשת רק למרחב כזה
     useEffect(()=>{ if(B && office) B.collection("meta").doc("space").set({ kind:"att" }, { merge:true }).catch(()=>{}); }, [B, office]);
     useEffect(()=>{
@@ -2418,6 +2495,16 @@ ${l}`
     const cards = useMemo(()=> scorecards(vst, exceptions, now), [vst, st.trackStart, exceptions, now]);
     const ctlV = myMgr ? { ...ctl, mgr: myMgr } : ctl;
     const setCtlV = c => setCtl(myMgr ? { ...c, mgr: myMgr } : c);
+    // קבלות סחורה מהרכש ← מלאי האתרים שהמשתמש רואה (בכניסה ואחר כך כל 15 דקות)
+    const siteKey = sites.map(s => s.id).join(",");
+    useEffect(()=>{
+      if(!signedIn || !cloud.ready || cloud.empty) return;
+      const ids = new Set(siteKey.split(",").filter(Boolean));
+      let dead = false;
+      const run = ()=> syncReceipts(ids, who).then(n => { if(!dead && n) notify("המלאי עודכן מ-" + n + (n === 1 ? " קבלת סחורה" : " קבלות סחורה") + " ברכש"); }).catch(e => console.warn("receipts sync", e));
+      run(); const t = setInterval(run, 15 * 60000);
+      return ()=>{ dead = true; clearInterval(t); };
+    }, [signedIn, cloud.ready, cloud.empty, siteKey]);
     // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
     useEffect(()=>{
       if(cloudCode && !(cloud.loaded.sites && cloud.loaded.since)) return;
@@ -3318,7 +3405,8 @@ ${l}`
     }
     return html`
       <form class="newunit" onSubmit=${submit}>
-        <input type="text" placeholder="שם הפריט (למשל: צנרת 4״)" value=${f.item} onInput=${e=>setF({...f, item:e.target.value})} maxLength=${50} />
+        <input type="text" list="rakesh-items" placeholder="שם הפריט — עדיף מהקטלוג של הרכש" value=${f.item} onInput=${e=>setF({...f, item:e.target.value})} maxLength=${50} />
+        <datalist id="rakesh-items">${RAKESH_ITEMS.map(n => html`<option key=${n} value=${n} />`)}</datalist>
         <div class="two">
           <input type="number" inputMode="decimal" min="0" placeholder="כמות במלאי" value=${f.onSite} onInput=${e=>setF({...f, onSite:e.target.value})} />
           <input type="text" list="units" placeholder="יחידה" value=${f.unit} onInput=${e=>setF({...f, unit:e.target.value})} maxLength=${12} />
