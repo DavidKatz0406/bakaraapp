@@ -2307,14 +2307,15 @@ ${l}`
       if(!p){ notify("מספר טלפון לא תקין"); return; }
       const n = name.trim(); if(!n){ notify("בחר שם"); return; }
       if(list && list.some(x => x.id === p)){ notify("המספר כבר רשום"); return; }
-      col().doc(p).set({ name:n, role, active:true, at:Date.now(), by:who })
+      const team = (()=>{ try{ return localStorage.getItem(TEAM_KEY) || ""; }catch(e){ return ""; } })();
+      col().doc(p).set({ name:n, role, active:true, at:Date.now(), by:who, team })
         .then(()=>{ notify(n + " נוסף — שלח לו את קישור הכניסה"); setPh(""); setName(""); })
         .catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
     }
     const upd = (r, patch, m) => col().doc(r.id).set(patch, { merge:true }).then(()=> m && notify(m)).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
     function invite(r){
       const team = (()=>{ try{ return localStorage.getItem(TEAM_KEY); }catch(e){ return ""; } })();
-      const link = location.origin + location.pathname + "#k=" + team;
+      const link = location.origin + location.pathname + (team ? "#k=" + team : "");
       const text = "שלום " + r.name + ", זה הקישור לבקרה של ט.ש. מי-רון.\nנכנסים עם מספר הטלפון שלך (" + fmtPhone(r.id) + ") ומקבלים קוד ב-SMS — פעם אחת בלבד.\n" + link;
       window.open("https://wa.me/" + r.id.replace(/\D/g, "") + "?text=" + encodeURIComponent(text), "_blank");
     }
@@ -2357,6 +2358,8 @@ ${l}`
 
   function App(){
     const cloudCode = useState(readTeamCode)[0];
+    // אין קוד צוות במכשיר (אייקון במסך הבית, דפדפן אחר, קישור בלי קוד) → כניסה בטלפון, והקוד נמשך מרשומת המשתמש
+    const needTeam = useState(()=>{ try{ return !cloudCode && sessionStorage.getItem("bakara_local") !== "1"; }catch(e){ return !cloudCode; } })[0];
     const [st, setSt] = useState(()=> cloudCode ? emptyState() : load());
     const stRef = useRef(null); if(stRef.current === null) stRef.current = st;
     const [cloud, setCloud] = useState({ mode: !!cloudCode, status: cloudCode ? "connecting" : "local", ready: !cloudCode, empty:false, loaded:{ sites:false, since:false, meta:false }, err:"" });
@@ -2371,7 +2374,7 @@ ${l}`
     const [idSheet, setIdSheet] = useState(false);
     const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"דוד" }; });
     // כניסה אישית: מי מחובר ומה התפקיד שלו (משרד / מנהל פרויקט)
-    const [auth, setAuth] = useState(()=> ({ s: cloudCode ? "checking" : "off" }));
+    const [auth, setAuth] = useState(()=> ({ s: (cloudCode || needTeam) ? "checking" : "off" }));
     const [staffSheet, setStaffSheet] = useState(false);
     const [rkOpen, setRkOpen] = useState({});      // הזמנות פתוחות מהרכש לפי אתר ("בדרך")
     const signedIn = cloudCode && auth.s === "in";
@@ -2386,16 +2389,23 @@ ${l}`
         const d = await db.collection("staff").doc(u.phoneNumber).get();
         if(d.exists && d.data().active !== false){
           const sd = d.data();
+          if(!cloudCode){
+            if(sd.team && /^[A-Za-z0-9]{16,64}$/.test(sd.team)){
+              try{ localStorage.setItem(TEAM_KEY, sd.team); sessionStorage.removeItem("bakara_local"); }catch(e){}
+              location.reload(); return;
+            }
+            setAuth({ s:"noteam", phone:u.phoneNumber }); return;
+          }
           Cloud.mgr = sd.role === "office" ? null : sd.name;
           setAuth({ s:"in", phone:u.phoneNumber, staff:sd }); return;
         }
         let ownerSet = true;
         try{ ownerSet = (await db.collection("staffmeta").doc("owner").get()).exists; }catch(e){}
-        setAuth({ s: ownerSet ? "nostaff" : "owner", phone:u.phoneNumber });
+        setAuth({ s: (ownerSet || !cloudCode) ? "nostaff" : "owner", phone:u.phoneNumber });
       }catch(e){ setAuth({ s:"err", phone:u.phoneNumber, err:String(e.code || e.message || e) }); }
     }
     useEffect(()=>{
-      if(!cloudCode) return;
+      if(!cloudCode && !needTeam) return;
       if(!fbInit()){ setAuth({ s:"err", err:"sdk-missing" }); return; }
       return firebase.auth().onAuthStateChanged(u => { checkStaff(u); });
     }, []);
@@ -2408,6 +2418,11 @@ ${l}`
       }catch(e){ notify("ההגדרה נכשלה: " + (e.code || e.message)); }
     }
     function logout(){ firebase.auth().signOut().then(()=> location.reload()); }
+    useEffect(()=>{
+      if(!signedIn || auth.staff.role !== "office") return;
+      const col = firebase.firestore().collection("staff");
+      col.get().then(q => q.docs.forEach(d => { if(d.data().team !== cloudCode) col.doc(d.id).set({ team:cloudCode }, { merge:true }).catch(()=>{}); })).catch(()=>{});
+    }, [signedIn]);
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
 
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
@@ -2708,8 +2723,14 @@ ${l}`
     }
     let body;
     const blocked = cloudCode && (!cloud.ready || cloud.empty);
-    if(cloudCode && auth.s !== "in")
+    if((cloudCode || needTeam) && auth.s !== "in")
       body = auth.s === "out" ? html`<${PhoneLogin} />`
+        : auth.s === "noteam" ? html`<div class="screen narrow"><div class="card">
+            <div class="lbl">חסר חיבור לצוות</div>
+            <div class="hint" style=${{textAlign:"start"}}>המספר רשום, אבל המשרד עוד לא עדכן את החיבור שלך. בקש מדוד לפתוח פעם אחת את הבקרה בטלפון שלו, ואז נסה שוב — או פתח את הקישור שקיבלת בוואטסאפ.</div>
+            <button class="btn wide" style=${{marginTop:12}} onClick=${()=>location.reload()}>נסה שוב</button>
+            <button class="btn wide" style=${{marginTop:8}} onClick=${logout}>יציאה / מספר אחר</button>
+          </div></div>`
         : auth.s === "owner" ? html`<${OwnerSetup} phone=${auth.phone} onOk=${becomeOwner} onOut=${logout} />`
         : auth.s === "nostaff" ? html`<div class="screen narrow"><div class="card">
             <div class="lbl">המספר לא רשום</div>
@@ -2777,9 +2798,10 @@ ${l}`
           </div>
           <button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
-          ${isOffice && (!cloudCode || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
+          ${isOffice && ((!cloudCode && !needTeam) || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
         </div>
-        ${!cloudCode
+        ${needTeam ? null
+          : !cloudCode
           ? html`<div class="banner">מצב מקומי — הנתונים נשמרים רק במכשיר הזה <button class="chip" onClick=${()=>setTeamSheet(true)}>הזן קוד צוות</button></div>`
           : cloud.status === "offline" ? html`<div class="banner">אין חיבור — השינויים נשמרים במכשיר ויסונכרנו כשהרשת תחזור</div>`
           : cloud.status === "error" && cloud.ready ? html`<div class="banner err">בעיית סנכרון (${cloud.err}) — השינויים עלולים לא להישמר במסד</div>` : null}
