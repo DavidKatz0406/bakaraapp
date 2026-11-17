@@ -24,7 +24,9 @@ service cloud.firestore {
     function isAtt(space) { return get(/databases/$(db)/documents/t/$(space)/meta/space).data.kind == 'att'; }
     // שם המנהל של אתר — בבקרה owner הוא {name}, במרחב הנוכחות owner הוא מחרוזת
     function ownerOf(d)   { return d.owner is map ? d.owner.name : d.owner; }
-    function ownsSite(space, sid) { return ownerOf(get(/databases/$(db)/documents/t/$(space)/sites/$(sid)).data) == myName(); }
+    // מנהל ראשי (owner) או מנהל נוסף (mgrs) של האתר
+    function manages(d)   { return ownerOf(d) == myName() || myName() in d.get('mgrs', []); }
+    function ownsSite(space, sid) { return manages(get(/databases/$(db)/documents/t/$(space)/sites/$(sid)).data); }
     function ownsWorker(space, wid) { return ownsSite(space, get(/databases/$(db)/documents/t/$(space)/workers/$(wid)).data.site); }
 
     // ── משתמשים ──
@@ -46,7 +48,7 @@ service cloud.firestore {
 
       // מנהל פרויקט — בקרה
       allow update: if isStaff() && coll == 'sites'
-                    && ownerOf(resource.data) == myName() && ownerOf(request.resource.data) == myName();
+                    && manages(resource.data) && manages(request.resource.data);
       allow write: if isStaff() && coll in ['requests', 'transfers', 'nudges', 'since'];
       allow create: if isStaff() && coll == 'log';
       allow create, update: if isStaff() && coll == 'photos' && ownsSite(space, request.resource.data.siteId);

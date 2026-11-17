@@ -534,15 +534,16 @@
   const RAWBY = {}; RAW.forEach(r => { RAWBY[r[2]] = r; });
 
   /* ---- מנהלי פרויקט אמיתיים — נלקחו מאפליקציית הרכש (שמות פרטיים בלבד, בלי טלפונים).
-     מפתח = מספר אתר בתיק. co = מנהל בכיר/מורשה נוסף על הפרויקט (דרג 2). ---- */
+     מפתח = מספר אתר בתיק. co = מנהל בכיר/מורשה נוסף על הפרויקט (דרג 2).
+     with = מנהלים נוספים עם גישה מלאה לאתר (רואים ומשנים כמו המנהל הראשי). ---- */
   const MGR = {
-    1:{ name:"אלי" },  2:{ name:"אייל" },  3:{ name:"סאמר" },  4:{ name:"סאמר" },
-    5:{ name:"איתי" },  6:{ name:"יער", co:["ליאור"] },  7:{ name:"אלכס" },  8:{ name:"ראובן" },
+    1:{ name:"אלי" },  2:{ name:"אוהד" },  3:{ name:"סאמר" },  4:{ name:"סאמר" },
+    5:{ name:"איתי" },  6:{ name:"יער", co:["ליאור"], with:["ליאור"] },  7:{ name:"אלכס" },  8:{ name:"ראובן" },
     9:{ name:"סאמר" },  10:{ name:"באהה" },  11:{ name:"מוראר", co:["מג׳ד"] },  12:{ name:"אבו לאבן" },
-    13:{ name:"אבו לאבן" },  14:{ name:"יער", co:["ליאור"] },  15:{ name:"וואהל" },  16:{ name:"וואהל" },
+    13:{ name:"אבו לאבן" },  14:{ name:"יער", co:["ליאור"], with:["ליאור"] },  15:{ name:"וואהל" },  16:{ name:"וואהל" },
     17:{ name:"באהה" },  18:{ name:"סאמר" },  19:{ name:"צביקה" },  20:{ name:"יזיד" },  21:{ name:"מוראר" },
-    23:{ name:"משה" },  25:{ name:"אולג" },  26:{ name:"באהה" },  27:{ name:"וואהל" },
-    28:{ name:"אולג" },  29:{ name:"אולג" },  30:{ name:"יניב" },  31:{ name:"כרובי" },
+    23:{ name:"משה" },  25:{ name:"אולג", with:["גנאדי"] },  26:{ name:"באהה" },  27:{ name:"וואהל" },
+    28:{ name:"אולג", with:["גנאדי"] },  29:{ name:"אולג", with:["גנאדי"] },  30:{ name:"יניב" },  31:{ name:"כרובי", with:["שלומי"] },
     32:{ name:"סאמר" },  33:{ name:"וואהל" },  34:{ name:"וואהל" },  35:{ name:"אלי" }
   };
   // אתרים שנפתחו מחדש (עדכון 11/2026 לפי רשימת העובדים)
@@ -556,6 +557,7 @@
       ? { name:m.name, role:"מנהל פרויקט" }
       : { name:"לא משויך", role:"דרוש שיוך מנהל" };
     site.senior = (m && m.co) ? m.co.join(", ") : "";
+    site.mgrs = (m && m.with) ? m.with.slice() : [];
   }
 
   // עדכון רשימת הפרויקטים: מוסיף פרויקטים חדשים מ-RAW, מעדכן שמות ומנהלים
@@ -670,9 +672,12 @@
 
   /* פיילוט: רק המנהלים האלה נספרים בחריגי "דוח חסר", "מלאי לא עודכן" ו"דיווח יומי חסר".
      כשמצטרפים עוד מנהלים — מוסיפים לכאן, או מרוקנים את הרשימה כדי לכלול את כולם. */
-  const PILOT = ["יער", "סאמר", "יניב"];
+  const PILOT = [];   // הפיילוט (יער, סאמר, יניב) הסתיים ב-17.11.2026 — המערכת פתוחה לכל המנהלים
   const inPilot = name => PILOT.length === 0 || PILOT.includes(name);
   const ownerName = s => (s.owner && s.owner.name) || "—";
+  // כל מי שמנהל את האתר: המנהל הראשי + מנהלים נוספים
+  const siteMgrs = s => [ownerName(s), ...((s && s.mgrs) || [])];
+  const managedBy = (s, n) => siteMgrs(s).includes(n);
 
   const pad2 = n => String(n).padStart(2, "0");
   function dstr(ts){ const d = new Date(ts); return d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()); }
@@ -982,7 +987,7 @@
     messagingSenderId: "316003592694",
     appId: "1:316003592694:web:e1dc8415b4f7ed1e073fd7"
   };
-  const ROSTER_V = 5;
+  const ROSTER_V = 6;   // 6: אוהד בחצרים, ליאור עם יער (הרצל, עצמאות), שלומי עם כרובי (עיר עולם), גנאדי עם אולג
   const TEAM_KEY = "bakara_team";
   const Cloud = { on:false, db:null, base:null, mgr:null };
 
@@ -1157,7 +1162,7 @@
     const del = (n, id) => { batch.delete(col(n).doc(docKey(id))); ops++; };
 
     // מנהל פרויקט כותב רק לאתרים שלו (החוקים במסד חוסמים כל דבר אחר — ואז כל הצרור נכשל)
-    const mine = (n, x) => !Cloud.mgr || n !== "sites" || (x && ownerName(x) === Cloud.mgr);
+    const mine = (n, x) => !Cloud.mgr || n !== "sites" || (x && managedBy(x, Cloud.mgr));
     [["sites", stripSite], ["requests", cleanDoc], ["transfers", cleanDoc]].forEach(([n, fix])=>{
       const before = new Map((prev[n] || []).map(x => [x.id, JSON.stringify(x)]));
       const ids = new Set();
@@ -2014,8 +2019,8 @@ ${l}`
       const batch = Cloud.db.batch();
       let n = 0;
       st.sites.forEach(s => {
-        const a = have.get(s.id), want = { id:s.id, name:s.name, num:s.num || 0, owner:ownerName(s), active:!!s.active };
-        if(!a || a.name !== want.name || a.owner !== want.owner || a.active !== want.active || a.num !== want.num){ batch.set(B.collection("sites").doc(docKey(s.id)), want, { merge:true }); n++; }
+        const a = have.get(s.id), want = { id:s.id, name:s.name, num:s.num || 0, owner:ownerName(s), mgrs:s.mgrs || [], active:!!s.active };
+        if(!a || a.name !== want.name || a.owner !== want.owner || a.active !== want.active || a.num !== want.num || JSON.stringify(a.mgrs || []) !== JSON.stringify(want.mgrs)){ batch.set(B.collection("sites").doc(docKey(s.id)), want, { merge:true }); n++; }
       });
       if(n) batch.commit().catch(()=>{});
     }, [B, asLoaded, st.sites, office]);
@@ -2042,7 +2047,7 @@ ${l}`
     useEffect(()=>{
       if(!B || !asLoaded || view === "month") return;
       const med = a => { const x = a.slice().sort((p, q) => p - q); return x[Math.floor(x.length / 2)]; };
-      const mine = new Set(st.sites.filter(x => mgr === "all" || ownerName(x) === mgr).map(x => x.id));
+      const mine = new Set(st.sites.filter(x => mgr === "all" || managedBy(x, mgr)).map(x => x.id));
       asites.filter(s => s.lat == null && s.active !== false && mine.has(s.id)).forEach(s => {
         const pts = punches.filter(p => p.site === s.id && p.lat != null && (p.acc || 999) <= 100);
         if(pts.length < 3 || new Set(pts.map(p => p.w)).size < 2) return;
@@ -2112,7 +2117,7 @@ ${l}`
     const sitesById = {};
     st.sites.forEach(s => { sitesById[s.id] = { id:s.id, name:s.name, owner:ownerName(s), active:s.active }; });
     asites.forEach(a => { sitesById[a.id] = { ...(sitesById[a.id] || {}), ...a }; });
-    const visSites = st.sites.filter(s => mgr === "all" || ownerName(s) === mgr);
+    const visSites = st.sites.filter(s => mgr === "all" || managedBy(s, mgr));
     const visIds = new Set(visSites.map(s => s.id));
     const T = (k, label) => html`<button class=${"chip " + (view === k ? "on" : "")} onClick=${()=>setView(k)}>${label}</button>`;
     const flagChips = (fl, small) => fl.filter(f => !small || f.sev !== "ok").map(f => html`<span key=${f.k} class=${"aflag " + f.sev}>${f.t}</span>`);
@@ -2569,8 +2574,8 @@ ${l}`
   function StaffAdmin({ st, who, myPhone, notify, onClose }){
     const [list, setList] = useState(null);
     const [ph, setPh] = useState(""), [name, setName] = useState(""), [role, setRole] = useState("mgr");
-    const owners = [...new Set(st.sites.filter(s => s.active).map(ownerName).filter(n => n && n !== "—" && n !== "לא משויך"))].sort((a, b) => a.localeCompare(b, "he"));
-    const sitesOf = n => st.sites.filter(s => s.active && ownerName(s) === n).length;
+    const owners = [...new Set(st.sites.filter(s => s.active).flatMap(siteMgrs).filter(n => n && n !== "—" && n !== "לא משויך"))].sort((a, b) => a.localeCompare(b, "he"));
+    const sitesOf = n => st.sites.filter(s => s.active && managedBy(s, n)).length;
     useEffect(()=> firebase.firestore().collection("staff").onSnapshot(
       q => setList(q.docs.map(d => ({ id:d.id, ...d.data() })).sort((a, b) => (a.role === b.role ? 0 : a.role === "office" ? -1 : 1) || String(a.name).localeCompare(String(b.name), "he"))),
       e => notify("אין הרשאה לרשימת המשתמשים: " + (e.code || e.message))), []);
@@ -2593,6 +2598,31 @@ ${l}`
       window.open("https://wa.me/" + r.id.replace(/\D/g, "") + "?text=" + encodeURIComponent(text), "_blank");
     }
     const warnName = role === "mgr" && name.trim() && !owners.includes(name.trim());
+    // הוספה מרובה: שורה לכל משתמש — "שם, טלפון" (להוסיף "משרד" למשתמש משרד)
+    const [bulk, setBulk] = useState(""), [bulkOpen, setBulkOpen] = useState(false), [bulkBusy, setBulkBusy] = useState(false);
+    const parsed = bulk.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const parts = l.split(/[,\t;|]+/).map(x => x.trim()).filter(Boolean);
+      const tok = parts.find(x => x.replace(/\D/g, "").length >= 9);
+      const p = tok ? normPhone(tok) : null, office = parts.includes("משרד");
+      const nm = parts.filter(x => x !== tok && x !== "משרד" && x !== "מנהל").join(" ");
+      const err = !p ? "טלפון לא תקין" : !nm ? "חסר שם" : (list && list.some(x => x.id === p)) ? "המספר כבר רשום"
+        : (!office && !owners.includes(nm)) ? "אין אתרים בשם \"" + nm + "\" — השם חייב להיות זהה לשם המנהל באתרים" : "";
+      return { l, p, nm, role: office ? "office" : "mgr", err };
+    });
+    const okRows = parsed.filter(r => !r.err);
+    async function addBulk(){
+      const team = (()=>{ try{ return localStorage.getItem(TEAM_KEY) || ""; }catch(e){ return ""; } })();
+      setBulkBusy(true);
+      try{
+        const b = firebase.firestore().batch();
+        okRows.forEach(r => b.set(col().doc(r.p), { name:r.nm, role:r.role, active:true, at:Date.now(), by:who, team }));
+        await b.commit();
+        notify(okRows.length + " משתמשים נוספו");
+        setBulk(""); setBulkOpen(false);
+      }catch(e){ notify("שמירה נכשלה: " + (e.code || e.message)); }
+      setBulkBusy(false);
+    }
+    const missing = owners.filter(n => !(list || []).some(x => x.name === n && x.active !== false));
     return html`
       <div class="scrim" onClick=${onClose}>
         <div class="sheet asheet" onClick=${e=>e.stopPropagation()}>
@@ -2614,6 +2644,19 @@ ${l}`
             ${warnName && html`<div class="alert warn"><span class="b"></span>אין אתרים פעילים בשם הזה — המנהל לא יראה כלום.</div>`}
             <button class="btn pri" disabled=${!ph.trim() || !name.trim()} onClick=${add}>הוסף</button>
           </div>
+          <div class="lbl" style=${{marginTop:14}}>הוספה מרובה</div>
+          ${!bulkOpen
+            ? html`<button class="addsection" onClick=${()=>setBulkOpen(true)}>＋ הדבקת רשימה (שם, טלפון בכל שורה)</button>`
+            : html`<div class="newunit" style=${{display:"flex", flexDirection:"column", gap:8}}>
+                <textarea rows="7" style=${{fontFamily:"inherit", fontSize:".88rem", padding:"9px 11px", border:"1px solid var(--line)", borderRadius:9, background:"var(--surface)", color:"var(--ink)"}}
+                  placeholder=${"שורה לכל מנהל, למשל:\nצביקה, 052-7979851\nוואהל, 052-3474389\nלמשתמש משרד: טל, 052-1234567, משרד"} value=${bulk} onInput=${e=>setBulk(e.target.value)}></textarea>
+                ${parsed.map((r, i) => html`<div key=${i} class="sub" style=${{color: r.err ? "var(--crit)" : "var(--ok)"}}>${r.err ? "✕ " + r.l + " — " + r.err : "✓ " + r.nm + " · " + (r.role === "office" ? "משרד" : sitesOf(r.nm) + " אתרים") + " · " + fmtPhone(r.p)}</div>`)}
+                <div class="btnrow">
+                  <button class="btn" onClick=${()=>{ setBulk(""); setBulkOpen(false); }}>ביטול</button>
+                  <button class="btn pri" disabled=${!okRows.length || bulkBusy} onClick=${addBulk}>${bulkBusy ? "מוסיף…" : "הוסף " + okRows.length + " משתמשים"}</button>
+                </div>
+              </div>`}
+          ${list && missing.length > 0 && html`<div class="alert warn" style=${{marginTop:10}}><span class="b"></span>מנהלים עם אתרים פעילים שעוד לא רשומים: ${missing.join(", ")}</div>`}
           <div class="lbl" style=${{marginTop:14}}>משתמשים (${list ? list.length : "…"})</div>
           ${(list || []).map(r => html`
             <div key=${r.id} class=${"awk " + (r.active === false ? "off" : "")}>
@@ -2802,7 +2845,7 @@ ${l}`
     // מנהל פרויקט רואה רק את האתרים שלו — כל המסכים מקבלים את התצוגה המסוננת (vst)
     const vst = useMemo(()=>{
       if(!myMgr) return st;
-      const own = st.sites.filter(s => ownerName(s) === myMgr), ids = new Set(own.map(s => s.id));
+      const own = st.sites.filter(s => managedBy(s, myMgr)), ids = new Set(own.map(s => s.id));
       // גם יומן הפעולות: רק פעולות באתרים שלו (או פעולות כלליות שהוא עצמו ביצע)
       return { ...st, sites: own, log: (st.log || []).filter(l => l.siteId ? ids.has(l.siteId) : l.who === myMgr) };
     }, [st, myMgr]);
@@ -2810,7 +2853,12 @@ ${l}`
     const bySite = useCallback((id)=> sites.find(s=>s.id===id), [sites]);
 
     const exAll = useMemo(()=> deriveExceptions(st, now, rkOpen), [st.sites, st.since, st.trackStart, now, rkOpen]);
-    const exceptions = useMemo(()=> myMgr ? exAll.filter(e => e.owner === myMgr) : exAll, [exAll, myMgr]);
+    // מנהל רואה את החריגים שלו + חריגים באתרים שהוא מנהל נוסף בהם
+    const exceptions = useMemo(()=>{
+      if(!myMgr) return exAll;
+      const ids = new Set(vst.sites.map(x => x.id));
+      return exAll.filter(e => e.owner === myMgr || (e.siteId && ids.has(e.siteId)) || (e.siteIds || []).some(id => ids.has(id)));
+    }, [exAll, myMgr, vst]);
     const cards = useMemo(()=> scorecards(vst, exceptions, now), [vst, st.trackStart, exceptions, now]);
     const ctlV = myMgr ? { ...ctl, mgr: myMgr } : ctl;
     const setCtlV = c => setCtl(myMgr ? { ...c, mgr: myMgr } : c);
@@ -3164,7 +3212,7 @@ ${l}`
   function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify, who, locked }){
     const [rep, setRep] = useState(null);
     const { tab, mgr } = ctl;
-    const list = exceptions.filter(e => mgr === "all" || e.owner === mgr);
+    const list = exceptions.filter(e => mgr === "all" || locked || e.owner === mgr);
     const crit = exceptions.filter(e => e.sev === "crit").length;
     const l3 = exceptions.filter(e => e.level === 3).length;
     const active = st.sites.filter(s => s.active);
@@ -3305,7 +3353,8 @@ ${l}`
   }
 
   function PlanMatrix({ st, now, mgr, cards, exceptions, onOpen }){
-    const names = cards.map(c => c.name).filter(n => mgr === "all" || n === mgr);
+    // מנהל נוסף (בלי כרטיס משלו) רואה את הכרטיסים של האתרים שלו
+    const names = cards.map(c => c.name).filter(n => mgr === "all" || n === mgr || !cards.some(c => c.name === mgr));
     const rowsOf = n => st.sites.filter(s => s.active && ((s.owner && s.owner.name) || "—") === n).sort((a, b) => a.num - b.num);
     const withText = st.sites.filter(s => {
       if(!s.active || (mgr !== "all" && ((s.owner && s.owner.name) || "—") !== mgr)) return false;
@@ -3356,7 +3405,7 @@ ${l}`
 
   /* מלאי כל האתרים — בקרה על מה שהמנהלים הזינו */
   function StockOverview({ st, now, mgr, cards, onOpen }){
-    const sites = st.sites.filter(s => s.active && (mgr === "all" || ((s.owner && s.owner.name) || "—") === mgr))
+    const sites = st.sites.filter(s => s.active && (mgr === "all" || managedBy(s, mgr)))
       .map(s => ({ s, i: stockInfo(s, st, now) }))
       .sort((a, b) => ((inPilot(ownerName(b.s)) ? 1 : 0) - (inPilot(ownerName(a.s)) ? 1 : 0)) || (b.i.short - a.i.short) || ((a.i.fresh ? 1 : 0) - (b.i.fresh ? 1 : 0)) || a.s.num - b.s.num);
     const counted = sites.filter(x => inPilot(ownerName(x.s)));
