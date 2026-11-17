@@ -1483,11 +1483,12 @@ ${l}`
           v.muted = true; v.setAttribute("playsinline", ""); v.srcObject = s; v.play().catch(()=>{});
         })
         .catch(()=> setErr(true));
-      return ()=>{ dead = true; if(stream) stream.getTracks().forEach(t => t.stop()); };
+      const watch = setTimeout(()=>{ const v = vid.current; if(!dead && !(v && v.videoWidth)) setErr(true); }, 6000);
+      return ()=>{ dead = true; clearTimeout(watch); if(stream) stream.getTracks().forEach(t => t.stop()); };
     }, []);
     function shoot(){
       const v = vid.current;
-      if(!v || !v.videoWidth) return;
+      if(!v || !v.videoWidth){ setErr(true); fileRef.current && fileRef.current.click(); return; }
       onShot(selfieFrame(v, v.videoWidth, v.videoHeight), "live");
     }
     function fromFile(e){
@@ -1580,6 +1581,7 @@ ${l}`
       setDone(null);
       setFlow({ type, step:"cam", photo:null, cam:"live", pos:null, posErr:null, site:null });
       if(!navigator.geolocation){ setFlow(f => f && { ...f, posErr:"na" }); return; }
+      setTimeout(()=> setFlow(f => f && !f.pos && !f.posErr ? { ...f, posErr:"slow" } : f), 25000);
       navigator.geolocation.getCurrentPosition(
         p => setFlow(f => f && { ...f, pos:{ lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy) } }),
         e => setFlow(f => f && { ...f, posErr: String(e.code || "err") }),
