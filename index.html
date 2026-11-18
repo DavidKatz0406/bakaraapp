@@ -442,6 +442,13 @@
   .usewarn{ font-family:"Heebo",sans-serif; font-size:.76rem; color:var(--crit); }
   .usecount{ color:var(--warn, var(--crit)); font-weight:600; }
   .usehist{ margin-top:6px; }
+  .agrep{ margin-top:10px; border-top:1px solid var(--line-2); padding-top:6px; }
+  .agrep .agtot{ font-weight:700; border-top:1px solid var(--line); }
+  .agw{ display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--line-2); }
+  .agw .an{ flex:1; min-width:0; font-family:"Heebo",sans-serif; font-size:.86rem; }
+  .agw .an small{ display:block; color:var(--ink-3); font-size:.72rem; }
+  .agw select,.agw input{ font-family:inherit; font-size:.8rem; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
+  .agw select{ max-width:44%; } .agw input{ width:84px; }
   /* צופה (קריאה בלבד): תגית קבועה, וכפתורי הפעולה מוסתרים. האכיפה עצמה — בחוקי המסד */
   .rotag{ font-family:"Heebo",sans-serif; font-size:.74rem; font-weight:700; color:var(--accent-ink); background:var(--accent-wash); border-radius:999px; padding:4px 10px; white-space:nowrap; }
   body.ro .btn.ok, body.ro .btn.pri:not(.rokeep), body.ro .btn.danger, body.ro .xbtn, body.ro .qty button,
@@ -2035,6 +2042,9 @@ ${l}`
     const [refs, setRefs] = useState({});
     const [mstat, setMstat] = useState(null);
     const [delRun, setDelRun] = useState(null);
+    const [agencies, setAgencies] = useState([]);
+    const [agReps, setAgReps] = useState([]);
+    const [agAcks, setAgAcks] = useState([]);
     const B = useMemo(()=> code && Cloud.db ? Cloud.db.collection("t").doc(code) : null, [code]);
 
     // קוד הנוכחות נוצר פעם אחת ונשמר במסד הבקרה — כל המנהלים רואים את אותו מרחב
@@ -2138,6 +2148,16 @@ ${l}`
       batch.commit().then(()=> notify("תמונת הזיהוי עודכנה")).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
       setRefs(m => ({ ...m, [wid]: url }));
     }
+    // חברות כ״א, הדוחות הנעולים והאישורים — רק במבט של כל האתרים (משרד / צופה)
+    useEffect(()=>{
+      if(!B || mgr !== "all") return;
+      const u = [
+        B.collection("agencies").onSnapshot(q => setAgencies(q.docs.map(d => d.data())), ()=>{}),
+        B.collection("agreports").onSnapshot(q => setAgReps(q.docs.map(d => d.data())), ()=>{}),
+        B.collection("agacks").onSnapshot(q => setAgAcks(q.docs.map(d => d.data({ serverTimestamps:"estimate" }))), ()=>{})
+      ];
+      return ()=> u.forEach(f => f());
+    }, [B, mgr]);
     // מצב החודש: מתי הופק האקסל ומה נמחק
     useEffect(()=>{
       if(!B || view !== "month") return;
@@ -2296,6 +2316,12 @@ ${l}`
       const phIds = mdata && mdata.punches ? [...new Set(mdata.punches.map(p => p.id))].sort() : [];
       const ended = month < dstr(now).slice(0, 7);
       const ms = mstat || {};
+      // חברות כ״א שיש להן עובדים: כל השבועות של החודש חייבים להיות נעולים ומאושרים לפני מחיקת התמונות
+      const agPend = agencies.filter(a => a.active !== false && workers.some(w => w.agency === a.id)).flatMap(a => {
+        const mo = agMonth(month, a.id, agReps, agAcks);
+        const miss = mo.weeks.filter(x => !(x.ack && x.ack.status === "approved")).map(x => x.ws.slice(8) + "/" + x.ws.slice(5, 7));
+        return miss.length ? [a.name + " (שבועות " + miss.join(", ") + ")"] : [];
+      });
       let photoCard = null;
       if(mgr === "all" && mdata && mdata.punches){
         const when = x => tsMs(x) ? dmy(tsMs(x)) + " " + hhmm(tsMs(x)) : "";
@@ -2304,6 +2330,7 @@ ${l}`
         else if(!phIds.length) body = html`<div class="sub2">אין תמונות בחודש הזה.</div>`;
         else if(!ended) body = html`<div class="sub2">אפשר למחוק את התמונות רק אחרי שהחודש נגמר והאקסל לשכר הופק.</div>`;
         else if(!ms.exportedAt) body = html`<div class="sub2">קודם מפיקים את קובץ האקסל לשכר (למעלה), ורק אז אפשר למחוק את התמונות.</div>`;
+        else if(agPend.length) body = html`<div class="sub2">התמונות הן הראיה לשעות. אפשר למחוק אותן רק אחרי שחברות כ״א אישרו את כל השבועות של החודש. עוד חסר: ${agPend.join(" · ")}.</div>`;
         else body = html`
           <div class="sub2">האקסל הופק ב-${when(ms.exportedAt)} ע״י ${ms.exportedBy || ""}. ${totalOpen > 0 ? html`<b style=${{ color:"var(--crit)" }}>שימו לב: ${totalOpen} ימים עוד לא נבדקו — אחרי המחיקה לא תהיה תמונה לבדוק לפיה.</b>` : ""}</div>
           ${delRun && html`<div class="sub2" style=${{ marginTop:6 }}>נמחקו ${delRun.done} מתוך ${delRun.total}${delRun.err ? "" : "…"}</div>`}
@@ -2346,6 +2373,9 @@ ${l}`
           ${photoCard}`}`;
     }
 
+    if(view === "ag" && mgr === "all")
+      content = html`<${AttAgencies} B=${B} workers=${workers} sitesById=${sitesById} who=${who} notify=${notify} now=${now} office=${office}
+        agencies=${agencies} reps=${agReps} acks=${agAcks} />`;
     if(view === "workers")
       content = html`<${AttWorkers} B=${B} code=${code} workers=${workers} visSites=${visSites} mgr=${mgr} who=${who} notify=${notify} />`;
 
@@ -2398,6 +2428,7 @@ ${l}`
         <div class="chips" style=${{ marginTop:0 }}>
           ${T("day", "יומי")}
           ${T("month", "חודשי ושכר")}
+          ${mgr === "all" && T("ag", "חברות כ״א")}
           ${T("workers", "עובדים (" + workers.filter(w => w.active !== false && (mgr === "all" || wSites(w).some(x => visIds.has(x)))).length + ")")}
         </div>
         ${err && html`<div class="alert crit" style=${{ marginBottom:10 }}><span class="b"></span>${err}</div>`}
@@ -2405,6 +2436,332 @@ ${l}`
         <div class="hint">כל עובד נרשם מהטלפון שלו עם סלפי. השעה נלקחת מהשרת (לא מהטלפון), ונשמרים גם המיקום והטלפון שממנו נרשם. תיקון של מנהל לא מוחק את הרישום המקורי: הוא נשמר עם שם המתקן והסיבה.</div>
         ${sheetEl}
         ${big && html`<div class="lightbox" onClick=${()=>setBig(null)}><img src=${big} alt="" /><button class="x">✕</button></div>`}
+      </div>`;
+  }
+
+  /* ═════════════ דוחות שעות לחברות כ״א ═════════════
+     המשרד נועל שבוע שהסתיים (א׳–ש׳) לכל חברה ← נוצר דוח קבוע (agreports). נעילה חוזרת = גרסה חדשה,
+     והגרסה הקודמת נשמרת בדיוק כמו שהייתה (agreportsv). החברה רואה רק את הדוחות שלה ומאשרת או משיגה (agacks).
+     הסכום: שעות × התעריף לשעה של החברה, בלי חישוב שעות נוספות אצלנו. אין בדוח תמונות, מיקומים או טלפונים. */
+  const AG_RATE = 75;
+  const r2 = x => Math.round((Number(x) || 0) * 100) / 100;
+  const nis = x => "₪" + r2(x).toLocaleString("he-IL", { minimumFractionDigits:2, maximumFractionDigits:2 });
+  const dmyS = s => { const d = dayDate(s); return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + "/" + d.getFullYear(); };
+  const wkStartOf = s => { const d = dayDate(s); d.setDate(d.getDate() - d.getDay()); return dstr(d.getTime()); };
+  const wkLabel = ws => dmyS(ws).slice(0, 5) + " עד " + dmyS(addDay(ws, 6));   // "עד" שומר על הסדר בתצוגה מימין לשמאל
+  const monthLabel = mo => mo.slice(5) + "/" + mo.slice(0, 4);
+  // תחילות השבועות שנוגעים בחודש
+  function monthWeeks(month){
+    const [y, m] = month.split("-").map(Number);
+    const last = dstr(new Date(y, m, 0).getTime()), out = [];
+    for(let ws = wkStartOf(month + "-01"); ws <= last; ws = addDay(ws, 7)) out.push(ws);
+    return out;
+  }
+  // האישור של הגרסה הנוכחית (אם יש)
+  const ackOf = (rep, acks) => rep ? (acks || []).find(a => a.rep === rep.id && a.version === rep.version) || null : null;
+  const ackText = a => !a ? "ממתין לאישור החברה" : (a.status === "approved" ? "✓ אושר" : "⚠ השגה") + " ע״י " + a.by + (tsMs(a.at) ? " · " + dmy(tsMs(a.at)) + " " + hhmm(tsMs(a.at)) : "");
+  // בניית הדוח מהשורות של חישוב הנוכחות (אותו חישוב של המסך החודשי והאקסל לשכר)
+  function agBuild(ag, ws, rows, wById, sitesById, who, prev){
+    const sName = id => (sitesById[id] && sitesById[id].name) || "";
+    const out = rows.filter(r => r.ms > 0 || r.fix).map(r => {
+      const w = wById.get(r.w) || {};
+      const f = r.fix ? (r.fix.absent ? "היעדרות" : r.ps.length ? "תוקן" : "הוזן ידנית") + " ע״י " + (r.fix.by || "") + (r.fix.reason ? ": " + r.fix.reason : "") : "";
+      return { d:r.day, w:r.w, n:r.name, e:String(w.empNo || ""), s:r.sites.map(sName).filter(Boolean).join(" + ") || sName(r.site),
+        i: r.inT == null ? "" : hhmm(r.inT), o: r.outT == null ? "" : hhmm(r.outT), h: r2(hrs(r.ms)), f };
+    }).sort((a, b) => a.n.localeCompare(b.n, "he") || a.d.localeCompare(b.d));
+    const tot = new Map();
+    out.forEach(x => { const t = tot.get(x.w) || { w:x.w, n:x.n, e:x.e, days:0, h:0 }; t.h = r2(t.h + x.h); if(x.h > 0) t.days++; tot.set(x.w, t); });
+    const totalHrs = r2(out.reduce((s, x) => s + x.h, 0)), rate = Number(ag.rate) || AG_RATE;
+    const chg = [];
+    if(prev){
+      const key = x => x.w + "|" + x.d, txt = x => x ? (x.i || "—") + "–" + (x.o || "—") + " (" + x.h + " ש׳)" : "לא היה";
+      const a = new Map((prev.rows || []).map(x => [key(x), x])), b = new Map(out.map(x => [key(x), x]));
+      [...new Set([...a.keys(), ...b.keys()])].sort().forEach(k => {
+        const p = a.get(k), q = b.get(k);
+        if(!p || !q || p.i !== q.i || p.o !== q.o || p.h !== q.h || p.f !== q.f) chg.push({ n:(q || p).n, d:(q || p).d, from:txt(p), to:q ? txt(q) : "הוסר", f:q ? q.f : "" });
+      });
+    }
+    return { id: ag.id + "_" + ws, ag: ag.id, agName: ag.name, ws, we: addDay(ws, 6), version: prev ? prev.version + 1 : 1,
+      rate, rows: out, tot: [...tot.values()].sort((a, b) => a.n.localeCompare(b.n, "he")),
+      totalHrs, amount: r2(totalHrs * rate), chg, lockedBy: who };
+  }
+  // השוואה בין מה שנעול למה שמחושב עכשיו
+  const agSame = (rep, b) => rep && JSON.stringify(rep.rows) === JSON.stringify(b.rows) && rep.rate === b.rate;
+  // אקסל: סיכום לעובד + פירוט יומי. parts = [{ rep, ack, rows }] — rows מסוננות לחודש כשצריך
+  function agXlsx(title, parts){
+    const rows = parts.flatMap(p => p.rows.map(x => ({ ...x, rate:p.rep.rate })));
+    const tot = new Map();
+    rows.forEach(x => { const t = tot.get(x.w) || { n:x.n, e:x.e, days:0, h:0, amt:0 }; t.h = r2(t.h + x.h); t.amt = r2(t.amt + x.h * x.rate); if(x.h > 0) t.days++; tot.set(x.w, t); });
+    const H = r2(rows.reduce((s, x) => s + x.h, 0)), A = r2(rows.reduce((s, x) => s + x.h * x.rate, 0));
+    const sum = [["מספר עובד", "שם", "ימי עבודה", "שעות", "תעריף לשעה", "סכום (₪)"]];
+    [...tot.values()].sort((a, b) => a.n.localeCompare(b.n, "he")).forEach(t => sum.push([t.e, t.n, t.days, t.h, t.days ? r2(t.amt / (t.h || 1)) : "", t.amt]));
+    sum.push([], ["", "סה״כ", "", H, "", A], []);
+    parts.forEach(p => sum.push(["", "שבוע " + wkLabel(p.rep.ws) + " · גרסה " + p.rep.version + " · ננעל ע״י " + (p.rep.lockedBy || "") + (tsMs(p.rep.lockedAt) ? " ב-" + dmy(tsMs(p.rep.lockedAt)) : "") + " · " + ackText(p.ack)]));
+    const det = [["תאריך", "יום", "מספר עובד", "שם", "אתר", "כניסה", "יציאה", "שעות", "הערה"]];
+    rows.slice().sort((a, b) => a.n.localeCompare(b.n, "he") || a.d.localeCompare(b.d))
+      .forEach(x => det.push([dmyS(x.d), WDAY[dayDate(x.d).getDay()], x.e, x.n, x.s, x.i, x.o, x.h, x.f]));
+    saveFile(xlsxBlob([{ name:"סיכום", rows:sum, widths:[12, 22, 10, 10, 11, 12] }, { name:"פירוט יומי", rows:det, widths:[12, 6, 12, 22, 24, 8, 8, 8, 44] }]), title + ".xlsx");
+  }
+  // חודש: מכל דוח נעול שנוגע בחודש — רק הימים של החודש
+  function agMonth(month, ag, reps, acks){
+    const weeks = monthWeeks(month).map(ws => {
+      const rep = reps.find(r => r.id === ag + "_" + ws) || null, ack = ackOf(rep, acks);
+      return { ws, rep, ack, rows: rep ? rep.rows.filter(x => x.d.slice(0, 7) === month) : [] };
+    });
+    const H = r2(weeks.reduce((s, x) => s + x.rows.reduce((t, y) => t + y.h, 0), 0));
+    const A = r2(weeks.reduce((s, x) => s + x.rows.reduce((t, y) => t + y.h * x.rep.rate, 0), 0));
+    return { weeks, H, A, done: weeks.every(x => x.rep && x.ack && x.ack.status === "approved") };
+  }
+
+  function AgRepView({ rep, ack, acks }){
+    const old = (acks || []).filter(a => a.rep === rep.id && a.version !== rep.version).sort((a, b) => b.version - a.version);
+    return html`
+      <div class="agrep">
+        <div class="arow head"><span class="an">עובד</span><span class="at">ימים</span><span class="ah">שעות</span><span class="af">סכום</span></div>
+        ${rep.tot.map(t => html`<div key=${t.w} class="arow sm"><span class="an">${t.n}${t.e ? html`<small>מס׳ ${t.e}</small>` : null}</span><span class="at">${t.days}</span><span class="ah">${t.h.toFixed(2)}</span><span class="af">${nis(t.h * rep.rate)}</span></div>`)}
+        <div class="arow sm agtot"><span class="an">סה״כ</span><span class="at"></span><span class="ah">${rep.totalHrs.toFixed(2)}</span><span class="af">${nis(rep.amount)}</span></div>
+        <details class="amon"><summary class="linkbtn">פירוט יומי (${rep.rows.length})</summary>
+          ${rep.rows.map(x => html`<div key=${x.w + x.d} class="rkord">${dmyS(x.d).slice(0, 5)} יום ${WDAY[dayDate(x.d).getDay()]} · <b>${x.n}</b> · ${x.i || "—"}–${x.o || "—"} · ${x.h.toFixed(2)} ש׳<div>${x.s}${x.f ? " · " + x.f : ""}</div></div>`)}
+        </details>
+        ${rep.version > 1 && rep.chg && rep.chg.length > 0 && html`<details class="amon" open><summary class="linkbtn">מה השתנה מגרסה ${rep.version - 1} (${rep.chg.length})</summary>
+          ${rep.chg.map((c, i) => html`<div key=${i} class="rkord"><b>${c.n}</b> · ${dmyS(c.d).slice(0, 5)}<div>היה: ${c.from} ← עכשיו: ${c.to}${c.f ? " · " + c.f : ""}</div></div>`)}
+        </details>`}
+        <div class="sub2" style=${{ marginTop:6 }}>גרסה ${rep.version} · ננעל ע״י ${rep.lockedBy || ""}${tsMs(rep.lockedAt) ? " · " + dmy(tsMs(rep.lockedAt)) + " " + hhmm(tsMs(rep.lockedAt)) : ""} · תעריף ${nis(rep.rate)} לשעה</div>
+        ${ack && ack.status === "disputed" && html`<div class="alert warn" style=${{ marginTop:8 }}><span class="b"></span>השגה של ${ack.by}: ${ack.note}</div>`}
+        ${old.map(a => html`<div key=${a.id} class="sub2">גרסה ${a.version}: ${ackText(a)}${a.note ? " — " + a.note : ""}</div>`)}
+      </div>`;
+  }
+
+  /* ── מסך המשרד: חברות, שיוך עובדים, נעילת שבוע וסיכום חודשי ── */
+  function AttAgencies({ B, workers, sitesById, who, notify, now, office, agencies, reps, acks }){
+    const today = dstr(now);
+    const [ws, setWs] = useState(()=> addDay(wkStartOf(dstr(Date.now())), -7));
+    const [wd, setWd] = useState(null);
+    const [busy, setBusy] = useState("");
+    const [open, setOpen] = useState(null);
+    const [nag, setNag] = useState({ name:"", rate:String(AG_RATE) });
+    const [onlyNone, setOnlyNone] = useState(true);
+    const [q, setQ] = useState("");
+    const we = addDay(ws, 6), ended = addDay(ws, 7) <= today;
+    function loadWeek(){
+      setWd(null);
+      Promise.all([
+        B.collection("punch").where("day", ">=", ws).where("day", "<=", we).get(),
+        B.collection("fix").where("day", ">=", ws).where("day", "<=", we).get()
+      ]).then(([p, f]) => setWd({ ws, punches:p.docs.map(d => d.data({ serverTimestamps:"estimate" })), fixes:f.docs.map(d => d.data({ serverTimestamps:"estimate" })) }))
+        .catch(e => { setWd({ ws, err:String(e.code || e.message || e) }); });
+    }
+    useEffect(()=>{ if(B) loadWeek(); }, [B, ws]);
+    const wById = new Map(workers.map(w => [w.id, w]));
+    const rows = wd && wd.punches ? dayRows(wd.punches, wd.fixes, workers, sitesById, now) : [];
+    const act = agencies.filter(a => a.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+    const agName = id => { const a = agencies.find(x => x.id === id); return a ? a.name : ""; };
+
+    async function lock(ag, built, rep){
+      if(!confirm((rep ? "לנעול מחדש (גרסה " + built.version + ")" : "לנעול") + " את שבוע " + wkLabel(ws) + " של " + ag.name + "?\n\n" +
+        built.tot.length + " עובדים · " + built.totalHrs + " שעות · " + nis(built.amount) +
+        "\n\nהדוח יישלח לאישור החברה." + (rep ? " הגרסה הקודמת נשמרת כמו שהיא." : ""))) return;
+      setBusy(ag.id);
+      try{
+        const batch = Cloud.db.batch();
+        if(rep) batch.set(B.collection("agreportsv").doc(rep.id + "_v" + rep.version), rep);
+        batch.set(B.collection("agreports").doc(built.id), { ...built, lockedAt:FV() });
+        await batch.commit();
+        notify("השבוע ננעל ונשלח לאישור " + ag.name);
+      }catch(e){ notify("הנעילה נכשלה: " + (e.code || e.message)); }
+      setBusy("");
+    }
+    function addAgency(){
+      const name = nag.name.trim(), rate = Number(nag.rate);
+      if(!name || !(rate > 0)) return;
+      const id = rid(8);
+      B.collection("agencies").doc(id).set({ id, name, rate, active:true, at:Date.now(), by:who })
+        .then(()=>{ notify(name + " נוספה"); setNag({ name:"", rate:String(AG_RATE) }); }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+    }
+    const updAg = (a, patch) => B.collection("agencies").doc(a.id).set(patch, { merge:true }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+    const updW = (w, patch) => B.collection("workers").doc(w.id).set(patch, { merge:true }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+
+    const month = addDay(ws, 3).slice(0, 7);   // החודש של רוב ימי השבוע
+    const wl = workers.filter(w => w.active !== false && (!onlyNone || !w.agency) && (!q || String(w.name).includes(q.trim())))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+    const sName = id => (sitesById[id] && sitesById[id].name) || "";
+
+    return html`
+      <div>
+        <div class="rowbet adate">
+          <button class="chip" onClick=${()=>setWs(addDay(ws, -7))}>‹ שבוע קודם</button>
+          <b>${wkLabel(ws)}</b>
+          <button class="chip" disabled=${addDay(ws, 7) > today} onClick=${()=>setWs(addDay(ws, 7))}>שבוע הבא ›</button>
+        </div>
+        ${!act.length && html`<div class="alert warn" style=${{ margin:"12px 0" }}><span class="b"></span>עוד לא הוגדרו חברות כ״א. מוסיפים אותן למטה, ואז משייכים את העובדים.</div>`}
+        ${wd && wd.err && html`<div class="alert crit" style=${{ margin:"12px 0" }}><span class="b"></span>${wd.err}</div>`}
+        ${act.map(ag => {
+          const wset = new Set(workers.filter(w => w.agency === ag.id).map(w => w.id));
+          const ar = rows.filter(r => wset.has(r.w));
+          const opn = ar.filter(r => r.openFlags.length);
+          const rep = reps.find(r => r.id === ag.id + "_" + ws) || null, ack = ackOf(rep, acks);
+          const built = wd && wd.punches && wd.ws === ws ? agBuild(ag, ws, ar, wById, sitesById, who, rep) : null;
+          const changed = rep && built && !agSame(rep, built);
+          const canLock = office && ended && built && !opn.length && (!rep || changed) && busy !== ag.id;
+          const mo = agMonth(month, ag.id, reps, acks);
+          return html`
+            <div key=${ag.id} class="card" style=${{ marginTop:12 }}>
+              <div class="rowbet">
+                <div><b>${ag.name}</b><div class="sub2">${wset.size} עובדים משויכים · ${nis(ag.rate || AG_RATE)} לשעה</div></div>
+                <span class=${"aflag " + (!rep ? "warn" : ack && ack.status === "approved" ? "ok" : ack ? "crit" : "warn")}>${!rep ? "לא נעול" : ack ? (ack.status === "approved" ? "✓ אושר" : "⚠ השגה") : "ממתין לאישור"}</span>
+              </div>
+              ${!wd ? html`<div class="sub2" style=${{ marginTop:8 }}>טוען את השבוע…</div>` : html`
+                <div class="kpis" style=${{ marginTop:10 }}>
+                  <div class="kpi"><b>${built ? built.tot.length : "—"}</b><span>עובדים</span></div>
+                  <div class="kpi"><b>${built ? built.totalHrs.toFixed(2) : "—"}</b><span>שעות</span></div>
+                  <div class="kpi"><b>${built ? nis(built.amount) : "—"}</b><span>לתשלום</span></div>
+                  <div class=${"kpi " + (opn.length ? "crit" : "")}><b>${opn.length}</b><span>לבדיקה</span></div>
+                </div>
+                ${!ended && html`<div class="sub2" style=${{ marginTop:8 }}>השבוע עוד לא הסתיים — נועלים אחרי מוצאי שבת.</div>`}
+                ${ended && opn.length > 0 && html`<div class="alert crit" style=${{ marginTop:8 }}><span class="b"></span>אי אפשר לנעול: ${opn.length} ימים לבדיקה — ${opn.slice(0, 6).map(r => r.name + " " + dmyS(r.day).slice(0, 5)).join(", ")}${opn.length > 6 ? "…" : ""}. מאשרים או מתקנים אותם בלשונית "יומי".</div>`}
+                ${changed && html`<div class="alert warn" style=${{ marginTop:8 }}><span class="b"></span>השעות השתנו מאז הנעילה (תיקון אחרי נעילה). צריך לנעול מחדש — החברה תקבל גרסה ${rep.version + 1} עם פירוט השינויים.</div>`}
+                ${office && ended && (!rep || changed) && html`<button class="btn pri wide" style=${{ marginTop:10 }} disabled=${!canLock} onClick=${()=>lock(ag, built, rep)}>${busy === ag.id ? "נועל…" : rep ? "🔒 נעל מחדש ושלח (גרסה " + (rep.version + 1) + ")" : "🔒 נעל ושלח לאישור החברה"}</button>`}`}
+              ${rep && html`
+                <div class="sub2" style=${{ marginTop:10 }}>נעול: גרסה ${rep.version} · ${rep.totalHrs.toFixed(2)} שעות · ${nis(rep.amount)} · ${ackText(ack)}</div>
+                <div class="btnrow" style=${{ marginTop:6 }}>
+                  <button class="chip" onClick=${()=>setOpen(open === rep.id ? null : rep.id)}>${open === rep.id ? "הסתר" : "הצג דוח"}</button>
+                  <button class="chip" onClick=${()=>agXlsx("שעות " + ag.name + " שבוע " + ws, [{ rep, ack, rows:rep.rows }])}>⬇ אקסל</button>
+                </div>
+                ${open === rep.id && html`<${AgRepView} rep=${rep} ack=${ack} acks=${acks} />`}`}
+              <div class="sub2" style=${{ marginTop:10, paddingTop:8, borderTop:"1px solid var(--line-2)" }}>
+                חודש ${monthLabel(month)}: ${mo.H.toFixed(2)} שעות · ${nis(mo.A)} ·
+                ${mo.weeks.map(x => html` <span key=${x.ws} class=${"aflag " + (x.ack && x.ack.status === "approved" ? "ok" : x.ack ? "crit" : "warn")}>${x.ws.slice(8)}/${x.ws.slice(5, 7)} ${!x.rep ? "לא נעול" : x.ack ? (x.ack.status === "approved" ? "✓" : "השגה") : "ממתין"}</span>`)}
+                ${mo.weeks.some(x => x.rep) && html` <button class="chip" onClick=${()=>agXlsx("שעות " + ag.name + " " + monthLabel(month).replace("/", "."), mo.weeks.filter(x => x.rep).map(x => ({ rep:x.rep, ack:x.ack, rows:x.rows })))}>⬇ אקסל חודשי</button>`}
+              </div>
+            </div>`;
+        })}
+
+        <details class="amon card" style=${{ marginTop:14 }} open=${!act.length}>
+          <summary class="lbl">חברות כ״א (${act.length})</summary>
+          ${agencies.map(a => html`
+            <div key=${a.id} class=${"awk " + (a.active === false ? "off" : "")}>
+              <div class="an">${a.name}<small>${nis(a.rate || AG_RATE)} לשעה${a.active === false ? " · מושבתת" : ""}</small></div>
+              ${office && html`<div class="awkb">
+                <button class="chip" onClick=${()=>{ const v = prompt("תעריף לשעה (₪) ל-" + a.name, String(a.rate || AG_RATE)); if(v != null && Number(v) > 0) updAg(a, { rate:Number(v) }); }}>₪</button>
+                <button class="chip" onClick=${()=>{ const v = prompt("שם החברה", a.name); if(v && v.trim()) updAg(a, { name:v.trim() }); }}>✎</button>
+                <button class="chip" onClick=${()=> a.active === false ? updAg(a, { active:true }) : confirm("להשבית את " + a.name + "? הדוחות הקודמים נשמרים.") && updAg(a, { active:false })}>${a.active === false ? "הפעל" : "השבת"}</button>
+              </div>`}
+            </div>`)}
+          ${office && html`<div class="newunit roh" style=${{ display:"flex", gap:8, flexWrap:"wrap", marginTop:8 }}>
+            <input type="text" style=${{ flex:"2 1 160px" }} placeholder="שם החברה" value=${nag.name} onInput=${e => setNag({ ...nag, name:e.target.value })} />
+            <input type="number" inputMode="decimal" style=${{ flex:"1 1 80px" }} placeholder="₪ לשעה" value=${nag.rate} onInput=${e => setNag({ ...nag, rate:e.target.value })} />
+            <button class="btn pri" disabled=${!nag.name.trim() || !(Number(nag.rate) > 0)} onClick=${addAgency}>הוסף חברה</button>
+          </div>`}
+        </details>
+
+        ${act.length > 0 && html`<details class="amon card" style=${{ marginTop:12 }}>
+          <summary class="lbl">שיוך עובדים לחברות (${workers.filter(w => w.active !== false && w.agency).length} משויכים · ${workers.filter(w => w.active !== false && !w.agency).length} בלי שיוך)</summary>
+          <div class="rowbet" style=${{ margin:"8px 0" }}>
+            <input class="tin" style=${{ fontFamily:"inherit" }} type="search" value=${q} placeholder="חיפוש עובד" onInput=${e => setQ(e.target.value)} />
+            <button class=${"chip " + (onlyNone ? "on" : "")} style=${{ flex:"none" }} onClick=${()=>setOnlyNone(!onlyNone)}>רק בלי שיוך</button>
+          </div>
+          <div class="sub2">מספר עובד = המספר שלו אצל חברת כ״א (לא ת״ז ולא דרכון), כדי שיתאימו את הדוח לשכר אצלם.</div>
+          ${wl.map(w => html`
+            <div key=${w.id} class="agw">
+              <span class="an">${w.name}<small>${sName(w.site)}</small></span>
+              <select disabled=${!office} value=${w.agency || ""} onChange=${e => updW(w, { agency:e.target.value || null })}>
+                <option value="">ישיר (לא כ״א)</option>
+                ${agencies.map(a => html`<option key=${a.id} value=${a.id}>${a.name}</option>`)}
+              </select>
+              <input type="text" disabled=${!office || !w.agency} placeholder="מס׳ עובד" value=${w.empNo || ""} maxLength=${20}
+                onChange=${e => updW(w, { empNo:e.target.value.trim() })} />
+            </div>`)}
+          ${wl.length === 0 && html`<div class="empty" style=${{ padding:"14px 0" }}>${onlyNone ? "כל העובדים משויכים" : "לא נמצאו עובדים"}.</div>`}
+        </details>`}
+        <div class="hint">נועלים כל שבוע שהסתיים, אחרי שאין ימים לבדיקה. החברה מקבלת רק את השעות של העובדים שלה — שם, מספר עובד, תאריך, אתר, כניסה, יציאה ושעות. בלי תמונות ומיקומים. תיקון אחרי נעילה מחייב נעילה מחדש, והגרסה הקודמת נשמרת.</div>
+      </div>`;
+  }
+
+  /* ── הפורטל של חברת כ״א: רק הדוחות שלה, אישור או השגה ── */
+  function AgencyPortal({ staff, phone, notify, onLogout }){
+    const [ag, setAg] = useState(null);
+    const [reps, setReps] = useState(null);
+    const [acks, setAcks] = useState([]);
+    const [err, setErr] = useState("");
+    const [open, setOpen] = useState(null);
+    const [disp, setDisp] = useState(null);
+    const [note, setNote] = useState("");
+    const [tab, setTab] = useState("weeks");
+    const [month, setMonth] = useState(()=> dstr(Date.now()).slice(0, 7));
+    const B = useMemo(()=> staff.att && typeof firebase !== "undefined" ? firebase.firestore().collection("t").doc(staff.att) : null, [staff.att]);
+    useEffect(()=>{
+      if(!B || !staff.agency) return;
+      const e = x => setErr(String(x.code || x.message || x));
+      B.collection("agencies").doc(staff.agency).get().then(d => setAg(d.exists ? d.data() : { name:"" })).catch(e);
+      const u1 = B.collection("agreports").where("ag", "==", staff.agency).onSnapshot(q => setReps(q.docs.map(d => d.data()).sort((a, b) => b.ws.localeCompare(a.ws))), e);
+      const u2 = B.collection("agacks").where("ag", "==", staff.agency).onSnapshot(q => setAcks(q.docs.map(d => d.data({ serverTimestamps:"estimate" }))), e);
+      return ()=>{ u1(); u2(); };
+    }, [B]);
+    function send(rep, status){
+      const id = rep.id + "_v" + rep.version;
+      B.collection("agacks").doc(id).set({ id, rep:rep.id, ag:staff.agency, version:rep.version, status, note: status === "approved" ? "" : note.trim(), by:staff.name, phone, at:FV() })
+        .then(()=>{ notify(status === "approved" ? "הדוח אושר — תודה" : "ההשגה נשלחה למשרד"); setDisp(null); setNote(""); })
+        .catch(x => notify("השליחה נכשלה: " + (x.code || x.message)));
+    }
+    if(!staff.att || !staff.agency) return html`<div class="screen narrow"><div class="card"><div class="lbl">החשבון עוד לא הוגדר</div><div class="hint" style=${{ textAlign:"start" }}>פנה למשרד של ט.ש. מי-רון.</div><button class="btn wide" style=${{ marginTop:12 }} onClick=${onLogout}>יציאה</button></div></div>`;
+    const list = reps || [];
+    const waiting = list.filter(r => !ackOf(r, acks));
+    const months = [...new Set(list.flatMap(r => [r.ws.slice(0, 7), r.we.slice(0, 7)]))].sort().reverse();
+    const mSel = months.includes(month) ? month : (months[0] || month);
+    const mo = agMonth(mSel, staff.agency, list, acks);
+    const agn = (ag && ag.name) || (list[0] && list[0].agName) || "";
+    return html`
+      <div class="screen narrow">
+        <div class="shead"><h2>דוחות שעות${agn ? " · " + agn : ""}</h2><span class="sub">ט.ש. מי-רון · ${staff.name} · <span dir="ltr">${fmtPhone(phone)}</span></span></div>
+        <div class="card" style=${{ marginTop:12 }}>
+          <div class="hint" style=${{ textAlign:"start", margin:0 }}>כל שבוע (א׳–ש׳) המשרד נועל את השעות של העובדים שלכם ושולח אותן לכאן. בודקים, ולוחצים <b>"✓ מאשר"</b> — או <b>"השגה"</b> עם פירוט. תיקון אחרי נעילה מגיע כגרסה חדשה עם פירוט מה השתנה, ומחכה שוב לאישור.</div>
+        </div>
+        ${err && html`<div class="alert crit" style=${{ marginTop:12 }}><span class="b"></span>${err}</div>`}
+        <div class="chips" style=${{ margin:"14px 0 6px" }}>
+          <button class=${"chip " + (tab === "weeks" ? "on" : "")} onClick=${()=>setTab("weeks")}>שבועות${waiting.length ? " (" + waiting.length + " ממתינים)" : ""}</button>
+          <button class=${"chip " + (tab === "month" ? "on" : "")} onClick=${()=>setTab("month")}>סיכום חודשי</button>
+        </div>
+        ${reps == null ? html`<div class="empty">טוען…</div>` : list.length === 0 ? html`<div class="empty">עוד אין דוחות נעולים.</div>`
+        : tab === "weeks" ? list.map(rep => {
+          const ack = ackOf(rep, acks);
+          return html`
+            <div key=${rep.id} class="card" style=${{ marginTop:10 }}>
+              <div class="rowbet">
+                <div><b>שבוע ${wkLabel(rep.ws)}</b><div class="sub2">${rep.tot.length} עובדים · ${rep.totalHrs.toFixed(2)} שעות · ${nis(rep.amount)}${rep.version > 1 ? " · גרסה " + rep.version : ""}</div></div>
+                <span class=${"aflag " + (!ack ? "warn" : ack.status === "approved" ? "ok" : "crit")}>${!ack ? "ממתין לאישורך" : ack.status === "approved" ? "✓ אושר" : "⚠ השגה"}</span>
+              </div>
+              <div class="btnrow" style=${{ marginTop:8 }}>
+                <button class="chip" onClick=${()=>setOpen(open === rep.id ? null : rep.id)}>${open === rep.id ? "הסתר" : "הצג פירוט"}</button>
+                <button class="chip" onClick=${()=>agXlsx("שעות " + agn + " שבוע " + rep.ws, [{ rep, ack, rows:rep.rows }])}>⬇ אקסל</button>
+              </div>
+              ${(open === rep.id || !ack) && html`<${AgRepView} rep=${rep} ack=${ack} acks=${acks} />`}
+              ${ack && html`<div class="sub2" style=${{ marginTop:6 }}>${ackText(ack)}${ack.note ? " — " + ack.note : ""}</div>`}
+              ${!ack && (disp === rep.id
+                ? html`<div class="newunit" style=${{ display:"flex", flexDirection:"column", gap:8, marginTop:10 }}>
+                    <textarea rows="3" placeholder="מה לא תקין? (שם העובד, התאריך ומה צריך להיות)" value=${note} onInput=${e => setNote(e.target.value)} maxLength=${1000}></textarea>
+                    <div class="btnrow"><button class="btn" onClick=${()=>{ setDisp(null); setNote(""); }}>ביטול</button><button class="btn danger" disabled=${note.trim().length < 3} onClick=${()=>send(rep, "disputed")}>שלח השגה</button></div>
+                  </div>`
+                : html`<div class="btnrow" style=${{ marginTop:10 }}>
+                    <button class="btn" onClick=${()=>{ setDisp(rep.id); setNote(""); }}>השגה</button>
+                    <button class="btn ok" onClick=${()=> confirm("לאשר את השעות של שבוע " + wkLabel(rep.ws) + "?\n" + rep.totalHrs.toFixed(2) + " שעות · " + nis(rep.amount) + "\n\nהאישור נרשם עם שמך ושעת השרת, ולא ניתן לשנות אותו.") && send(rep, "approved")}>✓ מאשר</button>
+                  </div>`)}
+            </div>`;
+        })
+        : html`
+          <div class="rowbet adate">
+            <select class="pick" value=${mSel} onChange=${e => setMonth(e.target.value)}>${months.map(m => html`<option key=${m} value=${m}>${monthLabel(m)}</option>`)}</select>
+          </div>
+          <div class="kpis" style=${{ marginTop:10 }}>
+            <div class="kpi"><b>${mo.H.toFixed(2)}</b><span>שעות בחודש</span></div>
+            <div class="kpi"><b>${nis(mo.A)}</b><span>סכום</span></div>
+            <div class=${"kpi " + (mo.done ? "" : "warn")}><b>${mo.weeks.filter(x => x.ack && x.ack.status === "approved").length}/${mo.weeks.length}</b><span>שבועות שאושרו</span></div>
+          </div>
+          <div class="card" style=${{ marginTop:10 }}>
+            ${mo.weeks.map(x => html`<div key=${x.ws} class="rkord"><b>שבוע ${wkLabel(x.ws)}</b> · ${x.rep ? x.rows.reduce((s, y) => s + y.h, 0).toFixed(2) + " שעות בחודש הזה" : "עוד לא נעול"}<div>${x.rep ? ackText(x.ack) : ""}</div></div>`)}
+          </div>
+          <button class="btn pri rokeep wide" style=${{ marginTop:10 }} disabled=${!mo.weeks.some(x => x.rep)} onClick=${()=>agXlsx("שעות " + agn + " " + monthLabel(mSel).replace("/", "."), mo.weeks.filter(x => x.rep).map(x => ({ rep:x.rep, ack:x.ack, rows:x.rows })))}>⬇ אקסל חודשי</button>
+          ${!mo.done && html`<div class="hint">החודש סגור כשכל השבועות שלו נעולים ומאושרים.</div>`}`}
+        <button class="btn wide" style=${{ marginTop:16 }} onClick=${onLogout}>יציאה מהחשבון</button>
       </div>`;
   }
 
@@ -2630,10 +2987,23 @@ ${l}`
   }
   const OFFICE_NAMES = ["דוד", "טל", "שרון"];
   const ROLE_NAME = { office:"משרד", viewer:"צופה (קריאה בלבד)", mgr:"מנהל פרויקט" };
-  const ROLE_ORD = { office:0, viewer:1, mgr:2 };
+  const ROLE_ORD = { office:0, viewer:1, mgr:2, agency:3 };
   function StaffAdmin({ st, who, myPhone, notify, onClose }){
     const [list, setList] = useState(null);
     const [ph, setPh] = useState(""), [name, setName] = useState(""), [role, setRole] = useState("mgr");
+    // חברות כ״א — נשמרות במרחב הנוכחות; משתמש של חברה מקבל את קוד המרחב ואת מזהה החברה (בלי קוד הצוות)
+    const [att, setAtt] = useState(null), [agList, setAgList] = useState([]), [agSel, setAgSel] = useState("");
+    useEffect(()=>{
+      if(!Cloud.base) return;
+      let un = null;
+      Cloud.base.collection("meta").doc("att").get().then(d => {
+        const c = d.exists && d.data().code; if(!c) return;
+        setAtt(c);
+        un = firebase.firestore().collection("t").doc(c).collection("agencies").onSnapshot(q => setAgList(q.docs.map(x => x.data()).filter(a => a.active !== false)), ()=>{});
+      }).catch(()=>{});
+      return ()=>{ if(un) un(); };
+    }, []);
+    const agNameOf = id => { const a = agList.find(x => x.id === id); return a ? a.name : "?"; };
     const owners = [...new Set(st.sites.filter(s => s.active).flatMap(siteMgrs).filter(n => n && n !== "—" && n !== "לא משויך"))].sort((a, b) => a.localeCompare(b, "he"));
     const sitesOf = n => st.sites.filter(s => s.active && managedBy(s, n)).length;
     useEffect(()=> firebase.firestore().collection("staff").onSnapshot(
@@ -2646,15 +3016,21 @@ ${l}`
       const n = name.trim(); if(!n){ notify("בחר שם"); return; }
       if(list && list.some(x => x.id === p)){ notify("המספר כבר רשום"); return; }
       const team = (()=>{ try{ return localStorage.getItem(TEAM_KEY) || ""; }catch(e){ return ""; } })();
-      col().doc(p).set({ name:n, role, active:true, at:Date.now(), by:who, team })
+      if(role === "agency" && (!agSel || !att)){ notify("בחר חברת כ״א"); return; }
+      const doc = role === "agency"
+        ? { name:n, role, agency:agSel, att, active:true, at:Date.now(), by:who }
+        : { name:n, role, active:true, at:Date.now(), by:who, team };
+      col().doc(p).set(doc)
         .then(()=>{ notify(n + " נוסף — שלח לו את קישור הכניסה"); setPh(""); setName(""); })
         .catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
     }
     const upd = (r, patch, m) => col().doc(r.id).set(patch, { merge:true }).then(()=> m && notify(m)).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
     function invite(r){
       const team = (()=>{ try{ return localStorage.getItem(TEAM_KEY); }catch(e){ return ""; } })();
-      const link = location.origin + location.pathname + (team ? "#k=" + team : "");
-      const text = "שלום " + r.name + ", זה הקישור לבקרה של ט.ש. מי-רון.\nנכנסים עם מספר הטלפון שלך (" + fmtPhone(r.id) + ") ומקבלים קוד ב-SMS — פעם אחת בלבד.\n" + link;
+      const link = location.origin + location.pathname + (team && r.role !== "agency" ? "#k=" + team : "");
+      const text = r.role === "agency"
+        ? "שלום " + r.name + ", זה הקישור לדוחות השעות של העובדים שלכם אצל ט.ש. מי-רון.\nנכנסים עם מספר הטלפון שלך (" + fmtPhone(r.id) + ") ומקבלים קוד ב-SMS. כל שבוע מחכה שם דוח שעות נעול לאישור.\n" + link
+        : "שלום " + r.name + ", זה הקישור לבקרה של ט.ש. מי-רון.\nנכנסים עם מספר הטלפון שלך (" + fmtPhone(r.id) + ") ומקבלים קוד ב-SMS — פעם אחת בלבד.\n" + link;
       window.open("https://wa.me/" + r.id.replace(/\D/g, "") + "?text=" + encodeURIComponent(text), "_blank");
     }
     const warnName = role === "mgr" && name.trim() && !owners.includes(name.trim());
@@ -2695,7 +3071,13 @@ ${l}`
               <option value="mgr">מנהל פרויקט — רק האתרים שלו</option>
               <option value="office">משרד — רואה הכול</option>
               <option value="viewer">צופה — רואה הכול, קריאה בלבד</option>
+              <option value="agency">חברת כ״א — רואה רק את דוחות השעות של העובדים שלה</option>
             </select>
+            ${role === "agency" && html`<select value=${agSel} onChange=${e=>setAgSel(e.target.value)}>
+              <option value="">בחר חברה…</option>
+              ${agList.map(a => html`<option key=${a.id} value=${a.id}>${a.name}</option>`)}
+            </select>`}
+            ${role === "agency" && !agList.length && html`<div class="alert warn"><span class="b"></span>קודם מוסיפים את החברה: בקרה ← נוכחות ← חברות כ״א.</div>`}
             ${role === "mgr"
               ? html`<select value=${name} onChange=${e=>setName(e.target.value)}>
                   <option value="">בחר מנהל…</option>
@@ -2703,7 +3085,7 @@ ${l}`
                 </select>`
               : html`<input class="tin" type="text" list="offnames" placeholder="שם" value=${name} onInput=${e=>setName(e.target.value)} /><datalist id="offnames">${OFFICE_NAMES.map(n => html`<option key=${n} value=${n} />`)}</datalist>`}
             ${warnName && html`<div class="alert warn"><span class="b"></span>אין אתרים פעילים בשם הזה — המנהל לא יראה כלום.</div>`}
-            <button class="btn pri" disabled=${!ph.trim() || !name.trim()} onClick=${add}>הוסף</button>
+            <button class="btn pri" disabled=${!ph.trim() || !name.trim() || (role === "agency" && !agSel)} onClick=${add}>הוסף</button>
           </div>
           <div class="lbl" style=${{marginTop:14}}>הוספה מרובה</div>
           ${!bulkOpen
@@ -2721,7 +3103,7 @@ ${l}`
           <div class="lbl" style=${{marginTop:14}}>משתמשים (${list ? list.length : "…"})</div>
           ${(list || []).map(r => html`
             <div key=${r.id} class=${"awk " + (r.active === false ? "off" : "")}>
-              <div class="an">${r.name}<small>${r.role === "mgr" || !ROLE_NAME[r.role] ? "מנהל פרויקט · " + sitesOf(r.name) + " אתרים" : ROLE_NAME[r.role]} · <span dir="ltr">${fmtPhone(r.id)}</span>${r.active === false ? " · מושבת" : ""}</small></div>
+              <div class="an">${r.name}<small>${r.role === "agency" ? "חברת כ״א · " + agNameOf(r.agency) : r.role === "mgr" || !ROLE_NAME[r.role] ? "מנהל פרויקט · " + sitesOf(r.name) + " אתרים" : ROLE_NAME[r.role]} · <span dir="ltr">${fmtPhone(r.id)}</span>${r.active === false ? " · מושבת" : ""}</small></div>
               <div class="awkb">
                 <button class="chip" title="שלח קישור כניסה בוואטסאפ" onClick=${()=>invite(r)}>🔗 שלח</button>
                 ${r.id !== myPhone && html`<button class="chip" onClick=${()=> r.active === false ? upd(r, { active:true }, "הופעל") : confirm("להשבית את " + r.name + "? הוא לא יוכל להיכנס לבקרה.") && upd(r, { active:false }, "הושבת")}>${r.active === false ? "הפעל" : "השבת"}</button>`}
@@ -2768,6 +3150,8 @@ ${l}`
         const d = await db.collection("staff").doc(u.phoneNumber).get();
         if(d.exists && d.data().active !== false){
           const sd = d.data();
+          // חברת כ״א: מסך נפרד שמציג רק את דוחות השעות שלה (בלי קוד צוות ובלי גישה לשום נתון אחר)
+          if(sd.role === "agency"){ setAuth({ s:"agency", phone:u.phoneNumber, staff:sd }); return; }
           if(!cloudCode){
             if(sd.team && /^[A-Za-z0-9]{16,64}$/.test(sd.team)){
               try{ localStorage.setItem(TEAM_KEY, sd.team); sessionStorage.removeItem("bakara_local"); }catch(e){}
@@ -2802,7 +3186,7 @@ ${l}`
     useEffect(()=>{
       if(!signedIn || auth.staff.role !== "office") return;
       const col = firebase.firestore().collection("staff");
-      col.get().then(q => q.docs.forEach(d => { if(d.data().team !== cloudCode) col.doc(d.id).set({ team:cloudCode }, { merge:true }).catch(()=>{}); })).catch(()=>{});
+      col.get().then(q => q.docs.forEach(d => { if(d.data().role !== "agency" && d.data().team !== cloudCode) col.doc(d.id).set({ team:cloudCode }, { merge:true }).catch(()=>{}); })).catch(()=>{});
     }, [signedIn]);
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
 
@@ -3153,7 +3537,9 @@ ${l}`
     }
     let body;
     const blocked = cloudCode && (!cloud.ready || cloud.empty);
-    if((cloudCode || needTeam) && auth.s !== "in")
+    if(auth.s === "agency")
+      body = html`<${AgencyPortal} staff=${auth.staff} phone=${auth.phone} notify=${notify} onLogout=${logout} />`;
+    else if((cloudCode || needTeam) && auth.s !== "in")
       body = auth.s === "out" ? html`<${PhoneLogin} />`
         : auth.s === "noteam" ? html`<div class="screen narrow"><div class="card">
             <div class="lbl">חסר חיבור לצוות</div>
@@ -3228,12 +3614,12 @@ ${l}`
             <span class="txt"><b>ט.ש. מי רון</b><span>פלס · בקרת ביצוע לאינסטלציה</span></span>
           </div>
           ${isViewer && html`<span class="rotag" title="המשתמש הזה יכול רק לצפות — אין לו הרשאה לשנות שום דבר">👁 צפייה בלבד</span>`}
-          <div class="seg" role="tablist">
+          ${auth.s !== "agency" && html`<div class="seg" role="tablist">
             <button role="tab" class=${role==="ctl"?"on":""} onClick=${()=>switchRole("ctl")}>בקרה</button>
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
             <button role="tab" class=${role==="stock"?"on":""} onClick=${()=>switchRole("stock")}>מלאי</button>
-          </div>
-          <button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>
+          </div>`}
+          ${auth.s !== "agency" && html`<button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>`}
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
           ${isOffice && ((!cloudCode && !needTeam) || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
         </div>

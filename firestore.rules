@@ -5,6 +5,8 @@ rules_version = '2';
 //   office — משרד: קורא וכותב הכול
 //   mgr    — מנהל פרויקט: קורא הכול, כותב רק באתרים שלו (+ requests/transfers/nudges/since/log)
 //   viewer — צופה: קורא כל מה שהמשרד קורא, לא כותב שום דבר, לא רואה את רשימת המשתמשים
+//   agency — חברת כוח אדם (staff.agency = מזהה החברה): קוראת רק את דוחות השעות הנעולים שלה ומאשרת/משיגה עליהם.
+//            לא נחשבת "צוות" — לא קוראת שום נתון אחר (אתרים, עובדים, רישומים, תמונות, משתמשים)
 //   עובד   — כניסה אנונימית מקישור אישי. מקושר לעובד אחד בלבד (workers/{w}.uid == ה-uid שלו)
 service cloud.firestore {
   match /databases/{db}/documents {
@@ -14,8 +16,12 @@ service cloud.firestore {
     function hasPhone() { return authed() && request.auth.token.get('phone_number', null) != null; }
     function phone()    { return request.auth.token.phone_number; }
     function staffRef() { return /databases/$(db)/documents/staff/$(phone()); }
-    function isStaff()  { return hasPhone() && exists(staffRef()) && get(staffRef()).data.get('active', true) != false; }
+    function isMember() { return hasPhone() && exists(staffRef()) && get(staffRef()).data.get('active', true) != false; }
     function role()     { return get(staffRef()).data.get('role', ''); }
+    // צוות פנימי: משרד, מנהל, צופה. חברת כ״א לא נכללת — כל חוקי הקריאה והכתיבה הרגילים עוברים דרך כאן
+    function isStaff()  { return isMember() && role() != 'agency'; }
+    function isAgency() { return isMember() && role() == 'agency'; }
+    function myAgency() { return get(staffRef()).data.agency; }
     function isOffice() { return isStaff() && role() == 'office'; }
     function isViewer() { return isStaff() && role() == 'viewer'; }
     // מי שמותר לו לכתוב: משתמש פעיל שאינו צופה. כל חוקי הכתיבה של המנהלים עוברים דרך כאן
@@ -40,8 +46,15 @@ service cloud.firestore {
     // מזהה רישום/תמונה: yyyymmdd_<עובד>_<5 תווים> — קושר את המסמך לעובד שלו
     function punchId(id, wid) { return id.matches('[0-9]{8}_' + wid + '_[A-Za-z0-9]{5}'); }
 
+    // ───── דוחות שעות לחברות כ״א ─────
+    // agreports/{חברה}_{תחילת שבוע}   — הגרסה האחרונה שנעלה המשרד (לא נמחקת לעולם)
+    // agreportsv/{דוח}_v{n}           — עותק מדויק של כל גרסה שהוחלפה (נוצר פעם אחת, לא משתנה ולא נמחק)
+    // agacks/{דוח}_v{n}               — אישור/השגה של החברה לגרסה מסוימת (נוצר פעם אחת, לא משתנה ולא נמחק)
+    function agColl(coll) { return coll in ['agreports', 'agreportsv', 'agacks']; }
+    function repPath(space, rid) { return /databases/$(db)/documents/t/$(space)/agreports/$(rid); }
+
     match /staffmeta/owner {
-      allow read: if hasPhone();
+      allow read: if hasPhone() && !isAgency();
       allow create: if hasPhone() && request.resource.data.phone == phone();
     }
     match /staff/{p} {
@@ -54,38 +67,70 @@ service cloud.firestore {
     match /t/{space}/{coll}/{id} {
       // ── קריאה: כל משתמש פעיל (משרד, מנהל, צופה) ──
       allow read: if isStaff();
-      // ── כתיבה: משרד ──
-      allow write: if isOffice();
+      // ── כתיבה: משרד (חוץ מדוחות כ״א, שיש להם חוקים משלהם למטה) ──
+      allow write: if !agColl(coll) && isOffice();
+
+      // ── דוחות שעות לחברות כ״א ──
+      // נעילה ראשונה: גרסה 1
+      allow create: if coll == 'agreports' && isOffice()
+                    && request.resource.data.id == id && request.resource.data.version == 1
+                    && request.resource.data.ag is string && id.matches(request.resource.data.ag + '_[0-9-]{10}');
+      // נעילה חוזרת: גרסה +1, ורק אם הגרסה הקודמת נשמרה באותה פעולה ב-agreportsv
+      allow update: if coll == 'agreports' && isOffice()
+                    && request.resource.data.id == id && request.resource.data.ag == resource.data.ag
+                    && request.resource.data.version == resource.data.version + 1
+                    && existsAfter(/databases/$(db)/documents/t/$(space)/agreportsv/$(id + '_v' + string(resource.data.version)));
+      // ארכיון גרסה: עותק זהה לגרסה הנוכחית (לפני העדכון), במזהה שלה
+      allow create: if coll == 'agreportsv' && isOffice()
+                    && request.resource.data == get(repPath(space, request.resource.data.id)).data
+                    && id == request.resource.data.id + '_v' + string(request.resource.data.version);
+      // החברה קוראת רק את הדוחות, הגרסאות והאישורים שלה
+      allow read: if agColl(coll) && isAgency() && resource.data.ag == myAgency();
+      allow get: if coll == 'agencies' && isAgency() && id == myAgency();
+      // אישור/השגה: רק לגרסה הנוכחית של דוח שלה, פעם אחת לכל גרסה, עם שעת שרת ושם החותם
+      allow create: if coll == 'agacks' && isAgency()
+                    && request.resource.data.keys().hasOnly(['id', 'rep', 'ag', 'version', 'status', 'note', 'by', 'phone', 'at'])
+                    && request.resource.data.id == id
+                    && request.resource.data.ag == myAgency()
+                    && get(repPath(space, request.resource.data.rep)).data.ag == myAgency()
+                    && request.resource.data.version == get(repPath(space, request.resource.data.rep)).data.version
+                    && id == request.resource.data.rep + '_v' + string(request.resource.data.version)
+                    && request.resource.data.status in ['approved', 'disputed']
+                    && request.resource.data.note is string && request.resource.data.note.size() <= 1000
+                    && (request.resource.data.status == 'approved' || request.resource.data.note.size() >= 3)
+                    && request.resource.data.by == myName()
+                    && request.resource.data.phone == phone()
+                    && request.resource.data.at == request.time;
 
       // ── כתיבה: מנהל פרויקט (צופה לא נכלל — canWrite) ──
-      allow update: if canWrite() && coll == 'sites'
+      allow update: if coll == 'sites' && canWrite()
                     && manages(resource.data) && manages(request.resource.data);
-      allow write: if canWrite() && coll in ['requests', 'transfers', 'nudges', 'since'];
-      allow create: if canWrite() && coll == 'log';
-      allow create, update: if canWrite() && coll == 'photos' && ownsSite(space, request.resource.data.siteId);
-      allow delete: if canWrite() && coll == 'photos' && ownsSite(space, resource.data.siteId);
+      allow write: if coll in ['requests', 'transfers', 'nudges', 'since'] && canWrite();
+      allow create: if coll == 'log' && canWrite();
+      allow create, update: if coll == 'photos' && canWrite() && ownsSite(space, request.resource.data.siteId);
+      allow delete: if coll == 'photos' && canWrite() && ownsSite(space, resource.data.siteId);
 
-      allow create: if canWrite() && coll == 'workers' && ownsSite(space, request.resource.data.site);
-      allow update: if canWrite() && coll == 'workers'
+      allow create: if coll == 'workers' && canWrite() && ownsSite(space, request.resource.data.site);
+      allow update: if coll == 'workers' && canWrite()
                     && ownsSite(space, resource.data.site) && ownsSite(space, request.resource.data.site);
-      allow create: if canWrite() && coll == 'fix' && ownsWorker(space, request.resource.data.w);
-      allow write: if canWrite() && coll == 'ref' && ownsWorker(space, id);
+      allow create: if coll == 'fix' && canWrite() && ownsWorker(space, request.resource.data.w);
+      allow write: if coll == 'ref' && canWrite() && ownsWorker(space, id);
 
       // ── עובד (כניסה אנונימית בלבד), רק במרחב הנוכחות ──
       // מסמך העובד: רק העובד המקושר אליי, או עובד חדש שעוד לא נקשר לשום טלפון. מסמך שלא קיים — מותר (כדי להציג "קישור לא תקין")
-      allow get: if isAnon() && coll == 'workers' && isAtt(space)
+      allow get: if coll == 'workers' && isAnon() && isAtt(space)
                  && (resource == null
                      || resource.data.get('uid', null) == request.auth.uid
                      || (resource.data.get('uid', null) == null && resource.data.get('dev', null) == null));
       // אתרים — שם ומיקום לבחירת אתר ולמדידת מרחק
-      allow read: if isAnon() && coll == 'sites' && isAtt(space);
+      allow read: if coll == 'sites' && isAnon() && isAtt(space);
       // רישומי כניסה/יציאה — רק של העובד המקושר אליי
-      allow read: if isAnon() && coll == 'punch' && isAtt(space) && myWorker(space, resource.data.w);
+      allow read: if coll == 'punch' && isAnon() && isAtt(space) && myWorker(space, resource.data.w);
       // קישור הטלפון לעובד ועדכון השדות שלו:
       //   • עובד שכבר מקושר אליי — מעדכן dev/devAt/hasRef
       //   • עובד שעוד לא מקושר — נקשר אליי אם הוא חדש (בלי טלפון), או אם זה אותו טלפון שנקשר בגרסה הקודמת (אותו dev)
       //   המנהל משחרר טלפון עם 📱✕ (dev ו-uid מתאפסים) — ואז הטלפון הבא שפותח את הקישור נקשר
-      allow update: if isAnon() && coll == 'workers' && isAtt(space)
+      allow update: if coll == 'workers' && isAnon() && isAtt(space)
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dev', 'devAt', 'hasRef', 'uid'])
                     && request.resource.data.get('uid', null) == request.auth.uid
                     && (resource.data.get('uid', null) == request.auth.uid
@@ -93,7 +138,7 @@ service cloud.firestore {
                             && (resource.data.get('dev', null) == null
                                 || resource.data.get('dev', null) == request.resource.data.get('dev', null))));
       // רישום כניסה/יציאה — רק לעובד המקושר אליי, עם שעת שרת ושדות מוכרים בלבד
-      allow create: if isAnon() && coll == 'punch' && isAtt(space)
+      allow create: if coll == 'punch' && isAnon() && isAtt(space)
                     && request.resource.data.keys().hasOnly(['id', 'w', 'name', 'site', 'siteName', 'type', 'day', 'dts', 'ts',
                                                             'lat', 'lng', 'acc', 'gpsErr', 'dev', 'off', 'cam', 'ua', 'v'])
                     && request.resource.data.id == id
@@ -103,7 +148,7 @@ service cloud.firestore {
                     && request.resource.data.type in ['in', 'out']
                     && myWorker(space, request.resource.data.w);
       // סלפי של רישום — רק לעובד המקושר אליי, באותו מזהה של הרישום, תמונה בלבד ובגודל סביר
-      allow create: if isAnon() && coll == 'pph' && isAtt(space)
+      allow create: if coll == 'pph' && isAnon() && isAtt(space)
                     && request.resource.data.keys().hasOnly(['id', 'w', 'day', 'site', 'url'])
                     && request.resource.data.id == id
                     && request.resource.data.w is string
@@ -114,14 +159,15 @@ service cloud.firestore {
                     && request.resource.data.url.matches('data:image/[a-z]+;base64,.*')
                     && myWorker(space, request.resource.data.w);
       // תמונת זיהוי אוטומטית (הסלפי הראשון) — רק לעובד המקושר אליי, פעם אחת
-      allow create: if isAnon() && coll == 'ref' && isAtt(space)
+      allow create: if coll == 'ref' && isAnon() && isAtt(space)
                     && myWorker(space, id)
                     && request.resource.data.keys().hasOnly(['w', 'url', 'pid', 'at', 'by'])
                     && request.resource.data.w == id
                     && request.resource.data.by == 'auto'
                     && request.resource.data.url is string && request.resource.data.url.size() < 600000;
     }
-    match /t/{space}/{coll}/{id}/{rest=**} {
+    // תתי-אוספים (רמה אחת לפחות מתחת למסמך — {rest=**} לבד תופס גם את המסמך עצמו)
+    match /t/{space}/{coll}/{id}/{sub}/{rest=**} {
       allow read: if isOffice() || isViewer();
       allow write: if isOffice();
     }
