@@ -1,81 +1,129 @@
 rules_version = '2';
 // חוקי האבטחה של הבקרה (ט.ש. מי-רון) — מדביקים ב-Firebase Console ← Firestore ← Rules ← Publish
 //
-// מי רשאי לעשות מה:
-//   משרד (staff.role == "office")  — קורא וכותב הכול.
-//   מנהל פרויקט (staff.role == "mgr") — קורא הכול (האפליקציה מציגה לו רק את שלו),
-//       אבל משנה רק אתרים שבהם הוא המנהל, ורק עובדים / תיקוני נוכחות / תמונות זיהוי של עובדים באתרים שלו.
-//   עובד (בלי כניסה, קישור אישי) — רק במרחב הנוכחות: קורא את הכרטיס שלו ואת רשימת האתרים,
-//       ויוצר רישום כניסה/יציאה עם שעת שרת. לא רואה תמונות, תיקונים או נתוני בקרה.
-//   כל השאר — אין גישה.
+// תפקידים (במסמך staff/{+9725…}, שדה role):
+//   office — משרד: קורא וכותב הכול
+//   mgr    — מנהל פרויקט: קורא הכול, כותב רק באתרים שלו (+ requests/transfers/nudges/since/log)
+//   viewer — צופה: קורא כל מה שהמשרד קורא, לא כותב שום דבר, לא רואה את רשימת המשתמשים
+//   עובד   — כניסה אנונימית מקישור אישי. מקושר לעובד אחד בלבד (workers/{w}.uid == ה-uid שלו)
 service cloud.firestore {
   match /databases/{db}/documents {
 
+    // ───── זהות ותפקיד ─────
     function authed()   { return request.auth != null; }
     function hasPhone() { return authed() && request.auth.token.get('phone_number', null) != null; }
     function phone()    { return request.auth.token.phone_number; }
     function staffRef() { return /databases/$(db)/documents/staff/$(phone()); }
     function isStaff()  { return hasPhone() && exists(staffRef()) && get(staffRef()).data.get('active', true) != false; }
-    function isOffice() { return isStaff() && get(staffRef()).data.role == 'office'; }
+    function role()     { return get(staffRef()).data.get('role', ''); }
+    function isOffice() { return isStaff() && role() == 'office'; }
+    function isViewer() { return isStaff() && role() == 'viewer'; }
+    // מי שמותר לו לכתוב: משתמש פעיל שאינו צופה. כל חוקי הכתיבה של המנהלים עוברים דרך כאן
+    function canWrite() { return isStaff() && role() != 'viewer'; }
     function myName()   { return get(staffRef()).data.name; }
     function isOwner()  { return hasPhone() && get(/databases/$(db)/documents/staffmeta/owner).data.phone == phone(); }
 
-    // מרחב נוכחות מסומן ב-meta/space (המשרד מסמן אותו אוטומטית)
+    // ───── אתרים ומנהלים ─────
     function isAtt(space) { return get(/databases/$(db)/documents/t/$(space)/meta/space).data.kind == 'att'; }
-    // שם המנהל של אתר — בבקרה owner הוא {name}, במרחב הנוכחות owner הוא מחרוזת
     function ownerOf(d)   { return d.owner is map ? d.owner.name : d.owner; }
     // מנהל ראשי (owner) או מנהל נוסף (mgrs) של האתר
     function manages(d)   { return ownerOf(d) == myName() || myName() in d.get('mgrs', []); }
     function ownsSite(space, sid) { return manages(get(/databases/$(db)/documents/t/$(space)/sites/$(sid)).data); }
     function ownsWorker(space, wid) { return ownsSite(space, get(/databases/$(db)/documents/t/$(space)/workers/$(wid)).data.site); }
 
-    // ── משתמשים ──
+    // ───── עובד (כניסה אנונימית) ─────
+    // העובד מקושר לטלפון שלו: בפתיחה הראשונה של הקישור נשמר ב-workers/{w}.uid ה-uid האנונימי של הטלפון
+    // רק כניסה אנונימית (הטלפון של העובד). משתמש עם מספר טלפון — משרד, מנהל או צופה — לא פועל כעובד
+    function isAnon() { return authed() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function workerDoc(space, wid) { return get(/databases/$(db)/documents/t/$(space)/workers/$(wid)); }
+    function myWorker(space, wid)  { return workerDoc(space, wid).data.get('uid', null) == request.auth.uid; }
+    // מזהה רישום/תמונה: yyyymmdd_<עובד>_<5 תווים> — קושר את המסמך לעובד שלו
+    function punchId(id, wid) { return id.matches('[0-9]{8}_' + wid + '_[A-Za-z0-9]{5}'); }
+
     match /staffmeta/owner {
       allow read: if hasPhone();
-      // נוצר פעם אחת בלבד, בכניסה הראשונה, ורק עם המספר של מי שנכנס
       allow create: if hasPhone() && request.resource.data.phone == phone();
     }
     match /staff/{p} {
-      allow get: if hasPhone() && (p == phone() || isStaff());
+      // כל אחד קורא את המסמך של עצמו. משרד ומנהלים — גם של אחרים (כמו היום). צופה — רק את עצמו
+      allow get: if hasPhone() && (p == phone() || canWrite());
       allow list: if isOffice();
       allow write: if isOffice() || isOwner();
     }
 
-    // ── בקרה + נוכחות ──
     match /t/{space}/{coll}/{id} {
+      // ── קריאה: כל משתמש פעיל (משרד, מנהל, צופה) ──
       allow read: if isStaff();
+      // ── כתיבה: משרד ──
       allow write: if isOffice();
 
-      // מנהל פרויקט — בקרה
-      allow update: if isStaff() && coll == 'sites'
+      // ── כתיבה: מנהל פרויקט (צופה לא נכלל — canWrite) ──
+      allow update: if canWrite() && coll == 'sites'
                     && manages(resource.data) && manages(request.resource.data);
-      allow write: if isStaff() && coll in ['requests', 'transfers', 'nudges', 'since'];
-      allow create: if isStaff() && coll == 'log';
-      allow create, update: if isStaff() && coll == 'photos' && ownsSite(space, request.resource.data.siteId);
-      allow delete: if isStaff() && coll == 'photos' && ownsSite(space, resource.data.siteId);
+      allow write: if canWrite() && coll in ['requests', 'transfers', 'nudges', 'since'];
+      allow create: if canWrite() && coll == 'log';
+      allow create, update: if canWrite() && coll == 'photos' && ownsSite(space, request.resource.data.siteId);
+      allow delete: if canWrite() && coll == 'photos' && ownsSite(space, resource.data.siteId);
 
-      // מנהל פרויקט — נוכחות (רק עובדים באתרים שלו)
-      allow create: if isStaff() && coll == 'workers' && ownsSite(space, request.resource.data.site);
-      allow update: if isStaff() && coll == 'workers'
+      allow create: if canWrite() && coll == 'workers' && ownsSite(space, request.resource.data.site);
+      allow update: if canWrite() && coll == 'workers'
                     && ownsSite(space, resource.data.site) && ownsSite(space, request.resource.data.site);
-      allow create: if isStaff() && coll == 'fix' && ownsWorker(space, request.resource.data.w);
-      allow write: if isStaff() && coll == 'ref' && ownsWorker(space, id);
+      allow create: if canWrite() && coll == 'fix' && ownsWorker(space, request.resource.data.w);
+      allow write: if canWrite() && coll == 'ref' && ownsWorker(space, id);
 
-      // עובד (קישור אישי, בלי כניסה) — רק במרחב נוכחות
-      allow get: if authed() && coll == 'workers' && isAtt(space);
-      allow read: if authed() && coll in ['sites', 'punch'] && isAtt(space);
-      allow update: if authed() && coll == 'workers' && isAtt(space)
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dev', 'devAt', 'hasRef']);
-      allow create: if authed() && coll == 'punch' && isAtt(space)
+      // ── עובד (כניסה אנונימית בלבד), רק במרחב הנוכחות ──
+      // מסמך העובד: רק העובד המקושר אליי, או עובד חדש שעוד לא נקשר לשום טלפון. מסמך שלא קיים — מותר (כדי להציג "קישור לא תקין")
+      allow get: if isAnon() && coll == 'workers' && isAtt(space)
+                 && (resource == null
+                     || resource.data.get('uid', null) == request.auth.uid
+                     || (resource.data.get('uid', null) == null && resource.data.get('dev', null) == null));
+      // אתרים — שם ומיקום לבחירת אתר ולמדידת מרחק
+      allow read: if isAnon() && coll == 'sites' && isAtt(space);
+      // רישומי כניסה/יציאה — רק של העובד המקושר אליי
+      allow read: if isAnon() && coll == 'punch' && isAtt(space) && myWorker(space, resource.data.w);
+      // קישור הטלפון לעובד ועדכון השדות שלו:
+      //   • עובד שכבר מקושר אליי — מעדכן dev/devAt/hasRef
+      //   • עובד שעוד לא מקושר — נקשר אליי אם הוא חדש (בלי טלפון), או אם זה אותו טלפון שנקשר בגרסה הקודמת (אותו dev)
+      //   המנהל משחרר טלפון עם 📱✕ (dev ו-uid מתאפסים) — ואז הטלפון הבא שפותח את הקישור נקשר
+      allow update: if isAnon() && coll == 'workers' && isAtt(space)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dev', 'devAt', 'hasRef', 'uid'])
+                    && request.resource.data.get('uid', null) == request.auth.uid
+                    && (resource.data.get('uid', null) == request.auth.uid
+                        || (resource.data.get('uid', null) == null
+                            && (resource.data.get('dev', null) == null
+                                || resource.data.get('dev', null) == request.resource.data.get('dev', null))));
+      // רישום כניסה/יציאה — רק לעובד המקושר אליי, עם שעת שרת ושדות מוכרים בלבד
+      allow create: if isAnon() && coll == 'punch' && isAtt(space)
+                    && request.resource.data.keys().hasOnly(['id', 'w', 'name', 'site', 'siteName', 'type', 'day', 'dts', 'ts',
+                                                            'lat', 'lng', 'acc', 'gpsErr', 'dev', 'off', 'cam', 'ua', 'v'])
+                    && request.resource.data.id == id
+                    && request.resource.data.w is string
+                    && punchId(id, request.resource.data.w)
                     && request.resource.data.ts == request.time
                     && request.resource.data.type in ['in', 'out']
-                    && exists(/databases/$(db)/documents/t/$(space)/workers/$(request.resource.data.w));
-      allow create: if authed() && coll == 'pph' && isAtt(space);
-      allow create: if authed() && coll == 'ref' && isAtt(space)
-                    && exists(/databases/$(db)/documents/t/$(space)/workers/$(id));
+                    && myWorker(space, request.resource.data.w);
+      // סלפי של רישום — רק לעובד המקושר אליי, באותו מזהה של הרישום, תמונה בלבד ובגודל סביר
+      allow create: if isAnon() && coll == 'pph' && isAtt(space)
+                    && request.resource.data.keys().hasOnly(['id', 'w', 'day', 'site', 'url'])
+                    && request.resource.data.id == id
+                    && request.resource.data.w is string
+                    && punchId(id, request.resource.data.w)
+                    && request.resource.data.day is string && request.resource.data.day.size() == 10
+                    && request.resource.data.site is string && request.resource.data.site.size() <= 40
+                    && request.resource.data.url is string && request.resource.data.url.size() < 600000
+                    && request.resource.data.url.matches('data:image/[a-z]+;base64,.*')
+                    && myWorker(space, request.resource.data.w);
+      // תמונת זיהוי אוטומטית (הסלפי הראשון) — רק לעובד המקושר אליי, פעם אחת
+      allow create: if isAnon() && coll == 'ref' && isAtt(space)
+                    && myWorker(space, id)
+                    && request.resource.data.keys().hasOnly(['w', 'url', 'pid', 'at', 'by'])
+                    && request.resource.data.w == id
+                    && request.resource.data.by == 'auto'
+                    && request.resource.data.url is string && request.resource.data.url.size() < 600000;
     }
     match /t/{space}/{coll}/{id}/{rest=**} {
-      allow read, write: if isOffice();
+      allow read: if isOffice() || isViewer();
+      allow write: if isOffice();
     }
   }
 }

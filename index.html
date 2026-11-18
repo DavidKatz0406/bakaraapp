@@ -437,6 +437,16 @@
   .rkbtn{ display:block; text-align:center; text-decoration:none; margin-top:8px; font-size:.85rem; }
   .rkord{ font-family:"Heebo",sans-serif; font-size:.8rem; padding:7px 0; border-top:1px solid var(--line-2); }
   .rkord div{ color:var(--ink-2); font-size:.76rem; margin-top:2px; }
+  .usebtn{ display:block; width:100%; margin-top:8px; font-size:.85rem; }
+  .usehave{ font-weight:400; color:var(--ink-3); font-size:.8rem; }
+  .usewarn{ font-family:"Heebo",sans-serif; font-size:.76rem; color:var(--crit); }
+  .usecount{ color:var(--warn, var(--crit)); font-weight:600; }
+  .usehist{ margin-top:6px; }
+  /* צופה (קריאה בלבד): תגית קבועה, וכפתורי הפעולה מוסתרים. האכיפה עצמה — בחוקי המסד */
+  .rotag{ font-family:"Heebo",sans-serif; font-size:.74rem; font-weight:700; color:var(--accent-ink); background:var(--accent-wash); border-radius:999px; padding:4px 10px; white-space:nowrap; }
+  body.ro .btn.ok, body.ro .btn.pri:not(.rokeep), body.ro .btn.danger, body.ro .xbtn, body.ro .qty button,
+  body.ro .addsection, body.ro .rkbtn, body.ro .usebtn, body.ro .awkb, body.ro .roh, body.ro .del{ display:none !important; }
+  body.ro .qty input, body.ro .roh input{ pointer-events:none; }
   .linkbtn{ background:none; border:0; padding:4px 0 0; color:var(--accent); font-family:"Heebo",sans-serif; font-size:.74rem; text-decoration:underline; cursor:pointer; }
   .agph img{ width:100%; aspect-ratio:1; object-fit:cover; display:block; }
   .agph span{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:.7rem; }
@@ -695,6 +705,22 @@
     d.log = d.log || [];
     d.log.unshift({ id: "l" + Date.now().toString(36) + Math.random().toString(36).slice(2,6), ts: Date.now(), who, text, siteId: siteId || null });
     if(d.log.length > 400) d.log.length = 400;
+  }
+  /* ---- צריכת חומר: כל ירידה במלאי נרשמת באתר (site.usage) עם סוג, כמות, מי ולמה ---- */
+  const USE_KIND = { use:"שימוש בעבודה", waste:"פחת / נזק", count:"ירידה בספירה" };
+  function addUsage(s, e){
+    s.usage = s.usage || [];
+    const now = Date.now(), last = s.usage[0];
+    const r3 = x => Math.round(x * 1000) / 1000;
+    // לחיצות חוזרות על − של אותו אדם על אותו פריט — רישום אחד
+    if(e.kind === "count" && last && last.kind === "count" && last.item === e.item && last.by === e.by && now - last.at < 15 * 60e3){
+      last.q = r3(last.q + e.q); last.at = now;
+      if(last.q <= 0) s.usage.shift();
+      return;
+    }
+    if(e.q <= 0) return;
+    s.usage.unshift({ id:"u" + now.toString(36) + Math.random().toString(36).slice(2,5), item:e.item, q:r3(e.q), unit:e.unit || "", kind:e.kind, note:e.note || "", at:now, by:e.by || "" });
+    if(s.usage.length > 300) s.usage.length = 300;
   }
 
   /* ---- שבוע עבודה: מתחיל ביום א׳ ---- */
@@ -990,6 +1016,22 @@
   const ROSTER_V = 7;   // 7: מג׳ד בקרסו, הולצברג ושנקר · 6: אוהד בחצרים, ליאור עם יער (הרצל, עצמאות), שלומי עם כרובי (עיר עולם), גנאדי עם אולג
   const TEAM_KEY = "bakara_team";
   const Cloud = { on:false, db:null, base:null, mgr:null };
+  /* ───── צופה (קריאה בלבד) ─────
+     האכיפה האמיתית היא בחוקי המסד. כאן רק נוחות: כל כתיבה למסד נחסמת מראש עם הודעה ברורה,
+     וכפתורי הפעולה מוסתרים (body.ro ב-CSS) — כדי שהצופה לא ילחץ על משהו שממילא ייכשל. */
+  const RO = { on:false };
+  function setReadOnly(on){
+    RO.on = !!on;
+    try{ document.body.classList.toggle("ro", RO.on); }catch(e){}
+    if(!RO.on || setReadOnly.done || typeof firebase === "undefined" || !firebase.firestore) return;
+    setReadOnly.done = true;
+    const deny = ()=> Promise.reject({ code:"permission-denied", message:"צפייה בלבד" });
+    const fs = firebase.firestore;
+    ["set", "update", "delete"].forEach(k => { if(fs.DocumentReference) fs.DocumentReference.prototype[k] = deny; });
+    if(fs.CollectionReference) fs.CollectionReference.prototype.add = deny;
+    if(fs.WriteBatch) fs.WriteBatch.prototype.commit = deny;
+    if(fs.Firestore) fs.Firestore.prototype.runTransaction = deny;
+  }
 
   /* ───── חיבור לאפליקציית הרכש: קבלת סחורה מעדכנת את המלאי באתר ─────
      הרכש (Google Apps Script) שומר כל קבלה עם הכמויות שהתקבלו. הבקרה מושכת את הקבלות
@@ -1099,6 +1141,7 @@
   const fmtPhone = p => p && p.startsWith("+972") ? ("0" + p.slice(4)).replace(/^(\d{3})(\d+)$/, "$1-$2") : (p || "");
   function authErr(e){
     const c = String((e && e.code) || "");
+    if(location.protocol === "file:") return "זה עותק של הבקרה ששמור במחשב — הוא לא יכול להתחבר. פתח בדפדפן את הכתובת davidkatz0406.github.io/bakaraapp ושמור אותה במועדפים.";
     if(c.includes("invalid-phone")) return "מספר הטלפון לא תקין";
     if(c.includes("invalid-verification-code")) return "הקוד שגוי — בדוק את ה-SMS ונסה שוב";
     if(c.includes("code-expired")) return "תוקף הקוד פג — בקש קוד חדש";
@@ -1727,11 +1770,11 @@ Your personal link (keep this message and open the link from here every time):
 ${l}`
   };
   const WT = {
-    he:{ dir:"rtl", name:"עברית", hello:"שלום", in:"כניסה לעבודה", out:"יציאה מהעבודה", notIn:"עוד לא נרשמת היום", since:"בעבודה מאז", left:"יצאת ב-", site:"אתר", snap:"צלם", retake:"צלם שוב", send:"אשר ושלח", cancel:"ביטול", saved:"נרשם", savedOff:"נשמר בטלפון — יישלח כשתחזור רשת", locating:"מאתר מיקום…", locOk:"מיקום התקבל", noLoc:"אין מיקום — אשר גישה למיקום בהגדרות הטלפון", camErr:"המצלמה לא נפתחה — לחץ כאן כדי לצלם", loading:"טוען…", bad:"הקישור לא תקין — בקש קישור חדש מהמנהל", off:"המשתמש הושבת — פנה למנהל", err:"אין חיבור למערכת — נסה שוב", face:"הפנים צריכות להיראות בבירור", hours:"שעות היום", net:"אין רשת — הרישום יישמר בטלפון", todayList:"הרישומים שלך היום", inL:"כניסה", outL:"יציאה", pending:"ממתין לשליחה" },
-    ar:{ dir:"rtl", name:"العربية", hello:"مرحبا", in:"دخول للعمل", out:"خروج من العمل", notIn:"لم تسجّل اليوم بعد", since:"في العمل منذ", left:"خرجت الساعة ", site:"الموقع", snap:"صوّر", retake:"صوّر مرة أخرى", send:"تأكيد وإرسال", cancel:"إلغاء", saved:"تم التسجيل", savedOff:"حُفظ في الهاتف — سيُرسل عند عودة الإنترنت", locating:"جارٍ تحديد الموقع…", locOk:"تم تحديد الموقع", noLoc:"لا يوجد موقع — اسمح بالوصول للموقع في إعدادات الهاتف", camErr:"الكاميرا لم تفتح — اضغط هنا للتصوير", loading:"جارٍ التحميل…", bad:"الرابط غير صالح — اطلب رابطًا جديدًا من المدير", off:"الحساب موقوف — راجع المدير", err:"لا يوجد اتصال بالنظام — حاول مرة أخرى", face:"يجب أن يظهر وجهك بوضوح", hours:"ساعات اليوم", net:"لا يوجد إنترنت — سيُحفظ التسجيل في الهاتف", todayList:"تسجيلاتك اليوم", inL:"دخول", outL:"خروج", pending:"بانتظار الإرسال" },
-    en:{ dir:"ltr", name:"English", hello:"Hello", in:"Clock in", out:"Clock out", notIn:"Not clocked in today", since:"Working since", left:"Clocked out at ", site:"Site", snap:"Take photo", retake:"Retake", send:"Confirm & send", cancel:"Cancel", saved:"Recorded", savedOff:"Saved on phone — will be sent when online", locating:"Getting location…", locOk:"Location received", noLoc:"No location — allow location access in phone settings", camErr:"Camera did not open — tap here to take a photo", loading:"Loading…", bad:"Invalid link — ask your manager for a new one", off:"Account disabled — contact your manager", err:"Cannot reach the system — try again", face:"Your face must be clearly visible", hours:"Hours today", net:"Offline — the record will be saved on the phone", todayList:"Your records today", inL:"In", outL:"Out", pending:"waiting to send" },
-    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" },
-    ru:{ dir:"ltr", name:"Русский", hello:"Здравствуйте", in:"Начало работы", out:"Конец работы", notIn:"Сегодня вы ещё не отметились", since:"На работе с", left:"Ушли в ", site:"Объект", snap:"Сфотографировать", retake:"Переснять", send:"Подтвердить и отправить", cancel:"Отмена", saved:"Записано", savedOff:"Сохранено в телефоне — отправится, когда появится интернет", locating:"Определяем местоположение…", locOk:"Местоположение получено", noLoc:"Нет местоположения — разрешите доступ к геолокации в настройках телефона", camErr:"Камера не открылась — нажмите здесь, чтобы сфотографироваться", loading:"Загрузка…", bad:"Ссылка недействительна — попросите новую у начальника", off:"Доступ отключён — обратитесь к начальнику", err:"Нет связи с системой — попробуйте ещё раз", face:"Лицо должно быть хорошо видно", hours:"Часы за сегодня", net:"Нет интернета — отметка сохранится в телефоне", todayList:"Ваши отметки сегодня", inL:"Приход", outL:"Уход", pending:"ожидает отправки" }
+    he:{ dir:"rtl", name:"עברית", hello:"שלום", in:"כניסה לעבודה", out:"יציאה מהעבודה", notIn:"עוד לא נרשמת היום", since:"בעבודה מאז", left:"יצאת ב-", site:"אתר", snap:"צלם", retake:"צלם שוב", send:"אשר ושלח", cancel:"ביטול", saved:"נרשם", savedOff:"נשמר בטלפון — יישלח כשתחזור רשת", locating:"מאתר מיקום…", locOk:"מיקום התקבל", noLoc:"אין מיקום — אשר גישה למיקום בהגדרות הטלפון", camErr:"המצלמה לא נפתחה — לחץ כאן כדי לצלם", loading:"טוען…", bad:"הקישור לא תקין — בקש קישור חדש מהמנהל", taken:"הקישור הזה כבר מחובר לטלפון אחר. בקש מהמנהל לשחרר את הטלפון (📱✕) ולשלוח לך את הקישור שוב.", off:"המשתמש הושבת — פנה למנהל", err:"אין חיבור למערכת — נסה שוב", face:"הפנים צריכות להיראות בבירור", hours:"שעות היום", net:"אין רשת — הרישום יישמר בטלפון", todayList:"הרישומים שלך היום", inL:"כניסה", outL:"יציאה", pending:"ממתין לשליחה" },
+    ar:{ dir:"rtl", name:"العربية", hello:"مرحبا", in:"دخول للعمل", out:"خروج من العمل", notIn:"لم تسجّل اليوم بعد", since:"في العمل منذ", left:"خرجت الساعة ", site:"الموقع", snap:"صوّر", retake:"صوّر مرة أخرى", send:"تأكيد وإرسال", cancel:"إلغاء", saved:"تم التسجيل", savedOff:"حُفظ في الهاتف — سيُرسل عند عودة الإنترنت", locating:"جارٍ تحديد الموقع…", locOk:"تم تحديد الموقع", noLoc:"لا يوجد موقع — اسمح بالوصول للموقع في إعدادات الهاتف", camErr:"الكاميرا لم تفتح — اضغط هنا للتصوير", loading:"جارٍ التحميل…", bad:"الرابط غير صالح — اطلب رابطًا جديدًا من المدير", taken:"هذا الرابط مرتبط بهاتف آخر. اطلب من المدير فكّ الهاتف (📱✕) وإرسال الرابط لك من جديد.", off:"الحساب موقوف — راجع المدير", err:"لا يوجد اتصال بالنظام — حاول مرة أخرى", face:"يجب أن يظهر وجهك بوضوح", hours:"ساعات اليوم", net:"لا يوجد إنترنت — سيُحفظ التسجيل في الهاتف", todayList:"تسجيلاتك اليوم", inL:"دخول", outL:"خروج", pending:"بانتظار الإرسال" },
+    en:{ dir:"ltr", name:"English", hello:"Hello", in:"Clock in", out:"Clock out", notIn:"Not clocked in today", since:"Working since", left:"Clocked out at ", site:"Site", snap:"Take photo", retake:"Retake", send:"Confirm & send", cancel:"Cancel", saved:"Recorded", savedOff:"Saved on phone — will be sent when online", locating:"Getting location…", locOk:"Location received", noLoc:"No location — allow location access in phone settings", camErr:"Camera did not open — tap here to take a photo", loading:"Loading…", bad:"Invalid link — ask your manager for a new one", taken:"This link is already connected to another phone. Ask your manager to release the phone (📱✕) and send you the link again.", off:"Account disabled — contact your manager", err:"Cannot reach the system — try again", face:"Your face must be clearly visible", hours:"Hours today", net:"Offline — the record will be saved on the phone", todayList:"Your records today", inL:"In", outL:"Out", pending:"waiting to send" },
+    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", taken:"यह लिंक पहले से किसी दूसरे फ़ोन से जुड़ा है। मैनेजर से फ़ोन हटाने (📱✕) और लिंक दोबारा भेजने को कहें।", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" },
+    ru:{ dir:"ltr", name:"Русский", hello:"Здравствуйте", in:"Начало работы", out:"Конец работы", notIn:"Сегодня вы ещё не отметились", since:"На работе с", left:"Ушли в ", site:"Объект", snap:"Сфотографировать", retake:"Переснять", send:"Подтвердить и отправить", cancel:"Отмена", saved:"Записано", savedOff:"Сохранено в телефоне — отправится, когда появится интернет", locating:"Определяем местоположение…", locOk:"Местоположение получено", noLoc:"Нет местоположения — разрешите доступ к геолокации в настройках телефона", camErr:"Камера не открылась — нажмите здесь, чтобы сфотографироваться", loading:"Загрузка…", bad:"Ссылка недействительна — попросите новую у начальника", taken:"Эта ссылка уже привязана к другому телефону. Попросите начальника отвязать телефон (📱✕) и прислать ссылку снова.", off:"Доступ отключён — обратитесь к начальнику", err:"Нет связи с системой — попробуйте ещё раз", face:"Лицо должно быть хорошо видно", hours:"Часы за сегодня", net:"Нет интернета — отметка сохранится в телефоне", todayList:"Ваши отметки сегодня", inL:"Приход", outL:"Уход", pending:"ожидает отправки" }
   };
 
   /* צילום ריבועי קטן (~20KB) עם חותמת תאריך ושעה */
@@ -1826,10 +1869,21 @@ ${l}`
       new Promise(res => { const u = fa.onAuthStateChanged(x => { u(); res(x); }); })
         .then(x => x ? x : fa.signInAnonymously()).then(()=>{
         if(stop) return;
-        uns.push(b.collection("workers").doc(id.w).onSnapshot(d => {
+        // מסמך העובד נפתח רק לטלפון שמקושר אליו. אם הקריאה נחסמה — מנסים לקשר (טלפון שנקשר בגרסה הקודמת,
+        // לפי אותו מזהה מכשיר). אם גם זה נחסם — הקישור שייך לטלפון אחר, וצריך 📱✕ מהמנהל
+        const ref = b.collection("workers").doc(id.w);
+        let tried = false;
+        const listen = ()=> uns.push(ref.onSnapshot(d => {
           if(d.exists){ const w = d.data(); setWorker(w); setPhase(w.active === false ? "off" : "ok"); }
           else if(!d.metadata.fromCache) setPhase("bad");
-        }, ()=> setPhase("err")));
+        }, e => {
+          if(stop) return;
+          if(String(e && e.code).includes("permission-denied") && !tried){
+            tried = true;
+            ref.update({ uid: fa.currentUser.uid, dev, devAt: FV() }).then(()=> !stop && listen()).catch(()=> !stop && setPhase("taken"));
+          } else setPhase(String(e && e.code).includes("permission-denied") ? "taken" : "err");
+        }));
+        listen();
         uns.push(b.collection("sites").onSnapshot(q => setSites(q.docs.map(d => d.data()).filter(s => s.active !== false)
           .sort((x, y) => String(x.name).localeCompare(String(y.name), "he"))), ()=>{}));
       }).catch(()=> setPhase("err"));
@@ -1840,11 +1894,13 @@ ${l}`
       return base.current.collection("punch").where("w", "==", id.w).where("day", "==", today)
         .onSnapshot(q => setPunches(q.docs.map(d => ({ ...d.data({ serverTimestamps:"estimate" }), _pending: d.metadata.hasPendingWrites }))), ()=>{});
     }, [phase, today]);
-    // קושרים את העובד לטלפון הראשון שבו פתח את הקישור — רישום מטלפון אחר יסומן למנהל
+    // קושרים את העובד לטלפון הראשון שבו פתח את הקישור (uid של הכניסה האנונימית + מזהה מכשיר).
+    // מאותו רגע רק הטלפון הזה יכול לרשום לו שעות. המנהל משחרר עם 📱✕
     useEffect(()=>{
-      if(phase === "ok" && worker && !worker.dev && base.current)
-        base.current.collection("workers").doc(id.w).set({ dev, devAt: FV() }, { merge:true }).catch(()=>{});
-    }, [phase, worker && worker.dev]);
+      const u = firebase.auth().currentUser;
+      if(phase === "ok" && worker && u && worker.uid !== u.uid && base.current)
+        base.current.collection("workers").doc(id.w).update({ uid: u.uid, dev, devAt: FV() }).catch(()=>{});
+    }, [phase, worker && worker.uid]);
 
     const mine = punches.map(p => ({ ...p, _t: punchTime(p) })).sort((a, b) => a._t.t - b._t.t);
     const last = mine[mine.length - 1];
@@ -1960,6 +2016,7 @@ ${l}`
   // עובד יכול לעבוד בכמה פרויקטים של הצוות: site = אתר הבית, sites = כל הפרויקטים
   const wSites = w => [...new Set([w.site, ...(w.sites || [])].filter(Boolean))];
   function Attendance({ st, now, mgr, who, notify, office }){
+    office = office && !RO.on;   // צופה רואה כמו המשרד, אבל לא מריץ את פעולות התחזוקה של המשרד
     const [code, setCode] = useState(null);
     const [err, setErr] = useState("");
     const [view, setView] = useState("day");
@@ -2267,7 +2324,7 @@ ${l}`
           ${totalOpen > 0
             ? html`<div class="alert crit" style=${{ margin:"12px 0" }}><span class="b"></span>${totalOpen} ימי עבודה עם חריגים שלא נבדקו — כדאי לאשר או לתקן אותם לפני העברה לשכר.</div>`
             : list.length > 0 && html`<div class="alert empty" style=${{ margin:"12px 0" }}><span class="b"></span>כל הימים בחודש נבדקו — מוכן להעברה לשכר.</div>`}
-          <button class="btn pri wide" disabled=${!list.length} onClick=${exportX}>⬇ ייצוא לאקסל לשכר${mgr !== "all" ? " (" + mgr + ")" : ""}</button>
+          <button class="btn pri rokeep wide" disabled=${!list.length} onClick=${exportX}>⬇ ייצוא לאקסל לשכר${mgr !== "all" ? " (" + mgr + ")" : ""}</button>
           <div class="card" style=${{ marginTop:12, padding:"6px 12px" }}>
             <div class="arow head"><span class="an">עובד</span><span class="at">ימים</span><span class="ah">שעות</span><span class="af">לבדיקה</span></div>
             ${list.map(a => html`
@@ -2381,20 +2438,20 @@ ${l}`
                   <b>${p.type === "in" ? "כניסה" : "יציאה"} ${hhmm(p._t.t)}</b> <small>${p._t.src === "srv" ? "שעת שרת" : p._t.src === "late" ? "שעת טלפון (נשלח מאוחר)" : "ממתין לשרת"}</small>
                   <div class="sub2">${s.name || p.siteName || "—"}${d != null ? " · " + fmtDist(d) + " מהאתר" : ""}${p.lat != null ? html` · <a href=${"https://maps.google.com/?q=" + p.lat + "," + p.lng} target="_blank" rel="noopener">מפה</a> (±${p.acc}מ׳)` : " · בלי מיקום"} · טלפון ${String(p.dev || "").slice(0, 4)}</div>
                   ${p._f.length > 0 && html`<div class="af">${p._f.map(f => html`<span key=${f.k} class=${"aflag " + f.sev}>${f.t}</span>`)}</div>`}
-                  ${photos[p.id] && photos[p.id] !== refUrl && html`<button class="linkbtn" onClick=${()=> confirm("להחליף את תמונת הזיהוי של " + name + " בתמונה הזו?") && onSetRef(p.id)}>קבע כתמונת זיהוי</button>`}
+                  ${photos[p.id] && photos[p.id] !== refUrl && html`<button class="linkbtn roh" onClick=${()=> confirm("להחליף את תמונת הזיהוי של " + name + " בתמונה הזו?") && onSetRef(p.id)}>קבע כתמונת זיהוי</button>`}
                 </div>
               </div>`;
           })}
           ${hist.length > 0 && html`
             <div class="lbl" style=${{ marginTop:12 }}>היסטוריית תיקונים</div>
             ${hist.map(f => html`<div key=${f.id} class="logrow"><span class="tm">${tsMs(f.at) ? dmy(tsMs(f.at)) + " " + hhmm(tsMs(f.at)) : ""}</span> · <b>${f.by}</b> · ${f.absent ? "סימן היעדרות" : f.approved ? "אישר כמו שהוא" : "כניסה " + hm(f.inT) + " · יציאה " + hm(f.outT)}${f.reason ? " — " + f.reason : ""}</div>`)}`}
-          <div class="lbl" style=${{ marginTop:14 }}>תיקון או אישור</div>
-          <div class="afix2">
+          <div class="lbl roh" style=${{ marginTop:14 }}>תיקון או אישור</div>
+          <div class="afix2 roh">
             <label class="afield">כניסה<input type="time" value=${inV} disabled=${absent} onInput=${e => setInV(e.target.value)} /></label>
             <label class="afield">יציאה<input type="time" value=${outV} disabled=${absent} onInput=${e => setOutV(e.target.value)} /></label>
           </div>
-          <label class="acheck"><input type="checkbox" checked=${absent} onChange=${e => setAbsent(e.target.checked)} /> לא עבד ביום הזה (לא ייספר לשכר)</label>
-          <label class="afield">סיבה (חובה לתיקון)<input type="text" value=${reason} placeholder="למשל: שכח לצלם ביציאה, אישר מנהל העבודה" onInput=${e => setReason(e.target.value)} /></label>
+          <label class="acheck roh"><input type="checkbox" checked=${absent} onChange=${e => setAbsent(e.target.checked)} /> לא עבד ביום הזה (לא ייספר לשכר)</label>
+          <label class="afield roh">סיבה (חובה לתיקון)<input type="text" value=${reason} placeholder="למשל: שכח לצלם ביציאה, אישר מנהל העבודה" onInput=${e => setReason(e.target.value)} /></label>
           <div class="btnrow" style=${{ marginTop:10 }}>
             <button class="btn" onClick=${onClose}>סגור</button>
             ${ps.length > 0 && html`<button class="btn ok" onClick=${()=>onSave({ approved:true, inT:null, outT:null, absent:false, reason: reason.trim() || "נבדק ואושר" })}>✓ אשר כמו שהוא</button>`}
@@ -2470,7 +2527,7 @@ ${l}`
     return html`
       <div class="card">
         <div class="lbl">הוספת עובד</div>
-        <div class="newunit" style=${{ display:"flex", flexDirection:"column", gap:8 }}>
+        <div class="newunit roh" style=${{ display:"flex", flexDirection:"column", gap:8 }}>
           ${bulk
             ? html`<textarea rows="5" value=${name} placeholder=${"עובד בכל שורה. אפשר להדביק מאקסל:\nשם מלא, אתר, שפה\nלמשל: ראג׳ קומאר, " + (visSites[0] ? visSites[0].name : "שם האתר") + ", הינדי\n(בלי אתר — ישויך לאתר שנבחר למטה)"} onInput=${e => setName(e.target.value)}></textarea>`
             : html`<input type="text" value=${name} placeholder="שם מלא" onInput=${e => setName(e.target.value)} onKeyDown=${e => e.key === "Enter" && add()} />`}
@@ -2502,11 +2559,11 @@ ${l}`
                 </div>
               </div>`
             : html`<div key=${w.id} class=${"awk " + (w.active === false ? "off" : "")}>
-                <div class="an">${w.name}<small>${WT[w.lang || "he"] ? WT[w.lang || "he"].name : ""}${wSites(w).length > 1 ? " · גם: " + wSites(w).filter(x => x !== w.site).map(siteName).join(", ") : ""} · ${w.dev ? "📱 טלפון נקשר" : "עוד לא פתח את הקישור"}${w.active === false ? " · מושבת" : ""}</small></div>
+                <div class="an">${w.name}<small>${WT[w.lang || "he"] ? WT[w.lang || "he"].name : ""}${wSites(w).length > 1 ? " · גם: " + wSites(w).filter(x => x !== w.site).map(siteName).join(", ") : ""} · ${(w.dev || w.uid) ? "📱 טלפון נקשר" : "עוד לא פתח את הקישור"}${w.active === false ? " · מושבת" : ""}</small></div>
                 <div class="awkb">
                   <button class="chip" onClick=${()=>share(w)}>🔗 שלח קישור</button>
                   <button class="chip" onClick=${()=>setEdit({ id:w.id, name:w.name, site:w.site, lang:w.lang })}>✎</button>
-                  ${w.dev && html`<button class="chip" title="העובד החליף טלפון" onClick=${()=> confirm("לנתק את הטלפון של " + w.name + "? הטלפון הבא שיפתח את הקישור ייקשר אליו.") && upd(w, { dev:null }, "הטלפון נותק")}>📱✕</button>`}
+                  ${(w.dev || w.uid) && html`<button class="chip" title="העובד החליף טלפון" onClick=${()=> confirm("לנתק את הטלפון של " + w.name + "? הטלפון הבא שיפתח את הקישור ייקשר אליו.") && upd(w, { dev:null, uid:null }, "הטלפון נותק — הטלפון הבא שיפתח את הקישור ייקשר")}>📱✕</button>`}
                   <button class="chip" onClick=${()=> w.active === false ? upd(w, { active:true }, "הופעל") : confirm("להשבית את " + w.name + "? הקישור שלו יפסיק לעבוד. הרישומים הקודמים נשמרים.") && upd(w, { active:false }, "הושבת")}>${w.active === false ? "הפעל" : "השבת"}</button>
                 </div>
               </div>`)}
@@ -2572,13 +2629,15 @@ ${l}`
       </div></div>`;
   }
   const OFFICE_NAMES = ["דוד", "טל", "שרון"];
+  const ROLE_NAME = { office:"משרד", viewer:"צופה (קריאה בלבד)", mgr:"מנהל פרויקט" };
+  const ROLE_ORD = { office:0, viewer:1, mgr:2 };
   function StaffAdmin({ st, who, myPhone, notify, onClose }){
     const [list, setList] = useState(null);
     const [ph, setPh] = useState(""), [name, setName] = useState(""), [role, setRole] = useState("mgr");
     const owners = [...new Set(st.sites.filter(s => s.active).flatMap(siteMgrs).filter(n => n && n !== "—" && n !== "לא משויך"))].sort((a, b) => a.localeCompare(b, "he"));
     const sitesOf = n => st.sites.filter(s => s.active && managedBy(s, n)).length;
     useEffect(()=> firebase.firestore().collection("staff").onSnapshot(
-      q => setList(q.docs.map(d => ({ id:d.id, ...d.data() })).sort((a, b) => (a.role === b.role ? 0 : a.role === "office" ? -1 : 1) || String(a.name).localeCompare(String(b.name), "he"))),
+      q => setList(q.docs.map(d => ({ id:d.id, ...d.data() })).sort((a, b) => (ROLE_ORD[a.role] ?? 2) - (ROLE_ORD[b.role] ?? 2) || String(a.name).localeCompare(String(b.name), "he"))),
       e => notify("אין הרשאה לרשימת המשתמשים: " + (e.code || e.message))), []);
     const col = ()=> firebase.firestore().collection("staff");
     function add(){
@@ -2604,11 +2663,11 @@ ${l}`
     const parsed = bulk.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
       const parts = l.split(/[,\t;|]+/).map(x => x.trim()).filter(Boolean);
       const tok = parts.find(x => x.replace(/\D/g, "").length >= 9);
-      const p = tok ? normPhone(tok) : null, office = parts.includes("משרד");
-      const nm = parts.filter(x => x !== tok && x !== "משרד" && x !== "מנהל").join(" ");
+      const p = tok ? normPhone(tok) : null, viewer = parts.includes("צופה"), office = viewer || parts.includes("משרד");
+      const nm = parts.filter(x => x !== tok && x !== "משרד" && x !== "מנהל" && x !== "צופה").join(" ");
       const err = !p ? "טלפון לא תקין" : !nm ? "חסר שם" : (list && list.some(x => x.id === p)) ? "המספר כבר רשום"
         : (!office && !owners.includes(nm)) ? "אין אתרים בשם \"" + nm + "\" — השם חייב להיות זהה לשם המנהל באתרים" : "";
-      return { l, p, nm, role: office ? "office" : "mgr", err };
+      return { l, p, nm, role: viewer ? "viewer" : office ? "office" : "mgr", err };
     });
     const okRows = parsed.filter(r => !r.err);
     async function addBulk(){
@@ -2628,13 +2687,14 @@ ${l}`
       <div class="scrim" onClick=${onClose}>
         <div class="sheet asheet" onClick=${e=>e.stopPropagation()}>
           <h3>👥 משתמשים והרשאות</h3>
-          <div class="who">משרד רואה ומשנה הכול. מנהל פרויקט רואה ומשנה רק את האתרים שבהם הוא רשום כמנהל, ואת העובדים שלהם. הכניסה בקוד SMS למספר שלו.</div>
+          <div class="who">משרד רואה ומשנה הכול. מנהל פרויקט רואה ומשנה רק את האתרים שבהם הוא רשום כמנהל, ואת העובדים שלהם. צופה רואה הכול ולא יכול לשנות שום דבר. הכניסה בקוד SMS למספר שלו.</div>
           <div class="lbl" style=${{marginTop:10}}>הוספת משתמש</div>
           <div class="newunit" style=${{display:"flex", flexDirection:"column", gap:8}}>
             <input class="tin" type="tel" dir="ltr" placeholder="050-1234567" value=${ph} onInput=${e=>setPh(e.target.value)} />
             <select value=${role} onChange=${e=>{ setRole(e.target.value); setName(""); }}>
               <option value="mgr">מנהל פרויקט — רק האתרים שלו</option>
               <option value="office">משרד — רואה הכול</option>
+              <option value="viewer">צופה — רואה הכול, קריאה בלבד</option>
             </select>
             ${role === "mgr"
               ? html`<select value=${name} onChange=${e=>setName(e.target.value)}>
@@ -2650,8 +2710,8 @@ ${l}`
             ? html`<button class="addsection" onClick=${()=>setBulkOpen(true)}>＋ הדבקת רשימה (שם, טלפון בכל שורה)</button>`
             : html`<div class="newunit" style=${{display:"flex", flexDirection:"column", gap:8}}>
                 <textarea rows="7" style=${{fontFamily:"inherit", fontSize:".88rem", padding:"9px 11px", border:"1px solid var(--line)", borderRadius:9, background:"var(--surface)", color:"var(--ink)"}}
-                  placeholder=${"שורה לכל מנהל, למשל:\nצביקה, 052-7979851\nוואהל, 052-3474389\nלמשתמש משרד: טל, 052-1234567, משרד"} value=${bulk} onInput=${e=>setBulk(e.target.value)}></textarea>
-                ${parsed.map((r, i) => html`<div key=${i} class="sub" style=${{color: r.err ? "var(--crit)" : "var(--ok)"}}>${r.err ? "✕ " + r.l + " — " + r.err : "✓ " + r.nm + " · " + (r.role === "office" ? "משרד" : sitesOf(r.nm) + " אתרים") + " · " + fmtPhone(r.p)}</div>`)}
+                  placeholder=${"שורה לכל מנהל, למשל:\nצביקה, 052-7979851\nוואהל, 052-3474389\nלמשתמש משרד: טל, 052-1234567, משרד\nלצופה (קריאה בלבד): עוזר, 050-0000000, צופה"} value=${bulk} onInput=${e=>setBulk(e.target.value)}></textarea>
+                ${parsed.map((r, i) => html`<div key=${i} class="sub" style=${{color: r.err ? "var(--crit)" : "var(--ok)"}}>${r.err ? "✕ " + r.l + " — " + r.err : "✓ " + r.nm + " · " + (r.role === "mgr" ? sitesOf(r.nm) + " אתרים" : ROLE_NAME[r.role]) + " · " + fmtPhone(r.p)}</div>`)}
                 <div class="btnrow">
                   <button class="btn" onClick=${()=>{ setBulk(""); setBulkOpen(false); }}>ביטול</button>
                   <button class="btn pri" disabled=${!okRows.length || bulkBusy} onClick=${addBulk}>${bulkBusy ? "מוסיף…" : "הוסף " + okRows.length + " משתמשים"}</button>
@@ -2661,7 +2721,7 @@ ${l}`
           <div class="lbl" style=${{marginTop:14}}>משתמשים (${list ? list.length : "…"})</div>
           ${(list || []).map(r => html`
             <div key=${r.id} class=${"awk " + (r.active === false ? "off" : "")}>
-              <div class="an">${r.name}<small>${r.role === "office" ? "משרד" : "מנהל פרויקט · " + sitesOf(r.name) + " אתרים"} · <span dir="ltr">${fmtPhone(r.id)}</span>${r.active === false ? " · מושבת" : ""}</small></div>
+              <div class="an">${r.name}<small>${r.role === "mgr" || !ROLE_NAME[r.role] ? "מנהל פרויקט · " + sitesOf(r.name) + " אתרים" : ROLE_NAME[r.role]} · <span dir="ltr">${fmtPhone(r.id)}</span>${r.active === false ? " · מושבת" : ""}</small></div>
               <div class="awkb">
                 <button class="chip" title="שלח קישור כניסה בוואטסאפ" onClick=${()=>invite(r)}>🔗 שלח</button>
                 ${r.id !== myPhone && html`<button class="chip" onClick=${()=> r.active === false ? upd(r, { active:true }, "הופעל") : confirm("להשבית את " + r.name + "? הוא לא יוכל להיכנס לבקרה.") && upd(r, { active:false }, "הושבת")}>${r.active === false ? "הפעל" : "השבת"}</button>`}
@@ -2696,8 +2756,10 @@ ${l}`
     const [rkOpen, setRkOpen] = useState({});      // הזמנות פתוחות מהרכש לפי אתר ("בדרך")
     const signedIn = cloudCode && auth.s === "in";
     const who = signedIn ? auth.staff.name : me.name;
-    const myMgr = signedIn && auth.staff.role !== "office" ? auth.staff.name : null;
-    const isOffice = !myMgr;
+    const isViewer = signedIn && auth.staff.role === "viewer";
+    const myMgr = signedIn && auth.staff.role !== "office" && !isViewer ? auth.staff.name : null;
+    // isOffice = פעולות של המשרד (סנכרון מנהלים, ניהול משתמשים, איפוס). צופה רואה הכול אבל לא מבצע אותן
+    const isOffice = !myMgr && !isViewer;
     async function checkStaff(u){
       if(!u || !u.phoneNumber){ setAuth({ s:"out" }); return; }
       setAuth({ s:"checking", phone:u.phoneNumber });
@@ -2713,7 +2775,9 @@ ${l}`
             }
             setAuth({ s:"noteam", phone:u.phoneNumber }); return;
           }
-          Cloud.mgr = sd.role === "office" ? null : sd.name;
+          // משרד וצופה רואים את כל האתרים; צופה — בלי שום כתיבה
+          Cloud.mgr = (sd.role === "office" || sd.role === "viewer") ? null : sd.name;
+          setReadOnly(sd.role === "viewer");
           setAuth({ s:"in", phone:u.phoneNumber, staff:sd }); return;
         }
         let ownerSet = true;
@@ -2745,6 +2809,7 @@ ${l}`
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
     const update = useCallback((fn)=>{
+      if(RO.on){ notify("צפייה בלבד — אין הרשאה לשנות"); return; }
       const prev = stRef.current;
       const next = fn(structuredClone(prev));
       stRef.current = next; setSt(next);
@@ -2879,6 +2944,7 @@ ${l}`
     // "מאז מתי" — נרשם ברגע שחריג נראה לראשונה, ונמחק כשהחריג נפתר
     useEffect(()=>{
       if(cloudCode && !(cloud.loaded.sites && cloud.loaded.since)) return;
+      if(RO.on) return;   // צופה לא רושם "מאז מתי" — המשרד והמנהלים רושמים
       const keys = new Set(exAll.map(e => e.key));
       const since = st.since || {};
       const fresh = exAll.some(e => !(e.key in since) && !e.fixedTs);
@@ -3032,6 +3098,12 @@ ${l}`
         ["onSite","unit","need","blocksTomorrow"].forEach(k => { if(patch[k] !== undefined) m[k] = patch[k]; });
         m.at = Date.now(); m.by = who;
         s.stockAt = m.at; s.stockBy = who;
+        // ירידה בספירה בלי רישום שימוש — נשמרת בנפרד, כדי שיהיה ברור כמה חומר "נעלם"
+        if(before != null && m.onSite !== before){
+          const last = (s.usage || [])[0];
+          if(m.onSite < before) addUsage(s, { item:m.item, q:before - m.onSite, unit:m.unit, kind:"count", by:who });
+          else if(last && last.kind === "count" && last.item === m.item && last.by === who && Date.now() - last.at < 15 * 60e3) addUsage(s, { item:m.item, q:-(m.onSite - before), unit:m.unit, kind:"count", by:who });
+        }
         pushLog(d, who, "עדכן מלאי: " + m.item + " · " + m.onSite + " " + m.unit + (before != null && before !== m.onSite ? " (היה " + before + ")" : ""), siteId);
         return d;
       });
@@ -3045,6 +3117,21 @@ ${l}`
         return d;
       });
       notify("הפריט הוסר מהמלאי");
+    }
+    function stockUse(siteId, item, q, kind, note){
+      let left = null, unit = "";
+      update(d=>{
+        const s = d.sites.find(x=>x.id===siteId); if(!s) return d;
+        const m = (s.materials || []).find(x=>x.item===item); if(!m) return d;
+        const before = Number(m.onSite) || 0;
+        m.onSite = Math.max(0, Math.round((before - q) * 1000) / 1000);
+        m.at = Date.now(); m.by = who; s.stockAt = m.at; s.stockBy = who;
+        left = m.onSite; unit = m.unit;
+        addUsage(s, { item, q, unit:m.unit, kind, note, by:who });
+        pushLog(d, who, (kind === "waste" ? "פחת/נזק: " : "שימוש בחומר: ") + item + " · " + q + " " + m.unit + (note ? " · " + note : "") + " (נשאר " + m.onSite + ")", siteId);
+        return d;
+      });
+      notify("נרשם " + (kind === "waste" ? "פחת" : "שימוש") + ": " + q + " " + unit + " " + item);
     }
     function stockConfirm(siteId){
       update(d=>{
@@ -3131,7 +3218,7 @@ ${l}`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
     else if(nav.screen === "stock.home")
-      body = html`<${StockHome} st=${vst} now=${now} who=${who} rk=${rkOpen} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} />`;
+      body = html`<${StockHome} st=${vst} now=${now} who=${who} rk=${rkOpen} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} onStockUse=${stockUse} />`;
 
     return html`
       <div class="app">
@@ -3140,6 +3227,7 @@ ${l}`
             <span class="plate"><img src=${LOGO} alt="ט.ש. מי רון" /></span>
             <span class="txt"><b>ט.ש. מי רון</b><span>פלס · בקרת ביצוע לאינסטלציה</span></span>
           </div>
+          ${isViewer && html`<span class="rotag" title="המשתמש הזה יכול רק לצפות — אין לו הרשאה לשנות שום דבר">👁 צפייה בלבד</span>`}
           <div class="seg" role="tablist">
             <button role="tab" class=${role==="ctl"?"on":""} onClick=${()=>switchRole("ctl")}>בקרה</button>
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
@@ -3175,7 +3263,7 @@ ${l}`
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
               ${signedIn ? html`
                 <h3>החשבון שלי</h3>
-                <div class="who">${auth.staff.name} · ${isOffice ? "משרד — רואה הכול" : "מנהל פרויקט — רואה רק את האתרים שלו (" + sites.length + ")"} · <span dir="ltr">${fmtPhone(auth.phone)}</span></div>
+                <div class="who">${auth.staff.name} · ${isViewer ? "צופה — רואה הכול, קריאה בלבד" : isOffice ? "משרד — רואה הכול" : "מנהל פרויקט — רואה רק את האתרים שלו (" + sites.length + ")"} · <span dir="ltr">${fmtPhone(auth.phone)}</span></div>
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setStaffSheet(true); }}><span class="e">👥</span>משתמשים והרשאות</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · שיתוף קישור</button>`}
                 <button class="opt" onClick=${logout}><span class="e">🚪</span>יציאה מהחשבון</button>
@@ -3334,7 +3422,7 @@ ${l}`
               <pre class="rep">${rep}</pre>
               <div class="btnrow">
                 <button class="btn" onClick=${()=>setRep(null)}>סגור</button>
-                <button class="btn pri" onClick=${shareRep}>שתף / העתק</button>
+                <button class="btn pri rokeep" onClick=${shareRep}>שתף / העתק</button>
               </div>
             </div>
           </div>`}
@@ -4052,7 +4140,53 @@ ${l}`
       </form>`;
   }
 
-  function StockEditor({ st, now, who, rk, onSave, onDelete, onConfirm }){
+  function UseForm({ m, onSave, onCancel }){
+    const [q, setQ] = useState(""), [kind, setKind] = useState("use"), [note, setNote] = useState("");
+    const n = Number(q), have = Number(m.onSite) || 0;
+    const ok = q !== "" && !isNaN(n) && n > 0 && n <= have;
+    return html`
+      <form class="newunit" onSubmit=${e=>{ e.preventDefault(); if(ok) onSave(n, kind, note.trim()); }}>
+        <div class="sitenm">🔧 ${m.item}<span class="usehave"> · במלאי ${have} ${m.unit}</span></div>
+        <div class="chips" style=${{margin:0}}>
+          ${["use","waste"].map(k => html`<button type="button" key=${k} class=${"chip "+(kind===k?"on":"")} onClick=${()=>setKind(k)}>${USE_KIND[k]}</button>`)}
+        </div>
+        <input type="number" inputMode="decimal" min="0" step="any" placeholder=${"כמה " + m.unit + (kind === "waste" ? " נפגמו / אבדו" : " נוצלו")} value=${q} onInput=${e=>setQ(e.target.value)} autoFocus />
+        ${n > have && html`<div class="usewarn">יותר ממה שרשום במלאי (${have} ${m.unit}). אם הספירה לא נכונה — סגור, תקן את הכמות במלאי ואז רשום.</div>`}
+        <input type="text" maxLength=${60} placeholder=${kind === "waste" ? "מה קרה? (נשבר, נגנב, פג תוקף…)" : "איפה? (קומה 3, דירה 12…) — לא חובה"} value=${note} onInput=${e=>setNote(e.target.value)} />
+        <div class="btnrow">
+          <button type="button" class="btn" onClick=${onCancel}>ביטול</button>
+          <button type="submit" class="btn pri" disabled=${!ok}>רשום והורד מהמלאי</button>
+        </div>
+      </form>`;
+  }
+
+  function UsageCard({ site, now }){
+    const since = now - 30 * DAY;
+    const list = (site.usage || []).filter(u => u.at >= since);
+    if(!list.length) return null;
+    const r3 = x => Math.round(x * 1000) / 1000;
+    const by = {};
+    list.forEach(u => { const x = by[u.item] = by[u.item] || { use:0, waste:0, count:0, unit:u.unit }; x[u.kind] = r3((x[u.kind] || 0) + u.q); });
+    const items = Object.keys(by).sort((a, b) => (by[b].use + by[b].waste + by[b].count) - (by[a].use + by[a].waste + by[a].count));
+    return html`
+      <div class="card" style=${{marginTop:12}}>
+        <div class="lbl">📉 צריכת חומר · 30 יום אחרונים</div>
+        ${items.map(it => { const x = by[it]; return html`
+          <div key=${it} class="rkord"><b>${it}</b>
+            <div>${[x.use && "שימוש " + x.use, x.waste && "פחת " + x.waste, x.count && html`<span class="usecount">ירידה בספירה ${x.count}</span>`].filter(Boolean).map((p, i) => html`${i ? " · " : ""}${p}`)} ${x.unit}</div>
+          </div>`; })}
+        <details class="usehist">
+          <summary class="linkbtn">כל הרישומים (${list.length})</summary>
+          ${list.slice(0, 60).map(u => html`<div key=${u.id} class="rkord">
+            ${dmy(u.at)} ${hhmm(u.at)} · ${u.by} · <b>${USE_KIND[u.kind] || u.kind}</b>
+            <div>${u.item} · ${u.q} ${u.unit}${u.note ? " · " + u.note : ""}</div>
+          </div>`)}
+        </details>
+        <div class="hint" style=${{textAlign:"start", marginTop:6}}>"ירידה בספירה" = הכמות ירדה בעדכון ידני (− או הקלדה) בלי רישום שימוש. כמות גדולה כאן — כדאי לברר לאן החומר הלך.</div>
+      </div>`;
+  }
+
+  function StockEditor({ st, now, who, rk, onSave, onDelete, onConfirm, onUse }){
     const actives = st.sites.filter(s => s.active);
     const mine = actives.filter(s => s.owner && s.owner.name === who);
     const [all, setAll] = useState(false);
@@ -4060,6 +4194,7 @@ ${l}`
     const [sid, setSid] = useState(null);
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState(null);
+    const [using, setUsing] = useState(null);
     const site = list.find(s => s.id === sid) || list[0];
     if(!site) return html`<div class="empty">אין אתרים פעילים</div>`;
     const info = stockInfo(site, st, now);
@@ -4078,7 +4213,7 @@ ${l}`
           <button class=${"chip "+(!all?"on":"")} onClick=${()=>setAll(false)}>האתרים שלי (${mine.length})</button>
           <button class=${"chip "+(all?"on":"")} onClick=${()=>setAll(true)}>כל האתרים</button>
         </div>`}
-        <select class="pick" value=${site.id} onChange=${e=>{ setSid(e.target.value); setAdding(false); setEditing(null); }}>
+        <select class="pick" value=${site.id} onChange=${e=>{ setSid(e.target.value); setAdding(false); setEditing(null); setUsing(null); }}>
           ${list.map(s => html`<option key=${s.id} value=${s.id}>${s.name} · ${s.contractor}${s.owner ? " · " + s.owner.name : ""}</option>`)}
         </select>
 
@@ -4103,6 +4238,9 @@ ${l}`
             ? html`<${StockForm} key=${m.item} init=${{ item:m.item, onSite:String(m.onSite), unit:m.unit, need: m.need ? String(m.need) : "", blocksTomorrow:!!m.blocksTomorrow }}
                 onSave=${p => { onSave(site.id, m.item, p); setEditing(null); }} onCancel=${()=>setEditing(null)}
                 onDelete=${()=>{ onDelete(site.id, m.item); setEditing(null); }} />`
+            : using === m.item
+            ? html`<${UseForm} key=${m.item} m=${m} onCancel=${()=>setUsing(null)}
+                onSave=${(q, kind, note) => { onUse(site.id, m.item, q, kind, note); setUsing(null); }} />`
             : html`
               <div key=${m.item} class=${"req stkrow "+(m.onSite < m.need ? "blocked" : "")}>
                 <div class="top">
@@ -4112,12 +4250,13 @@ ${l}`
                       ${m.onSite < m.need ? "חוסר " + (m.need - m.onSite) + " " + m.unit + " · " : ""}${m.need ? "מינימום " + m.need + " " + m.unit : "ללא מינימום"}${m.at ? "" : " · לא נספר"}
                     </div>
                   </div>
-                  <button type="button" class="xbtn" style=${{width:34, height:34}} aria-label="ערוך פריט" onClick=${()=>{ setEditing(m.item); setAdding(false); }}>✎</button>
+                  <button type="button" class="xbtn" style=${{width:34, height:34}} aria-label="ערוך פריט" onClick=${()=>{ setEditing(m.item); setAdding(false); setUsing(null); }}>✎</button>
                 </div>
                 <div class="rowbet">
                   <${QtyCell} value=${m.onSite} onCommit=${n => onSave(site.id, m.item, { onSite:n })} />
                   <span class="unit">${m.unit}</span>
                 </div>
+                ${m.onSite > 0 && html`<button type="button" class="btn usebtn" onClick=${()=>{ setUsing(m.item); setEditing(null); setAdding(false); }}>🔧 שימוש בחומר</button>`}
                 ${(()=>{ const oo = rkOnOrder(rk, site.id, m.item), q = toOrder(m); return html`
                   ${oo.q > 0 && html`<div class="rkline">🚚 בדרך: ${oo.q} ${m.unit}${oo.sup.length ? " · " + oo.sup.join(", ") : ""}</div>`}
                   ${canOrder && q > 0 && html`<a class="btn rkbtn" href=${orderLink([{ n:m.item, q, u:m.unit }])} target="_blank" rel="noopener">🛒 להזמין ${q} ${m.unit} ברכש</a>`}`; })()}
@@ -4127,16 +4266,17 @@ ${l}`
             ? html`<${StockForm} onSave=${p => { onSave(site.id, null, p); setAdding(false); }} onCancel=${()=>setAdding(false)} />`
             : html`<button class="addsection" onClick=${()=>{ setAdding(true); setEditing(null); }}>＋ הוסף פריט למלאי</button>`}
         </div>
-        <div class="hint">כל עדכון נרשם ביומן עם שמך. מינימום נדרש: כשהכמות יורדת מתחתיו נפתח חריג במרכז הבקרה. בלי עדכון ${CFG.stockDays} ימים — נפתח חריג "מלאי לא עודכן".</div>
+        <${UsageCard} site=${site} now=${now} />
+        <div class="hint">השתמשת בחומר? "🔧 שימוש בחומר" מוריד מהמלאי ורושם לאן הוא הלך. ＋/− רק לתיקון ספירה. כל עדכון נרשם ביומן עם שמך. מינימום נדרש: כשהכמות יורדת מתחתיו נפתח חריג במרכז הבקרה. בלי עדכון ${CFG.stockDays} ימים — נפתח חריג "מלאי לא עודכן".</div>
       </div>`;
   }
 
-  function StockHome({ st, now, who, rk, onStockSave, onStockDelete, onStockConfirm }){
+  function StockHome({ st, now, who, rk, onStockSave, onStockDelete, onStockConfirm, onStockUse }){
     return html`
       <div class="screen narrow">
         <div class="shead"><h2>מלאי באתר</h2><span class="sub">כל מנהל מנהל את המלאי של האתרים שלו · ההנהלה רואה בזמן אמת</span></div>
         <div style=${{marginTop:12}}>
-          <${StockEditor} st=${st} now=${now} who=${who} rk=${rk} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} />
+          <${StockEditor} st=${st} now=${now} who=${who} rk=${rk} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} onUse=${onStockUse} />
         </div>
       </div>`;
   }
