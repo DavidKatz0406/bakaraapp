@@ -2821,7 +2821,10 @@ ${l}`
   function AttWorkers({ B, code, workers, visSites, mgr, who, notify }){
     const [name, setName] = useState("");
     const pickSites = visSites.filter(s => s.active);
-    const [site, setSite] = useState(pickSites[0] ? pickSites[0].id : "");
+    const [siteSel, setSite] = useState(pickSites[0] ? pickSites[0].id : "");
+    // האתר שנבחר חייב להיות אחד מהאתרים שברשימה. אחרת (האתרים נטענו אחרי פתיחת המסך, או שהוחלף מנהל)
+    // הרשימה מציגה את האתר הראשון אבל הבחירה ריקה או ישנה — והעובד לא נוסף או נוסף לאתר אחר
+    const site = pickSites.some(s => s.id === siteSel) ? siteSel : (pickSites[0] ? pickSites[0].id : "");
     const [lang, setLang] = useState("he");
     const [bulk, setBulk] = useState(false);
     const [q, setQ] = useState("");

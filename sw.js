@@ -1,6 +1,6 @@
 /* Service worker — בקרה / ט.ש. מי-רון
    Bump CACHE whenever a shell file changes. */
-const CACHE = "bakara-v32";
+const CACHE = "bakara-v33";
 
 const SHELL = [
   "./",
