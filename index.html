@@ -331,6 +331,19 @@
   .grow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-family:"Heebo",sans-serif; font-size:.78rem; color:var(--ink-2); }
   .grow select{ font-size:.84rem; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
   .prevv{ font-family:"Heebo",sans-serif; font-size:.72rem; color:var(--ink-3); }
+  /* סעיפי חשבון בדוח השבועי ובמסך החשבון */
+  .bitems{ display:flex; flex-direction:column; gap:6px; }
+  .bit{ display:flex; align-items:center; gap:8px; padding:7px 9px; border:1px solid var(--line); border-radius:9px; background:var(--surface); }
+  .bit .bd{ flex:1; min-width:0; font-family:"Heebo",sans-serif; font-size:.8rem; line-height:1.3; }
+  .bit .bd small{ display:block; color:var(--ink-3); font-size:.7rem; }
+  .bit input{ width:68px; flex:none; font-size:.9rem; padding:6px; border:1px solid var(--line); border-radius:8px; text-align:center; background:var(--surface); color:var(--ink); }
+  .bit.over input{ border-color:var(--bad, #c0392b); }
+  .bit select{ flex:none; font-size:.74rem; padding:4px; border:1px solid var(--line); border-radius:7px; background:var(--surface); color:var(--ink); max-width:96px; }
+  .bmoney{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .bmoney div{ border:1px solid var(--line); border-radius:10px; padding:8px; text-align:center; font-family:"Heebo",sans-serif; }
+  .bmoney b{ display:block; font-size:1.02rem; }
+  .bmoney span{ font-size:.68rem; color:var(--ink-3); }
+  .wtxt{ width:100%; box-sizing:border-box; font-family:"Heebo",sans-serif; font-size:.86rem; padding:8px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); resize:vertical; }
   .card.fl{ margin-top:10px; display:flex; flex-direction:column; gap:12px; }
   .fl label{ display:flex; flex-direction:column; gap:5px; font-family:"Heebo",sans-serif; font-size:.78rem; font-weight:600; color:var(--ink-2); }
   .fl label.tgl{ flex-direction:row; font-weight:400; }
@@ -670,6 +683,7 @@
     checkinBy: 8,          // שעה: מכאן אתר בלי דיווח יומי מסומן (נוכחות ודיווח יומי עד 08:00 — החלטת דוד 11/2026)
     checkinEsc: 10,        // שעה: מכאן החריגה עוברת לדרג בעלים (שעתיים אחרי המועד)
     weeklyBy: 12,          // שעה ביום א׳: עד אז צריך להגיש את הדוח השבועי
+    matPct: 27,            // תקציב חומר = 27% מההכנסה הצפויה של החודש (יעד הכמויות של המשרד × מחירי החשבון) — החלטת דוד 11/2026
     stockDays: 3,          // ימים: מלאי שלא עודכן מעבר לזה נחשב לא מעודכן
     workerDrop: 0.6,       // ירידת כ"א: ביחס לשבוע שעבר מתחת ל-60% = חריג
     escL2h: 4,             // שעות פתוחה → דרג 2
@@ -747,7 +761,121 @@
   function compactWeekly(w){
     const tracks = {};
     TRACKS.forEach(t => { tracks[t.k] = pctOf(w, t.k); });
-    return { week: w.week, tracks, workers: w.workers == null ? null : w.workers };
+    return { week: w.week, at: w.at || null, tracks, workers: w.workers == null ? null : w.workers, txt: w.txt || null, bq: w.bq || null };
+  }
+
+  /* ───────── חשבון ביצוע חודשי ─────────
+     המשרד מעלה את החשבון של האתר (אקסל) פעם בחודש. כל סעיף משויך למסלול בדוח השבועי, והמנהל מדווח
+     כל שבוע מלל חופשי + כמה בוצע בכל סעיף פתוח. בסוף החודש יוצאת טיוטת חשבון עם "כמות נוכחית".
+     החשבון (כולל מחירים ויעד הכמויות של החודש) שמור ב-bills/{אתר}: רק המשרד, הצופה והמנהל של האתר קוראים. */
+  // r2 (עיגול ל-2 ספרות) מוגדר למטה, בדוחות של חברות כ״א
+  const monthKey = ts => { const d = new Date(ts); return d.getFullYear() + "-" + pad2(d.getMonth() + 1); };
+  const mLabel = mk => { const [y, m] = mk.split("-"); return ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"][+m - 1] + " " + y; };
+  const unitTxt = u => ({ "ק":"קומות", "יח":"יח׳", "קמפ":"קומפ׳", "מ\"א":"מ״א", "מ'":"מ׳" })[String(u || "").trim()] || String(u || "").trim();
+  const nisR = x => "₪" + Math.round(+x || 0).toLocaleString("he-IL");
+  const fmtQ = x => String(r2(x));
+  const BILL_OTHER = { k:"", label:"סעיפים נוספים בחשבון" };
+  // שיוך סעיף למסלול לפי שם הסעיף והפרק. "" = סעיף כללי (טופס 4, מסירה, פיתוח, עבודות נוספות)
+  function billTrack(d, ch){
+    const s = String(d || ""), c = String(ch || "");
+    if(/פיתוח|נוספות/.test(c) || /טופס\s*4|מסיר|^הפעלה|ביקורת/.test(s.trim())) return "";
+    if(/ביציק|ליווי\s*שלד|שרוול/.test(s)) return "skeleton";
+    if(/מתז|ספרינקלר/.test(s)) return "sprinklers";
+    if(/חניו[נן]|מרת[פף]/.test(c + " " + s) || /בורות\s*שאיבה|מפרידי?\s*שומן/.test(s)) return "parking";
+    if(/אמבטי|ניאגר|אסל|כיור|ברז|גלגלונ|סניטר|משאבות\s*בגג/.test(s)) return "finishing";
+    if(/קולטנ|דלוחין|צנרת\s*מים|הידרנט|ביוב|ניקוז|גז\b/.test(s)) return "complets";
+    return "";
+  }
+  // שורות של גיליון חשבון → { title, items:[{ c, d, u, q, p, base, t, ch }] } לפי שורת הכותרת "מספר סעיף"
+  function billParse(rows){
+    rows = rows.map(r => Array.from(r || [], x => String(x == null ? "" : x).trim()));
+    const hi = rows.findIndex(r => r.some(c => /מס.{0,3}\s*סעיף/.test(c)));
+    if(hi < 0) return { err:"לא נמצאה בגיליון שורת כותרת עם \"מספר סעיף\"." };
+    const h = rows[hi], f = re => h.findIndex(c => re.test(c));
+    const cC = f(/מס.{0,3}\s*סעיף/), cD = f(/תאור|תיאור/), cU = f(/יחידת|^יח/), cQ = f(/^כמות$/), cP = f(/מחיר/),
+          cCum = f(/מצטבר/), cPrev = f(/קודמת/), cCur = f(/נוכחית/);
+    if(cD < 0 || cQ < 0) return { err:"חסרות בגיליון העמודות \"תאור הסעיף\" או \"כמות\"." };
+    const num = v => { const n = parseFloat(String(v || "").replace(/,/g, "")); return isFinite(n) ? n : 0; };
+    let title = "";
+    rows.slice(0, hi).forEach(r => r.forEach(c => { if(!title && /חשבון/.test(c)) title = c.replace(/\s+/g, " "); }));
+    const items = [], seen = {};
+    let ch = "";
+    rows.slice(hi + 1).forEach(r => {
+      const d = (r[cD] || "").replace(/\s+/g, " ").trim(), u = cU >= 0 ? (r[cU] || "").trim() : "";
+      if(!d && !(r[cC] || "")) return;
+      if(u === "פרק"){ if(d) ch = d; return; }
+      if(/^סה"?״?כ/.test(d)) return;
+      const q = num(r[cQ]);
+      if(!d || !(q > 0)) return;
+      let c = cC >= 0 && r[cC] ? r[cC].trim() : "+" + d.slice(0, 40);
+      if(seen[c]) c = c + "#" + (++seen[c]); else seen[c] = 1;
+      const base = cCum >= 0 && r[cCum] !== "" && r[cCum] != null ? num(r[cCum]) : num(cPrev >= 0 ? r[cPrev] : 0) + num(cCur >= 0 ? r[cCur] : 0);
+      items.push({ c, d, u, q, p: cP >= 0 ? num(r[cP]) : 0, base: r2(base), t: billTrack(d, ch), ch });
+    });
+    return items.length ? { title, items } : { err:"לא נמצאו סעיפים עם כמות מתחת לשורת הכותרת." };
+  }
+  // כל הדוחות השבועיים של האתר (היסטוריה + האחרון), אחד לכל שבוע
+  function billWeeks(site){
+    const m = {};
+    (site.weeklyHist || []).forEach(w => { if(w && w.week) m[w.week] = w; });
+    if(site.weekly && site.weekly.week) m[site.weekly.week] = site.weekly;
+    return Object.values(m).sort((a, b) => a.week < b.week ? -1 : 1);
+  }
+  // סיכום כמויות: מצטבר (בסיס החשבון + דוחות שהוגשו אחרי שהחשבון נטען), לפני החודש, ובחודש עצמו
+  function billSums(bill, site, mk, skipWeek){
+    const done = {}, before = {}, month = {}, notes = [];
+    (bill.items || []).forEach(i => { done[i.c] = i.base || 0; before[i.c] = i.base || 0; month[i.c] = 0; });
+    billWeeks(site).forEach(w => {
+      if(!(w.at > (bill.at || 0)) || w.week === skipWeek) return;
+      const wm = w.week.slice(0, 7);
+      Object.entries(w.bq || {}).forEach(([c, q]) => {
+        if(!(c in done)) return;
+        q = +q || 0;
+        done[c] = r2(done[c] + q);
+        if(mk && wm < mk) before[c] = r2(before[c] + q);
+        if(mk && wm === mk) month[c] = r2(month[c] + q);
+      });
+      if(mk && wm === mk && w.txt) Object.entries(w.txt).forEach(([k, t]) => { if(hasText(t)) notes.push({ week: w.week, k, t }); });
+    });
+    return { done, before, month, notes };
+  }
+  // כסף לחודש: הכנסה צפויה (יעד המשרד), תקציב חומר, וביצוע לפי הדוחות השבועיים
+  function billMoney(bill, site, mk){
+    const plan = (bill.plan || {})[mk] || {}, s = billSums(bill, site, mk);
+    let target = 0, actual = 0;
+    (bill.items || []).forEach(i => { target += (+plan[i.c] || 0) * (i.p || 0); actual += (s.month[i.c] || 0) * (i.p || 0); });
+    return { target, budget: target * CFG.matPct / 100, actual, hasPlan: Object.keys(plan).length > 0 };
+  }
+  // גישה לחשבון: ענן (bills/{אתר}) או אחסון מקומי במצב בדיקה
+  const billLocal = {
+    get(){ try{ return JSON.parse(localStorage.getItem("bakara_bills") || "{}"); }catch(e){ return {}; } },
+    set(o){ try{ localStorage.setItem("bakara_bills", JSON.stringify(o)); }catch(e){} }
+  };
+  function useBill(siteId){
+    const [b, setB] = useState(undefined);   // undefined = טוען · null = אין חשבון
+    useEffect(()=>{
+      if(!siteId) return;
+      setB(undefined);
+      if(!Cloud.on){
+        const h = ()=> setB(billLocal.get()[siteId] || null);
+        h(); window.addEventListener("bakara-bills", h);
+        return ()=> window.removeEventListener("bakara-bills", h);
+      }
+      return Cloud.base.collection("bills").doc(docKey(siteId)).onSnapshot(d => setB(d.exists ? d.data() : null), ()=> setB(null));
+    }, [siteId]);
+    return b;
+  }
+  function billWrite(siteId, patch, planMonth){
+    if(!Cloud.on){
+      const all = billLocal.get(), o = { ...(all[siteId] || {}), ...patch };
+      if(planMonth) o.plan = { ...(o.plan || {}), [planMonth]: patch.plan[planMonth] };
+      all[siteId] = o; billLocal.set(all); window.dispatchEvent(new Event("bakara-bills"));
+      return Promise.resolve();
+    }
+    const ref = Cloud.base.collection("bills").doc(docKey(siteId));
+    // יעד של חודש מחליף את כל הסעיפים של אותו חודש (merge רגיל היה משאיר סעיפים שנמחקו)
+    if(planMonth) return ref.set({ site: siteId }, { merge:true }).then(()=> ref.update({ ["plan." + planMonth]: patch.plan[planMonth], planAt: patch.planAt, planBy: patch.planBy }));
+    return ref.set({ ...patch, site: siteId }, { merge:true });
   }
   const trackOpen = w => TRACKS.some(t => { const v = w.tracks && w.tracks[t.k]; return v && v.pct < 100; });
   const hasText = v => !!(v && String(v).trim());
@@ -2537,7 +2665,8 @@ ${l}`
   /* ── מסך המשרד: חברות, שיוך עובדים, נעילת שבוע וסיכום חודשי ── */
   /* ───── ייבוא רשימת עובדים מחברת כ״א (קובץ אקסל או הדבקה) ─────
      הקובץ נקרא רק בדפדפן. נשמרים רק החברה ומספר העובד אצלה — טלפונים וכל עמודה אחרת לא נשמרים. */
-  async function xlsxRows(buf){
+  // all=true → כל הגיליונות לפי הסדר בקובץ: [{ name, rows }]. אחרת — השורות של הגיליון הראשון
+  async function xlsxRows(buf, all){
     const u = new Uint8Array(buf), dv = new DataView(buf), dec = new TextDecoder();
     let e = u.length - 22;
     while(e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
@@ -2562,7 +2691,7 @@ ${l}`
     const sheet = Object.keys(ents).filter(k => /^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort((a, b) => parseInt(a.slice(19)) - parseInt(b.slice(19)))[0];
     if(!sheet) throw new Error("sheet");
     const col = r => { let n = 0; for(const ch of String(r).replace(/\d+/g, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
-    return [...X(await read(sheet)).getElementsByTagName("row")].map(row => {
+    const rowsOf = async path => [...X(await read(path)).getElementsByTagName("row")].map(row => {
       const a = [];
       [...row.getElementsByTagName("c")].forEach((c, i) => {
         const t = c.getAttribute("t"), v = c.getElementsByTagName("v")[0];
@@ -2570,6 +2699,20 @@ ${l}`
       });
       return a;
     });
+    if(!all) return rowsOf(sheet);
+    // שמות הגיליונות והקבצים שלהם מתוך workbook.xml + הקישורים שלו
+    const wb = X(await read("xl/workbook.xml") || "<w/>"), rel = X(await read("xl/_rels/workbook.xml.rels") || "<r/>");
+    const tgt = {};
+    [...rel.getElementsByTagName("Relationship")].forEach(r => { tgt[r.getAttribute("Id")] = r.getAttribute("Target"); });
+    const out = [];
+    for(const s of [...wb.getElementsByTagName("sheet")]){
+      const id = s.getAttribute("r:id") || [...s.attributes].find(a => /:id$/.test(a.name))?.value;
+      let p = tgt[id]; if(!p) continue;
+      p = p.replace(/^\/?xl\//, "").replace(/^\//, "");
+      if(!ents["xl/" + p]) continue;
+      out.push({ name: s.getAttribute("name") || "", rows: await rowsOf("xl/" + p) });
+    }
+    return out.length ? out : [{ name:"", rows: await rowsOf(sheet) }];
   }
   // שורות הטבלה → [{ empNo, name, proj }] לפי שורת הכותרת (מספר עובד / שם פרטי / שם משפחה / שם / פרויקט)
   function agParse(rows){
@@ -3661,11 +3804,13 @@ ${l}`
         const o = same ? s.weekly : null;
         s.weekly = {
           week: wk, at: ts, by: who, foreman: data.foreman, lead: data.lead, tracks: data.tracks, workers: data.workers,
+          txt: data.txt || null, bq: data.bq || null,
           note: data.note, issue: data.issue, issueResolvedAt: (o && o.note === data.note) ? (o.issueResolvedAt || null) : null,
           safety: data.safety, safetyResolvedAt: (o && o.safety === data.safety) ? (o.safetyResolvedAt || null) : null
         };
         const ps = TRACKS.filter(t => data.tracks[t.k]).map(t => t.label + " " + data.tracks[t.k].pct + "%").join(", ");
-        pushLog(d, who, (same ? "עדכן" : "הגיש") + " דוח שבועי · " + (ps || "ללא מסלולים") + " · כ״א " + data.workers, siteId);
+        const nq = Object.keys(data.bq || {}).length;
+        pushLog(d, who, (same ? "עדכן" : "הגיש") + " דוח שבועי · " + (ps || "ללא מסלולים") + " · כ״א " + data.workers + (nq ? " · כמויות ב-" + nq + " סעיפי חשבון" : ""), siteId);
         return d;
       });
       setNav({ screen:"field.home" });
@@ -3783,7 +3928,13 @@ ${l}`
         log=${(st.log||[]).filter(l=>l.siteId===nav.id).slice(0,8)}
         onBack=${()=>setNav({screen:"ctl.home"})} notify=${notify} />`;
     else if(nav.screen === "field.home")
-      body = html`<${FieldHome} sites=${sites} now=${now} onCheckin=${checkin} onOpen=${(sid,uid)=>setNav({screen:"field.report", sid, uid})} onAddUnit=${addUnit} onWeekly=${sid=>setNav({screen:"field.weekly", sid})} onBoq=${sid=>setNav({screen:"field.boq", sid})} />`;
+      body = html`<${FieldHome} sites=${sites} now=${now} onCheckin=${checkin} onOpen=${(sid,uid)=>setNav({screen:"field.report", sid, uid})} onAddUnit=${addUnit} onWeekly=${sid=>setNav({screen:"field.weekly", sid})} onBoq=${sid=>setNav({screen:"field.boq", sid})} onBill=${sid=>setNav({screen:"field.bill", sid})} />`;
+    else if(nav.screen === "field.bill"){
+      const bsite = bySite(nav.sid);
+      body = bsite
+        ? html`<${BillScreen} key=${bsite.id} site=${bsite} now=${now} office=${isOffice} who=${who} onBack=${()=>setNav({screen:"field.home"})} notify=${notify} />`
+        : html`<div class="screen narrow"><div class="empty">האתר לא נמצא</div></div>`;
+    }
     else if(nav.screen === "field.boq"){
       const bsite = bySite(nav.sid);
       body = bsite
@@ -4415,9 +4566,27 @@ ${l}`
       </div>`;
   }
 
-  function FieldHome({ sites, now, onCheckin, onOpen, onAddUnit, onWeekly, onBoq }){
+  /* כרטיס החשבון במסך השטח: יעד החודש, תקציב החומר והביצוע עד עכשיו */
+  function BillCard({ site, now, onBill }){
+    const bill = useBill(site.id), mk = monthKey(now);
+    const m = bill ? billMoney(bill, site, mk) : null;
+    return html`
+      <div class="card ci" style=${{marginBottom:12}}>
+        <div class="lbl">📑 חשבון ביצוע ותקציב חומר · ${mLabel(mk)}</div>
+        ${bill === undefined ? html`<div class="val" style=${{color:"var(--ink-3)"}}>טוען…</div>`
+          : !bill ? html`<div class="val" style=${{color:"var(--ink-3)"}}>טרם הועלה חשבון לאתר הזה</div>`
+          : m.hasPlan ? html`<div class="val">יעד החודש ${nisR(m.target)} · תקציב חומר ${nisR(m.budget)}</div>
+              <div class="sub2">בוצע לפי הדוחות השבועיים: ${nisR(m.actual)}${m.target ? " (" + Math.round(m.actual / m.target * 100) + "% מהיעד)" : ""}</div>`
+          : html`<div class="val">${bill.name || "חשבון"}</div><div class="sub2">המשרד עוד לא קבע יעד כמויות ל${mLabel(mk)} · בוצע עד כה ${nisR(m.actual)}</div>`}
+        <div class="btnrow" style=${{marginTop:10}}><button class="btn" onClick=${()=>onBill(site.id)}>פתח חשבון</button></div>
+      </div>`;
+  }
+
+  function FieldHome({ sites, now, onCheckin, onOpen, onAddUnit, onWeekly, onBoq, onBill }){
     const active = sites.filter(s=>s.active);
-    const [sid, setSid] = useState(active[0].id);
+    // האתר שנבחר נשמר בין המסכים (חזרה מהדוח השבועי / מהחשבון לא מאפסת את הבחירה)
+    const [sid, setSid0] = useState(()=>{ try{ const v = sessionStorage.getItem("bakara_field_sid"); if(v && active.some(s=>s.id===v)) return v; }catch(e){} return active[0].id; });
+    const setSid = v => { setSid0(v); try{ sessionStorage.setItem("bakara_field_sid", v); }catch(e){} };
     const [adding, setAdding] = useState(false);
     const [issue, setIssue] = useState(false);
     const [note, setNote] = useState("");
@@ -4450,6 +4619,7 @@ ${l}`
             <button class="btn pri" onClick=${()=>onWeekly(site.id)}>${wk ? "עדכן דוח שבועי" : "📅 מלא דוח שבועי"}</button>
           </div>
         </div>
+        ${onBill && html`<${BillCard} key=${site.id} site=${site} now=${now} onBill=${onBill} />`}
 
         <div class="card ci" style=${{marginBottom:12}}>
           <div class="lbl">דיווח יומי · ${site.name}</div>
@@ -4499,6 +4669,150 @@ ${l}`
       </div>`;
   }
 
+  /* מסך החשבון של אתר: המשרד מעלה חשבון וקובע יעד כמויות לחודש; המנהל רואה את האתר שלו בלבד (נאכף בחוקים) */
+  function BillScreen({ site, now, office, who, onBack, notify }){
+    const bill = useBill(site.id);
+    const months = [];
+    for(let i = -3; i <= 1; i++){ const d = new Date(now); d.setDate(1); d.setMonth(d.getMonth() + i); months.push(monthKey(d.getTime())); }
+    const [mk, setMk] = useState(monthKey(now));
+    const [imp, setImp] = useState(null);          // { sheets:[{name, rows}], i, res }
+    const [plan, setPlan] = useState(null);        // טיוטת יעד בעריכה: { c: "כמות" }
+    const [busy, setBusy] = useState(false);
+    const fileRef = useRef(null);
+    const sums = bill ? billSums(bill, site, mk) : null, money = bill ? billMoney(bill, site, mk) : null;
+    const curPlan = bill ? ((bill.plan || {})[mk] || {}) : {};
+    useEffect(()=>{ setPlan(null); }, [mk]);
+
+    function onFile(e){
+      const f = e.target.files && e.target.files[0]; e.target.value = "";
+      if(!f) return;
+      f.arrayBuffer().then(b => xlsxRows(b, true)).then(sheets => {
+        let i = -1;
+        sheets.forEach((s, j) => { if(/חשבון/.test(s.name) && !billParse(s.rows).err) i = j; });
+        if(i < 0) i = Math.max(0, sheets.findIndex(s => !billParse(s.rows).err));
+        setImp({ sheets, i, file: f.name.replace(/\.xlsx$/i, "") });
+      }).catch(()=> notify("לא הצלחתי לקרוא את הקובץ. צריך קובץ אקסל (xlsx)"));
+    }
+    const impRes = imp ? billParse(imp.sheets[imp.i].rows) : null;
+    function saveImport(){
+      if(!impRes || impRes.err) return;
+      setBusy(true);
+      // שיוך שהמשרד תיקן ידנית בחשבון הקודם נשמר לפי מספר הסעיף
+      const oldT = {};
+      ((bill && bill.items) || []).forEach(i => { if(i.tFix) oldT[i.c] = i.t; });
+      const items = impRes.items.map(i => i.c in oldT ? { ...i, t: oldT[i.c], tFix: true } : i);
+      billWrite(site.id, { name: impRes.title || imp.sheets[imp.i].name || imp.file, sheet: imp.sheets[imp.i].name, file: imp.file, at: Date.now(), by: who, items })
+        .then(()=>{ setImp(null); notify("החשבון נשמר · " + items.length + " סעיפים"); })
+        .catch(e => notify("שמירה נכשלה: " + (e.code || e.message))).finally(()=> setBusy(false));
+    }
+    function setTrack(c, t){
+      const items = bill.items.map(i => i.c === c ? { ...i, t, tFix: true } : i);
+      billWrite(site.id, { items }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+    }
+    function savePlan(){
+      const out = {};
+      Object.entries(plan).forEach(([c, v]) => { const n = r2(Number(v)); if(v !== "" && n > 0) out[c] = n; });
+      setBusy(true);
+      billWrite(site.id, { plan: { [mk]: out }, planAt: Date.now(), planBy: who }, mk)
+        .then(()=>{ setPlan(null); notify("יעד " + mLabel(mk) + " נשמר"); })
+        .catch(e => notify("שמירה נכשלה: " + (e.code || e.message))).finally(()=> setBusy(false));
+    }
+    function exportDraft(){
+      const tl = k => (TRACKS.find(t => t.k === k) || BILL_OTHER).label;
+      let tot = 0;
+      const rows = [["מספר סעיף", "תאור הסעיף", "יחידת מידה", "כמות", "מחיר ליח׳", "כמות קודמת", "כמות נוכחית", "כמות מצטברת", "אחוז ביצוע", "סה״כ מצטבר", "יעד החודש", "מסלול בדוח השבועי"]];
+      let ch = null;
+      bill.items.forEach(i => {
+        if(i.ch !== ch){ ch = i.ch; if(ch) rows.push(["", ch]); }
+        const prev = sums.before[i.c], cur = sums.month[i.c], cum = r2(prev + cur), sum = Math.round(cum * (i.p || 0));
+        tot += sum;
+        rows.push([i.c.startsWith("+") ? "" : i.c.replace(/#\d+$/, ""), i.d, i.u, i.q, i.p || "", prev, cur || "", cum, i.q ? Math.round(cum / i.q * 100) + "%" : "", sum, curPlan[i.c] || "", tl(i.t)]);
+      });
+      rows.push([], ["", "סה״כ מצטבר (לפני קיזוזים, עכבון והתייקרות)", "", "", "", "", "", "", "", tot]);
+      rows.push([], ["אתר: " + site.name + " · " + mLabel(mk)], ["בסיס: " + (bill.name || "") + " (נטען " + dmy(bill.at) + ")"],
+        ["כמות נוכחית = סכום הכמויות בדוחות השבועיים של " + mLabel(mk) + " (לפי יום א׳ של השבוע) · טיוטה לבדיקה לפני הגשה"]);
+      const notes = [["שבוע", "מסלול", "מה בוצע (מלל המנהל)"], ...sums.notes.map(n => [dmy(new Date(n.week).getTime()), tl(n.k === "other" ? "" : n.k), n.t])];
+      saveFile(xlsxBlob([{ name:"טיוטת חשבון", rows, widths:[16, 44, 8, 8, 10, 10, 10, 10, 9, 12, 9, 14] },
+        { name:"מלל מהדוחות", rows: notes, widths:[10, 14, 70] }]), "טיוטת חשבון - " + site.name + " - " + mLabel(mk) + ".xlsx");
+    }
+
+    const groups = [...TRACKS, BILL_OTHER];
+    return html`
+      <div class="screen narrow">
+        <div class="shead">
+          <button class="back" onClick=${onBack} aria-label="חזרה">→</button>
+          <div><h2 style=${{fontSize:"1.2rem"}}>חשבון ביצוע · ${site.name}</h2><span class="sub">${bill ? (bill.name || "חשבון") + " · נטען " + dmy(bill.at) + (bill.by ? " · " + bill.by : "") : "יעד חודשי, תקציב חומר וטיוטת חשבון"}</span></div>
+        </div>
+
+        ${office && html`
+          <div class="card" style=${{marginTop:12}}>
+            <input ref=${fileRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange=${onFile} />
+            ${!imp ? html`
+              <div class="rowbet"><span class="prevv">${bill ? "חשבון חדש בסוף החודש מחליף את הבסיס (הכמויות המצטברות)" : "מעלים את קובץ החשבון של האתר (אקסל)"}</span>
+                <button class="btn" onClick=${()=>fileRef.current && fileRef.current.click()}>📥 ${bill ? "העלה חשבון חדש" : "העלה חשבון"}</button></div>`
+            : html`
+              <div class="lbl">טעינת חשבון · ${imp.file}</div>
+              ${imp.sheets.length > 1 && html`<select class="pick" value=${imp.i} onChange=${e => setImp({ ...imp, i: +e.target.value })}>
+                ${imp.sheets.map((s, j) => html`<option key=${j} value=${j}>${s.name || "גיליון " + (j + 1)}</option>`)}</select>`}
+              ${impRes.err ? html`<div class="alert warn"><span class="b"></span>${impRes.err}</div>`
+                : html`<div class="prevv" style=${{margin:"8px 0"}}>${impRes.title || ""} · ${impRes.items.length} סעיפים ·
+                    ${groups.map(g => g.label + " " + impRes.items.filter(i => (i.t || "") === g.k).length).join(" · ")}</div>`}
+              <div class="btnrow">
+                <button class="btn" onClick=${()=>setImp(null)}>ביטול</button>
+                <button class="btn pri" disabled=${busy || !!impRes.err} onClick=${saveImport}>שמור חשבון לאתר</button>
+              </div>
+              <div class="hint">הכמות המצטברת בגיליון הופכת לבסיס. מכאן והלאה מצטברות עליה הכמויות מהדוחות השבועיים.</div>`}
+          </div>`}
+
+        ${bill === undefined ? html`<div class="empty">טוען…</div>`
+          : !bill ? html`<div class="empty">${office ? "עוד לא הועלה חשבון לאתר הזה" : "המשרד עוד לא העלה חשבון לאתר הזה"}</div>`
+          : html`
+          <div class="card" style=${{marginTop:12}}>
+            <div class="rowbet" style=${{marginBottom:8}}>
+              <select class="pick" style=${{margin:0, flex:1}} value=${mk} onChange=${e => setMk(e.target.value)}>
+                ${months.map(m => html`<option key=${m} value=${m}>${mLabel(m)}</option>`)}
+              </select>
+            </div>
+            <div class="bmoney">
+              <div><b>${money.hasPlan ? nisR(money.target) : "—"}</b><span>יעד החודש (הכנסה צפויה)</span></div>
+              <div><b>${money.hasPlan ? nisR(money.budget) : "—"}</b><span>תקציב חומר · ${CFG.matPct}%</span></div>
+              <div><b>${nisR(money.actual)}</b><span>בוצע לפי הדוחות${money.target ? " · " + Math.round(money.actual / money.target * 100) + "%" : ""}</span></div>
+            </div>
+            ${!money.hasPlan && html`<div class="prevv" style=${{marginTop:8}}>${office ? "קבע יעד כמויות לחודש בסעיפים למטה — ממנו נגזרים ההכנסה הצפויה ותקציב החומר." : "המשרד עוד לא קבע יעד כמויות לחודש הזה."}</div>`}
+            <div class="btnrow" style=${{marginTop:10}}>
+              ${office && !plan && html`<button class="btn" onClick=${()=>{ const p = {}; bill.items.forEach(i => { if(curPlan[i.c]) p[i.c] = String(curPlan[i.c]); }); setPlan(p); }}>🎯 ${money.hasPlan ? "ערוך יעד" : "קבע יעד"} ל${mLabel(mk)}</button>`}
+              ${office && plan && html`<button class="btn" onClick=${()=>setPlan(null)}>ביטול</button><button class="btn pri" disabled=${busy} onClick=${savePlan}>שמור יעד</button>`}
+              <button class="btn" onClick=${exportDraft}>📤 טיוטת חשבון ${mLabel(mk)}</button>
+            </div>
+          </div>
+
+          ${groups.map(g => {
+            const its = bill.items.filter(i => (i.t || "") === g.k);
+            if(!its.length) return null;
+            return html`
+              <div class="card trk" key=${g.k || "other"}>
+                <b>${g.label}</b>
+                <div class="bitems">
+                  ${its.map(i => {
+                    const done = sums.done[i.c], left = r2(i.q - done);
+                    return html`
+                      <div class="bit" key=${i.c}>
+                        <div class="bd">${i.d}
+                          <small>${fmtQ(done)}/${fmtQ(i.q)} ${unitTxt(i.u)}${left > 0 ? " · נשאר " + fmtQ(left) : " · הושלם"}${sums.month[i.c] ? " · החודש " + fmtQ(sums.month[i.c]) : ""}${!plan && curPlan[i.c] ? " · יעד " + fmtQ(curPlan[i.c]) : ""}${i.p ? " · " + nisR(i.p) + " ליח׳" : ""}</small>
+                        </div>
+                        ${office && plan ? html`<input type="number" inputMode="decimal" min="0" step="any" value=${plan[i.c] || ""} placeholder="יעד"
+                            aria-label=${"יעד החודש · " + i.d} onInput=${e => setPlan({ ...plan, [i.c]: e.target.value })} />`
+                          : office ? html`<select value=${i.t || ""} aria-label="מסלול" onChange=${e => setTrack(i.c, e.target.value)}>
+                            ${groups.map(x => html`<option key=${x.k} value=${x.k}>${x.k ? (x.short || x.label) : "כללי"}</option>`)}</select>` : null}
+                      </div>`;
+                  })}
+                </div>
+              </div>`;
+          })}
+          <div class="hint">${office ? "החשבון והמחירים גלויים רק למשרד, לצופה ולמנהלי האתר הזה. כל מנהל רואה רק את החשבון של האתרים שלו." : "החשבון של האתר הזה גלוי רק לך ולמשרד."} הכמויות נכנסות מהדוח השבועי (שטח ← דוח שבועי).</div>`}
+      </div>`;
+  }
+
   /* הטופס השבועי — אותן עמודות כמו הטופס על הנייר */
   function WeeklyForm({ site, now, onSubmit, onBack }){
     const cur = curWeekly(site, now);
@@ -4513,7 +4827,10 @@ ${l}`
       const base = cur || site.weekly || {};
       const openNote = old && old.issue && !old.issueResolvedAt && hasText(old.note);
       const openSafety = old && hasText(old.safety) && !old.safetyResolvedAt;
+      const bq = {};
+      Object.entries((cur && cur.bq) || {}).forEach(([c, q]) => { bq[c] = String(q); });
       return {
+        txt: { ...((cur && cur.txt) || {}) }, bq,
         tracks, foreman: base.foreman || "", lead: base.lead || "",
         workers: cur ? (cur.workers == null ? "" : String(cur.workers)) : (prev && prev.workers != null ? String(prev.workers) : ""),
         note: cur ? (cur.note || "") : (openNote ? old.note : ""), issue: cur ? !!cur.issue : !!openNote,
@@ -4525,11 +4842,48 @@ ${l}`
     const wOk = d.workers !== "" && !isNaN(Number(d.workers));
     const goals = [];
     for(let g = 5; g <= 100; g += 5) goals.push(g);
+    // סעיפי החשבון: מה בוצע עד השבוע הזה (בלי הדוח הנוכחי), ויעד החודש של המשרד
+    const bill = useBill(site.id), wk = weekKey(now);
+    const sums = bill ? billSums(bill, site, null, wk) : null;
+    const plan = bill ? ((bill.plan || {})[monthKey(now)] || {}) : {};
+    const setTxt = (k, v) => setD(x => ({ ...x, txt: { ...x.txt, [k || "other"]: v } }));
+    const setBq = (c, v) => setD(x => ({ ...x, bq: { ...x.bq, [c]: v } }));
+    const bqBad = Object.values(d.bq).some(v => v !== "" && (isNaN(Number(v)) || Number(v) < 0));
+    function itemsOf(k){
+      if(!bill) return [];
+      return (bill.items || []).filter(i => (i.t || "") === k && (sums.done[i.c] < i.q || d.bq[i.c]));
+    }
+    function billBlock(k){
+      const its = itemsOf(k), tk = k || "other";
+      return html`
+        <label class="prevv" style=${{display:"block"}}>מה בוצע השבוע (מלל חופשי)
+          <textarea class="wtxt" rows="2" value=${d.txt[tk] || ""} onInput=${e => setTxt(k, e.target.value)} maxLength=${300}
+            placeholder=${k === "skeleton" ? "למשל: יציקה קומות 27–28" : k === "complets" ? "למשל: קולטנים ומים בקומה 28, 6 דירות" : "מה בוצע, איפה, ומה נשאר פתוח"}></textarea>
+        </label>
+        ${its.length ? html`
+          <div class="bitems">
+            ${its.map(i => {
+              const v = d.bq[i.c] || "", tot = r2(sums.done[i.c] + (Number(v) || 0));
+              return html`
+                <div class=${"bit" + (tot > i.q ? " over" : "")} key=${i.c}>
+                  <div class="bd">${i.d}
+                    <small>בוצע ${fmtQ(sums.done[i.c])} מתוך ${fmtQ(i.q)} ${unitTxt(i.u)}${plan[i.c] ? " · יעד החודש " + fmtQ(plan[i.c]) : ""}${tot > i.q ? " · חורג מהחוזה" : ""}</small>
+                  </div>
+                  <input type="number" inputMode="decimal" min="0" step="any" value=${v} placeholder="השבוע"
+                    aria-label=${"כמות השבוע · " + i.d} onInput=${e => setBq(i.c, e.target.value)} />
+                </div>`;
+            })}
+          </div>` : null}`;
+    }
 
     function submit(e){
       e.preventDefault();
-      if(!wOk) return;
+      if(!wOk || bqBad) return;
+      const txt = {}, bq = {};
+      Object.entries(d.txt).forEach(([k, v]) => { if(hasText(v)) txt[k] = v.trim(); });
+      Object.entries(d.bq).forEach(([c, v]) => { const n = r2(Number(v)); if(v !== "" && n > 0) bq[c] = n; });
       onSubmit(site.id, {
+        txt: Object.keys(txt).length ? txt : null, bq: Object.keys(bq).length ? bq : null,
         tracks: d.tracks, workers: Math.max(0, Math.round(Number(d.workers))),
         foreman: d.foreman.trim(), lead: d.lead.trim(),
         note: d.note.trim(), issue: d.issue && hasText(d.note), safety: d.safety.trim()
@@ -4563,9 +4917,17 @@ ${l}`
                     ${goals.map(g => html`<option key=${g} value=${g}>${g}%</option>`)}
                   </select>
                   ${p != null ? html`<span class="prevv">שבוע שעבר: ${p}%</span>` : null}
-                </div>` : html`<div class="prevv">לא רלוונטי באתר הזה</div>`}
+                </div>
+                ${billBlock(t.k)}` : html`<div class="prevv">לא רלוונטי באתר הזה</div>`}
             </div>`;
         })}
+
+        ${bill && itemsOf("").length ? html`
+          <div class="card trk">
+            <b>${BILL_OTHER.label}</b>
+            ${billBlock("")}
+          </div>` : null}
+        ${bill === null ? html`<div class="hint">לאתר הזה עוד לא הועלה חשבון ביצוע, ולכן אין כאן סעיפים לכמויות. המלל החופשי בכל מסלול נשמר בכל מקרה.</div>` : null}
 
         <div class="card fl">
           <label>כ״א בשטח השבוע (מס׳ עובדים)
@@ -4589,7 +4951,7 @@ ${l}`
           </label>
         </div>
 
-        <button type="submit" class="btn pri wide" disabled=${!wOk}>${cur ? "עדכן דוח שבועי" : "הגש דוח שבועי"}</button>
+        <button type="submit" class="btn pri wide" disabled=${!wOk || bqBad}>${cur ? "עדכן דוח שבועי" : "הגש דוח שבועי"}</button>
         <div class="hint">הדוח נרשם ביומן הפעולות ועולה למרכז הבקרה. נקודת בטיחות מסומנת אדומה ועולה מיד לדרג 2.</div>
       </form>`;
   }

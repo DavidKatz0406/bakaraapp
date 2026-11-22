@@ -65,8 +65,12 @@ service cloud.firestore {
     }
 
     match /t/{space}/{coll}/{id} {
-      // ── קריאה: כל משתמש פעיל (משרד, מנהל, צופה) ──
-      allow read: if isStaff();
+      // ── קריאה: כל משתמש פעיל (משרד, מנהל, צופה) — חוץ מחשבונות הביצוע ──
+      allow read: if isStaff() && coll != 'bills';
+      // חשבון ביצוע של אתר (bills/{אתר}, כולל מחירים ויעד חודשי): משרד, צופה, ומנהלי האתר בלבד.
+      // רק get (לא list) — מנהל לא יכול לשלוף את כל החשבונות בשאילתה. כתיבה — משרד בלבד (החוק הכללי למטה)
+      allow get: if coll == 'bills' && (isOffice() || isViewer() || (isStaff() && ownsSite(space, id)));
+      allow list: if coll == 'bills' && (isOffice() || isViewer());
       // ── כתיבה: משרד (חוץ מדוחות כ״א, שיש להם חוקים משלהם למטה) ──
       allow write: if !agColl(coll) && isOffice();
 
