@@ -449,6 +449,8 @@
   .agw .an small{ display:block; color:var(--ink-3); font-size:.72rem; }
   .agw select,.agw input{ font-family:inherit; font-size:.8rem; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); }
   .agw select{ max-width:44%; } .agw input{ width:84px; }
+  .agimp{ margin:10px 0; padding:10px 12px; border:1px dashed var(--line); border-radius:12px; background:var(--surface-2, transparent); }
+  .agw select.bad{ border-color:var(--crit, #c0392b); }
   /* צופה (קריאה בלבד): תגית קבועה, וכפתורי הפעולה מוסתרים. האכיפה עצמה — בחוקי המסד */
   .rotag{ font-family:"Heebo",sans-serif; font-size:.74rem; font-weight:700; color:var(--accent-ink); background:var(--accent-wash); border-radius:999px; padding:4px 10px; white-space:nowrap; }
   body.ro .btn.ok, body.ro .btn.pri:not(.rokeep), body.ro .btn.danger, body.ro .xbtn, body.ro .qty button,
@@ -2533,6 +2535,203 @@ ${l}`
   }
 
   /* ── מסך המשרד: חברות, שיוך עובדים, נעילת שבוע וסיכום חודשי ── */
+  /* ───── ייבוא רשימת עובדים מחברת כ״א (קובץ אקסל או הדבקה) ─────
+     הקובץ נקרא רק בדפדפן. נשמרים רק החברה ומספר העובד אצלה — טלפונים וכל עמודה אחרת לא נשמרים. */
+  async function xlsxRows(buf){
+    const u = new Uint8Array(buf), dv = new DataView(buf), dec = new TextDecoder();
+    let e = u.length - 22;
+    while(e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if(e < 0) throw new Error("zip");
+    const ents = {};
+    for(let i = 0, n = dv.getUint16(e + 10, true), p = dv.getUint32(e + 16, true); i < n; i++){
+      const fl = dv.getUint16(p + 28, true);
+      ents[dec.decode(u.subarray(p + 46, p + 46 + fl))] = { m:dv.getUint16(p + 10, true), cs:dv.getUint32(p + 20, true), lo:dv.getUint32(p + 42, true) };
+      p += 46 + fl + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+    }
+    async function read(name){
+      const z = ents[name]; if(!z) return null;
+      const s = z.lo + 30 + dv.getUint16(z.lo + 26, true) + dv.getUint16(z.lo + 28, true), raw = u.slice(s, s + z.cs);
+      if(z.m === 0) return dec.decode(raw);
+      if(z.m !== 8 || typeof DecompressionStream === "undefined") throw new Error("deflate");
+      return await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+    }
+    const X = s => new DOMParser().parseFromString(s, "application/xml");
+    const txt = el => [...el.getElementsByTagName("t")].map(t => t.textContent).join("");
+    const ssx = await read("xl/sharedStrings.xml");
+    const ss = ssx ? [...X(ssx).getElementsByTagName("si")].map(txt) : [];
+    const sheet = Object.keys(ents).filter(k => /^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort((a, b) => parseInt(a.slice(19)) - parseInt(b.slice(19)))[0];
+    if(!sheet) throw new Error("sheet");
+    const col = r => { let n = 0; for(const ch of String(r).replace(/\d+/g, "")) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
+    return [...X(await read(sheet)).getElementsByTagName("row")].map(row => {
+      const a = [];
+      [...row.getElementsByTagName("c")].forEach((c, i) => {
+        const t = c.getAttribute("t"), v = c.getElementsByTagName("v")[0];
+        a[c.getAttribute("r") ? col(c.getAttribute("r")) : i] = t === "s" ? (ss[+(v && v.textContent)] || "") : t === "inlineStr" ? txt(c) : (v ? v.textContent : "");
+      });
+      return a;
+    });
+  }
+  // שורות הטבלה → [{ empNo, name, proj }] לפי שורת הכותרת (מספר עובד / שם פרטי / שם משפחה / שם / פרויקט)
+  function agParse(rows){
+    rows = rows.map(r => Array.from(r || [], x => String(x == null ? "" : x).trim()));
+    const hi = rows.findIndex(r => r.some(c => /מס.{0,4}עובד|emp/i.test(c)));
+    if(hi < 0) return { err:"לא נמצאה בקובץ עמודה בשם \"מספר עובד\"." };
+    const h = rows[hi], f = re => h.findIndex(c => re.test(c));
+    const cE = f(/מס.{0,4}עובד|emp/i), cF = f(/פרטי|first/i), cL = f(/משפחה|last/i), cN = f(/^(שם|שם עובד|שם מלא|name|full name)$/i), cP = f(/פרויקט|אתר|project|site/i);
+    if(cF < 0 && cN < 0) return { err:"לא נמצאה בקובץ עמודת שם." };
+    const out = [];
+    rows.slice(hi + 1).forEach(r => {
+      const empNo = String(r[cE] || "").replace(/\.0+$/, "").trim();
+      const toks = [];
+      [cN, cF, cL].filter(c => c >= 0).map(c => r[c] || "").join(" ").replace(/\bNO\s+NAME\b/ig, " ").split(/\s+/)
+        .forEach(t => { if(t && !toks.some(x => x.toLowerCase() === t.toLowerCase())) toks.push(t); });
+      const name = toks.join(" ");
+      if(!empNo && !name) return;
+      out.push({ empNo, name, proj:cP >= 0 ? (r[cP] || "").trim() : "" });
+    });
+    return out.length ? { rows:out } : { err:"לא נמצאו עובדים מתחת לשורת הכותרת." };
+  }
+  const agTok = s => String(s || "").toLowerCase().replace(/[^a-z0-9֐-׿]+/g, " ").split(" ").filter(t => t.length > 1);
+  function agLev(a, b){
+    let p = Array.from({ length:b.length + 1 }, (_, j) => j);
+    for(let i = 1; i <= a.length; i++){
+      const c = [i];
+      for(let j = 1; j <= b.length; j++) c[j] = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      p = c;
+    }
+    return p[b.length];
+  }
+  const agTokEq = (a, b) => a === b || (Math.min(a.length, b.length) >= 4 && agLev(a, b) <= (Math.max(a.length, b.length) >= 7 ? 2 : 1));
+  // התאמת שורות הקובץ לעובדים: קודם לפי מספר עובד שכבר שמור לחברה, אחר כך לפי שם (שם נדיר שווה יותר מ-KUMAR), והאתר מכריע בתיקו
+  function agMatch(rows, workers, ag, sitesById){
+    const act = workers.filter(w => w.active !== false);
+    const rt = rows.map(r => agTok(r.name));
+    const df = t => Math.max(1, rt.filter(a => a.some(x => agTokEq(x, t))).length);
+    const nrm = s => String(s || "").replace(/["׳״'.]/g, "").replace(/ט\s*ש\s*מירון|מי-?רון/g, "").replace(/\s+/g, " ").trim();
+    const siteHit = (r, w) => { const a = nrm(r.proj), b = nrm(sitesById[w.site] && sitesById[w.site].name); return !!(a && b && (a.includes(b) || b.includes(a))); };
+    const cand = rows.map((r, i) => {
+      const byNo = r.empNo && act.find(w => w.agency === ag && String(w.empNo || "") === r.empNo);
+      if(byNo) return [{ w:byNo.id, s:9 }];
+      return act.map(w => {
+        const wt = agTok(w.name); if(!wt.length) return null;
+        const hit = wt.filter(t => rt[i].some(x => agTokEq(x, t)));
+        if(!hit.length) return null;
+        return { w:w.id, s:hit.reduce((s, t) => s + 1 / df(t), 0) / wt.length + (siteHit(r, w) ? .25 : 0) };
+      }).filter(c => c && c.s >= .2).sort((a, b) => b.s - a.s).slice(0, 4);   // שם נפוץ לבד (KUMAR) לא נחשב הצעה
+    });
+    // שיבוץ חמדני: הציון הגבוה ביותר קודם, כל עובד פעם אחת, ורק כשההתאמה ברורה (לא תיקו עם מועמד אחר)
+    const pick = rows.map(() => ""), used = new Set();
+    rows.map((_, i) => i).filter(i => cand[i][0] && cand[i][0].s >= .5 && !(cand[i][1] && cand[i][1].s > cand[i][0].s * .8))
+      .sort((a, b) => cand[b][0].s - cand[a][0].s)
+      .forEach(i => { if(!used.has(cand[i][0].w)){ pick[i] = cand[i][0].w; used.add(cand[i][0].w); } });
+    return { cand, pick, auto:pick.map(Boolean) };
+  }
+  function AgImport({ B, workers, agencies, sitesById, notify }){
+    const act = agencies.filter(a => a.active !== false);
+    const [ag, setAg] = useState(act.length === 1 ? act[0].id : "");
+    const [data, setData] = useState(null);   // { rows, cand, pick, auto }
+    const [err, setErr] = useState("");
+    const [paste, setPaste] = useState("");
+    const [onlyOpen, setOnlyOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const agOk = act.some(a => a.id === ag);
+    const wById = new Map(workers.map(w => [w.id, w]));
+    const agName = id => { const a = agencies.find(x => x.id === id); return a ? a.name : ""; };
+    const sName = id => (sitesById[id] && sitesById[id].name) || "";
+    function load(rows){
+      setErr(""); setData(null);
+      const p = agParse(rows);
+      if(p.err){ setErr(p.err); return; }
+      setData({ rows:p.rows, ...agMatch(p.rows, workers, ag, sitesById) });
+    }
+    function onFile(e){
+      const f = e.target.files && e.target.files[0]; e.target.value = "";
+      if(!f) return;
+      f.arrayBuffer().then(xlsxRows).then(load)
+        .catch(()=> setErr("לא הצלחתי לקרוא את הקובץ. צריך קובץ אקסל (xlsx). אפשר גם להעתיק את הטבלה מאקסל ולהדביק למטה."));
+    }
+    const setPick = (i, w) => setData({ ...data, pick:data.pick.map((x, j) => j === i ? w : x), auto:data.auto.map((x, j) => j === i ? false : x) });
+    const cnt = {};
+    if(data) data.pick.forEach(w => { if(w) cnt[w] = (cnt[w] || 0) + 1; });
+    const dups = data ? data.pick.filter(w => w && cnt[w] > 1).length : 0;
+    const noNo = data ? data.rows.filter((r, i) => data.pick[i] && !r.empNo).length : 0;
+    const chosen = data ? data.pick.filter(Boolean).length : 0;
+    const missing = data ? data.rows.filter((r, i) => !data.pick[i]) : [];
+    const inFile = new Set(data ? data.pick.filter(Boolean) : []);
+    const notInFile = data && agOk ? workers.filter(w => w.active !== false && w.agency === ag && !inFile.has(w.id)) : [];
+    const sorted = workers.filter(w => w.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+    async function save(){
+      const pairs = data.rows.map((r, i) => [data.pick[i], r]).filter(x => x[0] && x[1].empNo);
+      const moved = pairs.filter(([w]) => { const x = wById.get(w); return x && x.agency && x.agency !== ag; }).length;
+      if(!confirm("לשייך " + pairs.length + " עובדים ל-" + agName(ag) + ", עם מספר העובד מהקובץ?" + (moved ? "\n\n" + moved + " מהם משויכים היום לחברה אחרת ויועברו." : "") + (missing.length ? "\n\n" + missing.length + " שורות בלי עובד בבקרה לא יישמרו." : ""))) return;
+      setBusy(true);
+      try{
+        for(let k = 0; k < pairs.length; k += 400){
+          const b = Cloud.db.batch();
+          pairs.slice(k, k + 400).forEach(([w, r]) => b.set(B.collection("workers").doc(w), { agency:ag, empNo:r.empNo.slice(0, 20) }, { merge:true }));
+          await b.commit();
+        }
+        notify(pairs.length + " עובדים שויכו ל-" + agName(ag));
+        setData(null); setPaste("");
+      }catch(e){ notify("השמירה נכשלה: " + (e.code || e.message)); }
+      setBusy(false);
+    }
+    function copyMissing(){
+      const text = missing.map(r => r.name + (r.proj ? ", " + r.proj : "")).join("\n");
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(()=> notify(missing.length + " שורות הועתקו — הדבק בלשונית עובדים ← הוספת כמה עובדים"))
+        .catch(()=> window.prompt("העתק:", text));
+    }
+    return html`
+      <div class="agimp">
+        <b>📥 ייבוא רשימה מהחברה</b>
+        <div class="sub2">קובץ אקסל מהחברה עם עמודות "מספר עובד" ושם. הקובץ נקרא רק במכשיר הזה. נשמרים רק החברה ומספר העובד — טלפונים ושאר העמודות לא נשמרים.</div>
+        <div class="btnrow" style=${{ marginTop:8, alignItems:"center" }}>
+          <select class="tin" style=${{ fontFamily:"inherit", flex:"1 1 140px", width:"auto" }} value=${ag} onChange=${e => { setAg(e.target.value); setData(null); }}>
+            <option value="">בחר חברה…</option>
+            ${act.map(a => html`<option key=${a.id} value=${a.id}>${a.name}</option>`)}
+          </select>
+          <label class=${"btn " + (agOk ? "pri" : "")} style=${{ flex:"none", opacity:agOk ? 1 : .5, pointerEvents:agOk ? "auto" : "none" }}>בחר קובץ
+            <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style=${{ display:"none" }} onChange=${onFile} />
+          </label>
+        </div>
+        ${agOk && !data && html`<details style=${{ marginTop:6 }}><summary class="sub2">או הדבקה של הטבלה מאקסל</summary>
+          <textarea class="tin" rows="4" style=${{ marginTop:6 }} placeholder="מעתיקים מאקסל את הטבלה כולל שורת הכותרת" value=${paste} onInput=${e => setPaste(e.target.value)}></textarea>
+          <button class="chip" disabled=${!paste.trim()} onClick=${()=>load(paste.split(/\r?\n/).map(l => l.split("\t")))}>קרא את הטבלה</button>
+        </details>`}
+        ${err && html`<div class="alert crit" style=${{ marginTop:8 }}><span class="b"></span>${err}</div>`}
+        ${data && html`
+          <div class="kpis" style=${{ marginTop:10 }}>
+            <div class="kpi"><b>${data.rows.length}</b><span>בקובץ</span></div>
+            <div class="kpi"><b>${data.auto.filter(Boolean).length}</b><span>זוהו לבד</span></div>
+            <div class="kpi"><b>${chosen}</b><span>עם עובד</span></div>
+            <div class=${"kpi " + (missing.length ? "warn" : "")}><b>${missing.length}</b><span>בלי עובד</span></div>
+          </div>
+          <div class="sub2" style=${{ margin:"8px 0" }}>לבדוק כל שורה: השם מהקובץ מימין, העובד בבקרה משמאל. התאמה אוטומטית מסומנת ✓ — גם אותה כדאי לעבור בעין.</div>
+          <button class=${"chip " + (onlyOpen ? "on" : "")} onClick=${()=>setOnlyOpen(!onlyOpen)}>רק מה שלא זוהה לבד</button>
+          ${data.rows.map((r, i) => {
+            if(onlyOpen && data.auto[i]) return null;
+            const w = data.pick[i] && wById.get(data.pick[i]);
+            const sug = new Set(data.cand[i].map(c => c.w));
+            return html`
+              <div key=${i} class="agw">
+                <span class="an">${data.auto[i] ? (data.cand[i][0] && data.cand[i][0].s === 9 ? "✓ לפי מספר · " : "✓ ") : ""}<bdi>#${r.empNo || "—"}</bdi> <bdi>${r.name}</bdi><small>${r.proj}${w && w.agency && w.agency !== ag ? " · ⚠ היום ב-" + agName(w.agency) : ""}${w && cnt[w.id] > 1 ? " · ⚠ נבחר פעמיים" : ""}${w && !r.empNo ? " · ⚠ אין מספר עובד" : ""}</small></span>
+                <select style=${{ maxWidth:"52%" }} class=${w && cnt[w.id] > 1 ? "bad" : ""} value=${data.pick[i]} onChange=${e => setPick(i, e.target.value)}>
+                  <option value="">— אין בבקרה —</option>
+                  ${data.cand[i].length > 0 && html`<optgroup label="הצעות">${data.cand[i].map(c => wById.get(c.w) && html`<option key=${c.w} value=${c.w}>${wById.get(c.w).name} · ${sName(wById.get(c.w).site)}</option>`)}</optgroup>`}
+                  <optgroup label="כל העובדים">${sorted.filter(x => !sug.has(x.id)).map(x => html`<option key=${x.id} value=${x.id}>${x.name} · ${sName(x.site)}</option>`)}</optgroup>
+                </select>
+              </div>`;
+          })}
+          ${dups > 0 && html`<div class="alert crit" style=${{ marginTop:8 }}><span class="b"></span>אותו עובד נבחר ליותר משורה אחת. מתקנים לפני השמירה.</div>`}
+          ${noNo > 0 && html`<div class="alert warn" style=${{ marginTop:8 }}><span class="b"></span>${noNo} שורות בלי מספר עובד — הן לא יישמרו.</div>`}
+          ${notInFile.length > 0 && html`<div class="alert warn" style=${{ marginTop:8 }}><span class="b"></span>${notInFile.length} עובדים משויכים היום ל-${agName(ag)} ולא נבחרו לאף שורה בקובץ: ${notInFile.slice(0, 8).map(w => w.name).join(", ")}${notInFile.length > 8 ? "…" : ""}. השיוך שלהם לא משתנה.</div>`}
+          ${missing.length > 0 && html`<div class="sub2" style=${{ marginTop:8 }}>${missing.length} עובדים מהקובץ לא נמצאו בבקרה. אם הם עובדים אצלנו, מוסיפים אותם בלשונית עובדים ← "הוספת כמה עובדים" ואז מייבאים שוב. <button class="chip" onClick=${copyMissing}>📋 העתק את הרשימה</button></div>`}
+          <div class="btnrow" style=${{ marginTop:10 }}>
+            <button class="btn pri" disabled=${busy || dups > 0 || !chosen} onClick=${save}>${busy ? "שומר…" : "💾 שמור שיוך (" + data.rows.filter((r, i) => data.pick[i] && r.empNo).length + ")"}</button>
+            <button class="btn" onClick=${()=>setData(null)}>ביטול</button>
+          </div>`}
+      </div>`;
+  }
   function AttAgencies({ B, workers, sitesById, who, notify, now, office, agencies, reps, acks }){
     const today = dstr(now);
     const [ws, setWs] = useState(()=> addDay(wkStartOf(dstr(Date.now())), -7));
@@ -2661,6 +2860,7 @@ ${l}`
             <button class=${"chip " + (onlyNone ? "on" : "")} style=${{ flex:"none" }} onClick=${()=>setOnlyNone(!onlyNone)}>רק בלי שיוך</button>
           </div>
           <div class="sub2">מספר עובד = המספר שלו אצל חברת כ״א (לא ת״ז ולא דרכון), כדי שיתאימו את הדוח לשכר אצלם.</div>
+          ${office && html`<${AgImport} B=${B} workers=${workers} agencies=${agencies} sitesById=${sitesById} notify=${notify} />`}
           ${wl.map(w => html`
             <div key=${w.id} class="agw">
               <span class="an">${w.name}<small>${sName(w.site)}</small></span>
