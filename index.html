@@ -365,6 +365,52 @@
   .newunit .two{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .newunit .btnrow{ flex-wrap:wrap; }
 
+  /* ───── מחשב (PC / מקבוק): תפריט צד במקום הסרגל העליון ───── */
+  .side{ display:none; }
+  @media (min-width:1024px){
+    html{ scrollbar-gutter:stable; }
+    .app.desk{ max-width:none; display:grid; grid-template-columns:248px minmax(0,1fr); align-items:start; padding-bottom:0; }
+    .desk .side{ display:flex; flex-direction:column; gap:1px; position:sticky; top:0; height:100vh; overflow-y:auto; background:var(--surface); border-inline-end:1px solid var(--line); padding:16px 12px 12px; scrollbar-width:thin; }
+    .desk .main{ min-width:0; min-height:100vh; padding-bottom:40px; }
+    .desk .screen:not(.narrow){ padding:26px 36px 0; max-width:1480px; margin:0 auto; }
+    .desk .navchips{ display:none; }
+    .desk .screen.narrow{ max-width:760px; padding:26px 24px 0; }
+    .desk .att > .btn.wide{ width:auto; min-width:300px; padding-inline:28px; }
+    .desk .chips{ margin:16px 0 18px; }
+    .desk .exlist{ display:grid; grid-template-columns:repeat(auto-fill, minmax(440px,1fr)); gap:12px; align-items:start; }
+    .desk .asites{ display:grid; grid-template-columns:repeat(auto-fill, minmax(540px,1fr)); gap:14px; align-items:start; }
+    .desk .kpi{ padding:14px 8px; }
+    .desk .kpi b{ font-size:1.6rem; }
+    .desk .kpi span{ font-size:.72rem; }
+    .sheet{ max-width:540px; max-height:92vh; overflow-y:auto; }
+    .desk .arow:hover{ background:var(--surface-2); }
+    .desk ::-webkit-scrollbar{ width:10px; height:10px; }
+    .desk ::-webkit-scrollbar-thumb{ background:var(--surface-3); border-radius:10px; border:2px solid var(--paper); }
+  }
+  .side .sbrand{ display:flex; align-items:center; gap:10px; padding:2px 6px 14px; margin-bottom:6px; border-bottom:1px solid var(--line-2); }
+  .side .sbrand .plate{ background:#fff; border:1px solid var(--line); border-radius:9px; padding:5px 7px; display:flex; flex:none; }
+  .side .sbrand .plate img{ height:24px; width:auto; display:block; }
+  .side .sbrand b{ display:block; font-family:"Frank Ruhl Libre",serif; font-weight:900; font-size:1rem; line-height:1.15; }
+  .side .sbrand span{ font-family:"Heebo",sans-serif; font-size:.64rem; color:var(--ink-3); }
+  .side .si{ display:flex; align-items:center; gap:9px; width:100%; border:0; background:none; text-align:start; padding:8px 10px; border-radius:9px; font-size:.92rem; font-weight:700; color:var(--ink); margin-top:6px; }
+  .side .si.sub{ margin-top:0; padding:6px 10px; padding-inline-start:32px; font-size:.86rem; font-weight:500; color:var(--ink-2); }
+  .side .si.deep{ margin:0; padding:5px 10px; padding-inline-start:48px; font-family:"Heebo",sans-serif; font-size:.8rem; font-weight:500; color:var(--ink-2); }
+  .side .si:hover{ background:var(--surface-2); color:var(--ink); }
+  .side .si.on{ background:var(--ink); color:var(--paper); }
+  .side .si.sub.open:not(.on){ background:var(--surface-2); color:var(--ink); }
+  .side .si:focus-visible,.side .meb:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .side .si .n{ margin-inline-start:auto; font-family:"Heebo",sans-serif; font-size:.68rem; font-weight:700; background:var(--warn-wash); color:var(--warn); border-radius:999px; padding:1px 8px; }
+  .side .si.on .n{ background:rgba(255,255,255,.22); color:inherit; }
+  .side .rotag{ align-self:flex-start; margin:0 6px 6px; }
+  .side .sfoot{ margin-top:auto; padding-top:12px; border-top:1px solid var(--line-2); display:flex; align-items:center; gap:6px; }
+  .side .meb{ flex:1; min-width:0; display:flex; align-items:center; gap:9px; border:0; background:none; padding:6px; border-radius:9px; text-align:start; color:var(--ink); }
+  .side .meb:hover{ background:var(--surface-2); }
+  .side .meb .av{ position:relative; flex:none; width:32px; height:32px; border-radius:50%; background:var(--surface-2); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-weight:700; }
+  .side .meb .nm{ min-width:0; display:flex; flex-direction:column; line-height:1.2; }
+  .side .meb .nm b{ font-size:.86rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .side .meb .nm small{ font-family:"Heebo",sans-serif; font-size:.66rem; color:var(--ink-3); }
+  .side .hk{ font-family:"Heebo",sans-serif; font-size:.64rem; color:var(--ink-3); padding:8px 6px 0; }
+
   @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }
   @media (max-width:560px){
     .topbar{ gap:10px; padding:10px 14px; }
@@ -2724,11 +2770,13 @@ ${l}`
   /* ═════════════ נוכחות — מסך המנהלים / המשרד ═════════════ */
   // עובד יכול לעבוד בכמה פרויקטים של הצוות: site = אתר הבית, sites = כל הפרויקטים
   const wSites = w => [...new Set([w.site, ...(w.sites || [])].filter(Boolean))];
-  function Attendance({ st, now, mgr, who, notify, office }){
+  function Attendance({ st, now, mgr, who, notify, office, av, setAv }){
     office = office && !RO.on;   // צופה רואה כמו המשרד, אבל לא מריץ את פעולות התחזוקה של המשרד
     const [code, setCode] = useState(null);
     const [err, setErr] = useState("");
-    const [view, setView] = useState("day");
+    const [view0, setView0] = useState("day");
+    const view = av || view0;
+    const setView = v => { setView0(v); if(setAv) setAv(v); };
     const [day, setDay] = useState(()=> dstr(Date.now()));
     const [month, setMonth] = useState(()=> dstr(Date.now()).slice(0, 7));
     const [rws, setRws] = useState(()=> addDay(wkStartOf(dstr(Date.now())), -7));
@@ -3229,7 +3277,7 @@ ${l}`
 
     return html`
       <div class="att">
-        <div class="chips" style=${{ marginTop:0 }}>
+        <div class="chips navchips" style=${{ marginTop:0 }}>
           ${T("day", "יומי")}
           ${T("month", "חודשי ושכר")}
           ${T("rev", "לבדיקה")}
@@ -4167,6 +4215,18 @@ ${l}`
       </div>`;
   }
 
+  // מסך מחשב (PC / מקבוק): רוחב 1024 ומעלה
+  function useMedia(q){
+    const [m, setM] = useState(()=>{ try{ return window.matchMedia(q).matches; }catch(e){ return false; } });
+    useEffect(()=>{
+      let mq; try{ mq = window.matchMedia(q); }catch(e){ return; }
+      const f = ()=>setM(mq.matches); f();
+      if(mq.addEventListener) mq.addEventListener("change", f); else mq.addListener(f);
+      return ()=>{ if(mq.removeEventListener) mq.removeEventListener("change", f); else mq.removeListener(f); };
+    }, [q]);
+    return m;
+  }
+
   function App(){
     const cloudCode = useState(readTeamCode)[0];
     // אין קוד צוות במכשיר (אייקון במסך הבית, דפדפן אחר, קישור בלי קוד) → כניסה בטלפון, והקוד נמשך מרשומת המשתמש
@@ -4182,6 +4242,17 @@ ${l}`
     const [toast, setToast] = useState(null);
     const [now, setNow] = useState(Date.now());
     const [ctl, setCtl] = useState({ tab:"ex", mgr:"all" });
+    const desk = useMedia("(min-width:1024px)");
+    // Esc סוגר את החלון הפתוח העליון (במחשב). לא כשמקלידים בתיבת טקסט ארוכה
+    useEffect(()=>{
+      const f = e => {
+        if(e.key !== "Escape") return;
+        const a = document.activeElement; if(a && a.tagName === "TEXTAREA") return;
+        const s = document.querySelectorAll(".scrim, .lightbox"); if(s.length) s[s.length - 1].click();
+      };
+      document.addEventListener("keydown", f);
+      return ()=>document.removeEventListener("keydown", f);
+    }, []);
     const [idSheet, setIdSheet] = useState(false);
     const [me, setMe] = useState(()=>{ try{ const m = JSON.parse(localStorage.getItem("bakara_me")); if(m && m.name) return m; }catch(e){} return { name:"דוד" }; });
     // כניסה אישית: מי מחובר ומה התפקיד שלו (משרד / מנהל פרויקט)
@@ -4668,9 +4739,45 @@ ${l}`
     else if(nav.screen === "stock.home")
       body = html`<${StockHome} st=${vst} now=${now} who=${who} rk=${rkOpen} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} onStockUse=${stockUse} />`;
 
+    const inApp = auth.s !== "agency" && !((cloudCode || needTeam) && auth.s !== "in") && !blocked;
+    const deskOn = desk && inApp;
+    let sideNav = null;
+    if(deskOn){
+      const exCount = exceptions.filter(e => ctlV.mgr === "all" || !!myMgr || e.owner === ctlV.mgr).length;
+      const onCtl = role === "ctl";
+      const goCtl = (tab, av) => { setRole("ctl"); setNav({ screen:"ctl.home" }); setCtlV({ ...ctlV, tab, ...(av ? { av } : {}) }); try{ window.scrollTo(0, 0); }catch(e){} };
+      const goRole = r => { switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} };
+      const SI = (on, label, onClick, cls, n) => html`<button class=${"si " + (cls || "") + (on ? " on" : "")} aria-current=${on ? "page" : null} onClick=${onClick}>${label}${n ? html`<span class="n">${n}</span>` : null}</button>`;
+      const ctlTabs = [["ex", "חריגים", exCount], ["att", "נוכחות"], ["mgr", "מנהלים"], ["plan", "תוכנית שבועית"], ["stock", "מלאי באתרים"], ["log", "יומן פעולות"]];
+      const attTabs = [["day", "יומי"], ["month", "חודשי ושכר"], ["rev", "לבדיקה"], ...(ctlV.mgr === "all" ? [["ag", "חברות כ״א"]] : []), ["workers", "עובדים"]];
+      const attOn = onCtl && ctlV.tab === "att";
+      sideNav = html`<nav class="side" aria-label="תפריט ראשי">
+        <div class="sbrand">
+          <span class="plate"><img src=${LOGO} alt="ט.ש. מי רון" /></span>
+          <span><b>ט.ש. מי רון</b><span>פלס · בקרת ביצוע לאינסטלציה</span></span>
+        </div>
+        ${isViewer && html`<span class="rotag" title="המשתמש הזה יכול רק לצפות — אין לו הרשאה לשנות שום דבר">👁 צפייה בלבד</span>`}
+        ${SI(onCtl && nav.screen !== "ctl.home", "📊 בקרה", ()=>goCtl(ctlV.tab))}
+        ${ctlTabs.map(([k, label, n]) => html`
+          ${SI(onCtl && nav.screen === "ctl.home" && ctlV.tab === k && !(k === "att"), label, ()=>goCtl(k), "sub" + (k === "att" && attOn ? " open" : ""), n)}
+          ${k === "att" && attOn && attTabs.map(([a, al]) => SI((ctlV.av || "day") === a, al, ()=>goCtl("att", a), "deep"))}`)}
+        ${SI(role === "field", "📍 שטח", ()=>goRole("field"))}
+        ${SI(role === "stock", "📦 מלאי", ()=>goRole("stock"))}
+        <div class="sfoot">
+          <button class="meb" title="החשבון שלי · החלף" onClick=${()=>setIdSheet(true)}>
+            <span class="av">${me.name.slice(0,1)}<i class=${"sdot " + cloud.status}></i></span>
+            <span class="nm"><b>${signedIn ? auth.staff.name : me.name}</b><small>${isViewer ? "צופה" : isOffice ? "משרד" : "מנהל פרויקט"}</small></span>
+          </button>
+          <button class="ic0" title="מצב תצוגה (בהיר/כהה)" onClick=${toggleTheme}>◐</button>
+          ${isOffice && ((!cloudCode && !needTeam) || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
+        </div>
+        <div class="hk">Esc סוגר חלון פתוח</div>
+      </nav>`;
+    }
+
     return html`
-      <div class="app">
-        <div class="topbar">
+      <div class=${"app" + (deskOn ? " desk" : "")}>
+        ${deskOn ? sideNav : html`<div class="topbar">
           <div class="brand">
             <span class="plate"><img src=${LOGO} alt="ט.ש. מי רון" /></span>
             <span class="txt"><b>ט.ש. מי רון</b><span>פלס · בקרת ביצוע לאינסטלציה</span></span>
@@ -4684,7 +4791,8 @@ ${l}`
           ${auth.s !== "agency" && html`<button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>`}
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
           ${isOffice && ((!cloudCode && !needTeam) || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
-        </div>
+        </div>`}
+        <div class="main">
         ${needTeam ? null
           : !cloudCode
           ? html`<div class="banner">מצב מקומי — הנתונים נשמרים רק במכשיר הזה <button class="chip" onClick=${()=>setTeamSheet(true)}>הזן קוד צוות</button></div>`
@@ -4692,6 +4800,7 @@ ${l}`
           : cloud.status === "error" && cloud.ready ? html`<div class="banner err">בעיית סנכרון (${cloud.err}) — השינויים עלולים לא להישמר במסד</div>` : null}
         ${body}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
+        </div>
         ${toast && html`<div class="toast"><div>${toast}</div></div>`}
         ${teamSheet && html`
           <div class="scrim" onClick=${()=>setTeamSheet(false)}>
@@ -4782,7 +4891,7 @@ ${l}`
 
         ${!locked && PILOT.length > 0 && html`<div class="alert warn" style=${{margin:"10px 0 0"}}><span class="b"></span>פיילוט: ${PILOT.join(", ")} — חריגי דוח שבועי, מלאי ודיווח יומי נספרים רק להם.</div>`}
 
-        <div class="chips">
+        <div class="chips navchips">
           ${T("ex", "חריגים (" + list.length + ")")}
           ${T("att", "נוכחות")}
           ${T("mgr", "מנהלים")}
@@ -4848,7 +4957,7 @@ ${l}`
           <div class="hint">אין ציון יחיד בכוונה — כל מדד מוצג לבד כדי שלא ינסו "לשחק" אותו. ההתקדמות נמדדת מדוחות התוכנית השבועית של המנהלים, לצד כ״א, בטיחות ומלאי.</div>
         `}
 
-        ${tab === "att" && html`<${Attendance} st=${st} now=${now} mgr=${mgr} who=${who} notify=${notify} office=${!locked} />`}
+        ${tab === "att" && html`<${Attendance} st=${st} now=${now} mgr=${mgr} who=${who} notify=${notify} office=${!locked} av=${ctl.av} setAv=${v => setCtl({ ...ctl, tab:"att", av:v })} />`}
         ${tab === "plan" && html`<${PlanMatrix} st=${st} now=${now} mgr=${mgr} cards=${cards} exceptions=${exceptions} onOpen=${onOpen} />`}
         ${tab === "stock" && html`<${StockOverview} st=${st} now=${now} mgr=${mgr} cards=${cards} onOpen=${onOpen} />`}
 
