@@ -1549,8 +1549,13 @@
   }
 
   /* ═════════════ כתב כמויות מתוכנית (PDF) ═════════════
-     מודדים את אורך הצנרת לפי צבע הקו: מציירים את התוכנית בחלקים, סופרים פיקסלים בכל צבע
-     ומחלקים בעובי הקו. עובד בתוכניות מקוריות מהמתכנן (שרטוט, לא סריקה). הכול רץ בדפדפן. */
+     לכל עמוד נבחרת לבד אחת משתי שיטות:
+     • תוכנית וקטורית (יצוא ישיר מאוטוקאד): כל קטע צינור נקרא מהקובץ עם השכבה שלו. הקוטר והשיפוע נלקחים מהכיתוב
+       שליד הקו ומופצים לאורך הקו המחובר. זוויות וטי נספרים מהחיבורים בין הקטעים.
+     • תוכנית שהצנרת בה שמורה כתמונה (הדפסה דרך PDF24 וכד׳): מציירים בחלקים, מאחדים את הגוונים של כל צבע
+       וסופרים פיקסלים לחלק לעובי הקו.
+     בשתי השיטות דוגמיות המקרא לא נספרות, והשם של כל צבע נלקח מהמקרא. עיגולים עם כיתוב בפנים (צירים ותגיות)
+     לא נספרים כברירת מחדל. הכול רץ בדפדפן. */
   const PDFJS_V = "3.11.174";
   let _pdfjs = null;
   function loadPdfJs(){
@@ -1566,63 +1571,486 @@
     return _pdfjs;
   }
   const hexOf = (r, g, b) => "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("");
-  // קוראים את קנה המידה מאבן הפינה (למשל "1 : 100")
-  async function planScaleGuess(page){
-    try{
-      const tc = await page.getTextContent();
-      const txt = tc.items.map(i => i.str).join(" ");
-      const m = txt.match(/1\s*:\s*(20|25|50|75|100|200|250|500)\b/);
-      return m ? +m[1] : null;
-    }catch(e){ return null; }
+  const rgbOf = x => [parseInt(x.slice(1, 3), 16), parseInt(x.slice(3, 5), 16), parseInt(x.slice(5, 7), 16)];
+  const PT_MM = 25.4 / 72, PLAN_PX = 6, PLAN_CELL = 8;   // נקודת PDF במ"מ · פיקסלים למ"מ במדידה · גודל משבצת במפה
+
+  // כיתוב של קוטר (6", 1 1/2", Ø110, DN50) ושל שיפוע (1.5%)
+  function parseLabel(s){
+    s = String(s).replace(/[״”″]/g, '"').replace(/''/g, '"');
+    let dia = null, m;
+    if((m = s.match(/(?:[ØøΦφ∅]\s*|\b(?:DN|D)\s*=?\s*)(\d{2,3})(?!\d)/) || s.match(/(?:^|[^\d.])(\d{2,3})\s*(?:מ["׳']מ|mm)/i) || s.match(/מ["׳']מ\s*(\d{2,3})(?!\d)/))) dia = "Ø" + m[1];
+    else if((m = s.match(/(?:^|[^\d.\/])((?:\d\s+)?\d\/\d|\d{1,2}(?:\.\d+)?)\s*"/))) dia = m[1].replace(/\s+/g, " ") + '"';
+    const sl = s.match(/(\d{1,2}(?:\.\d+)?)\s*%/);
+    return { dia, slope: sl ? sl[1] + "%" : null };
   }
+  // כל כיתובי הקוטר/השיפוע בעמוד. מספר לבד + "מ"מ" צמוד (שני פריטי כיתוב נפרדים) = קוטר
+  function planLabels(texts){
+    const out = [], mmRe = /^(?:מ["״׳']{1,2}מ|[øØ∅]?\s*mm\s*[øØ∅]?)$/i;
+    texts.forEach(t => {
+      if(t.s.length > 24) return;
+      const lb = parseLabel(t.s);
+      if(lb.dia || lb.slope){ out.push({ x:t.x, y:t.y, dia:lb.dia, slope:lb.slope }); return; }
+      if(!/^\d{2,3}$/.test(t.s) || +t.s < 10) return;
+      const u = texts.find(u => u !== t && mmRe.test(u.s) && Math.abs(u.dx * t.dx + u.dy * t.dy) > 0.9 && Math.hypot(u.x - t.x, u.y - t.y) < (t.w + u.w) / 2 + Math.max(1.5, t.h));
+      if(u) out.push({ x:(t.x + u.x) / 2, y:(t.y + u.y) / 2, dia:"Ø" + t.s, slope:null });
+    });
+    return out;
+  }
+  // שארית קטנה בלי קוטר (קצה קו, צומת) מצטרפת לחלק הגדול
+  function tidyParts(parts){
+    const tot = parts.reduce((a, p) => a + p.lenM, 0), un = parts.find(p => !p.dia), big = parts.filter(p => p.dia).sort((a, b) => b.lenM - a.lenM)[0];
+    if(un && big && un.lenM < Math.max(0.5, tot * 0.03)){ big.lenM = Math.round((big.lenM + un.lenM) * 10) / 10; return parts.filter(p => p !== un); }
+    return parts;
+  }
+  // קוטר במבנה אחיד להשוואה: "in:1.5" / "mm:110"
+  function diaNorm(s){
+    s = String(s || "").replace(/[״”″]/g, '"').replace(/''/g, '"').trim();
+    if(!s) return "";
+    const frac = t => { t = t.trim(); let m = t.match(/^(\d+)\s+(\d+)\/(\d+)$/); if(m) return +m[1] + m[2] / m[3]; m = t.match(/^(\d+)\/(\d+)$/); if(m) return m[1] / m[2]; return parseFloat(t); };
+    let m = s.match(/((?:\d+\s+)?\d+\/\d+|\d+(?:\.\d+)?)\s*(?:"|אינץ|אינטש|inch)/i);
+    if(m) return "in:" + Math.round(frac(m[1]) * 1000) / 1000;
+    m = s.match(/(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)/);
+    if(!m) return "";
+    const v = frac(m[1]);
+    return v <= 8 && !/[ØøΦφ∅]|mm|מ"מ|מ״מ|DN/i.test(s) ? "in:" + Math.round(v * 1000) / 1000 : "mm:" + v;
+  }
+  const diaMm = s => { const n = diaNorm(s); return !n ? 0 : n.startsWith("in:") ? parseFloat(n.slice(3)) * 25.4 : parseFloat(n.slice(3)); };
+  // קומה מתוך שם קובץ או כיתוב. strict = רק ניסוח מפורש (בכיתוב של גיליון יש גם "ניקוז גג" וכד׳)
+  function floorOf(s, strict){
+    s = String(s || "");
+    let m;
+    if(/קומת\s*קרקע|ק(?:ומה)?\.?\s*קרקע/.test(s) || (!strict && /קרקע/.test(s))) return "קרקע";
+    if((m = s.match(/מרתף\s*\(?\s*(-?\d+)/))) return "מרתף " + (m[1].startsWith("-") ? m[1] : "-" + m[1]);
+    if((m = s.match(/קומ(?:ה|ת)\s*(-?\d+)/))) return "קומה " + (+m[1]);
+    if((m = s.match(/(?:floor|level)\s*(-?\d+)/i))) return "קומה " + (+m[1]);
+    if(/מרתף/.test(s)) return "מרתף";
+    if(/קומת\s*גג/.test(s) || (!strict && /(^|[^א-ת])גג($|[^א-ת])/.test(s))) return "גג";
+    if(!strict && /גלרי/.test(s)) return "גלריה";
+    return "";
+  }
+  function floorKey(f){
+    const s = floorOf(f) || String(f || "").trim();
+    if(/קרקע/.test(s)) return "0";
+    const m = s.match(/-?\d+/);
+    if(/מרתף/.test(s)) return m ? (m[0].startsWith("-") ? m[0] : "-" + m[0]) : "מרתף";
+    return m ? String(+m[0]) : s;
+  }
+  // שכבות של אדריכלות, כיתוב ומסגרת — לא צנרת. שכבות של צנרת — גם שחור/אפור נחשב
+  const LAYER_X = /cloud|revis|ענן|arch|(^|[|_\- ])a-|text|txt|annot|dim|grid|logo|title|frame|border|hatch|furn|door|wall|stair|elev|column|beam|park|notes?\b|viewport|defpoints|טקסט|מידות|הערות|אדריכל/i;
+  const LAYER_P = /(^|[|_\- ])p[_-]|pipe|sew|drain|rain|fire|spr|water|gas|hyd|ביוב|ניקוז|מים|כיבוי|ספרינק|גז|סניק/i;
+  const LAYER_HINT = [[/locker|cabinet|ארון/i, "ארונות כיבוי"], [/press.*sew|sniq|סניק/i, "סניקת ביוב"], [/sew|ביוב/i, "ביוב"], [/rain|balcon|גשם/i, "ניקוז מי גשם"],
+    [/cond|\ba\.?c\b|מזגן/i, "ניקוז מזגנים"], [/drain|ניקוז/i, "ניקוז"], [/spr|ספרינק/i, "ספרינקלרים"], [/fire|hyd|כיבוי/i, "כיבוי אש"], [/hot|חמים/i, "מים חמים"],
+    [/water|cold|מים/i, "מים קרים"], [/gas|גז/i, "גז"], [/air|vent|אוורור/i, "אוורור"]];
+  const layerHint = ly => { if(!ly) return ""; for(const [re, n] of LAYER_HINT) if(re.test(ly)) return n; return ""; };
+
   async function openPlan(file){
     const pdfjs = await loadPdfJs();
     const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-    const page = await doc.getPage(1);
-    const vp = page.getViewport({ scale:1 });
-    return { doc, page, pages: doc.numPages, wMm: vp.width * 25.4 / 72, hMm: vp.height * 25.4 / 72, scale: await planScaleGuess(page) };
+    return { doc, pages: doc.numPages, name: file.name.replace(/\.pdf$/i, "") };
   }
-  // pxMm = פיקסלים למ"מ נייר. מחזיר לכל צבע: אורך במ', עובי, ומפת מיקום מוקטנת
-  async function measurePlan(plan, scale, onProgress, pxMm){
-    pxMm = pxMm || 6;
-    const page = plan.page, k = pxMm * 25.4 / 72;
-    const W = Math.ceil(plan.wMm * pxMm), H = Math.ceil(plan.hMm * pxMm), T = 2048, CELL = 8;
-    const gw = Math.ceil(W / CELL), gh = Math.ceil(H / CELL);
-    const stats = new Map();   // key -> { r,g,b, n, hist:Uint32Array(64), cells:Set }
-    const gstats = new Map();  // שחור/אפור לפי (כהות, טווח עובי)
-    // טווחי עובי בפיקסלים — בערך 0.4–0.6 / 0.7–1.0 / 1.1–1.4 / 1.5–2.2 מ"מ על הנייר
+  // גיאומטריה
+  function pca(P){
+    let mx = 0, my = 0;
+    P.forEach(p => { mx += p[0]; my += p[1]; }); mx /= P.length; my /= P.length;
+    let sxx = 0, syy = 0, sxy = 0;
+    P.forEach(([x, y]) => { const dx = x - mx, dy = y - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; });
+    const an = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(an), uy = Math.sin(an);
+    let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+    P.forEach(([x, y]) => { const dx = x - mx, dy = y - my, u = dx * ux + dy * uy, v = -dx * uy + dy * ux;
+      if(u < u0) u0 = u; if(u > u1) u1 = u; if(v < v0) v0 = v; if(v > v1) v1 = v; });
+    const vm = (v0 + v1) / 2, nx = -uy, ny = ux;
+    return { L:u1 - u0, W:v1 - v0, cx:mx + ux * (u0 + u1) / 2 + nx * vm, cy:my + uy * (u0 + u1) / 2 + ny * vm,
+      ax:mx + ux * u0 + nx * vm, ay:my + uy * u0 + ny * vm, bx:mx + ux * u1 + nx * vm, by:my + uy * u1 + ny * vm };
+  }
+  function distSeg(px, py, s){
+    const vx = s.bx - s.ax, vy = s.by - s.ay, L2 = vx * vx + vy * vy;
+    let t = L2 ? ((px - s.ax) * vx + (py - s.ay) * vy) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return Math.hypot(px - s.ax - t * vx, py - s.ay - t * vy);
+  }
+  // משבצות (בגודל sz מ"מ) שהקטע עובר בהן
+  function cellsAlong(s, sz, out){
+    const L = Math.hypot(s.bx - s.ax, s.by - s.ay), n = Math.max(1, Math.ceil(L / (sz / 2)));
+    for(let i = 0; i <= n; i++){ const t = i / n; out.add(Math.floor((s.ax + (s.bx - s.ax) * t) / sz) + ":" + Math.floor((s.ay + (s.by - s.ay) * t) / sz)); }
+    return out;
+  }
+  // שורות כיתוב: מחברים מילים סמוכות באותו גובה (למקרא)
+  function textLines(texts){
+    const used = new Set(), lines = [];
+    const T = texts.filter(t => Math.abs(t.dy) < 0.2).sort((a, b) => a.y - b.y || a.x - b.x);
+    T.forEach((t, i) => {
+      if(used.has(i)) return;
+      const L = [t]; used.add(i);
+      const tol = Math.max(0.8, t.h * 0.4);
+      for(let grow = true; grow;){
+        grow = false;
+        for(let j = i + 1; j < T.length && T[j].y - t.y <= tol; j++){
+          const u = T[j];
+          if(used.has(j)) continue;
+          if(L.some(v => Math.abs(u.x - v.x) - (u.w + v.w) / 2 < Math.max(2, t.h * 1.2))){ L.push(u); used.add(j); grow = true; }
+        }
+      }
+      const he = L.some(v => /[א-ת]/.test(v.s));
+      L.sort((a, b) => he ? b.x - a.x : a.x - b.x);
+      const x0 = Math.min(...L.map(v => v.x - v.w / 2)), x1 = Math.max(...L.map(v => v.x + v.w / 2));
+      lines.push({ s:L.map(v => v.s).join(" ").replace(/\s+/g, " ").trim(), x0, x1, y:t.y, h:t.h });
+    });
+    return lines;
+  }
+  // דוגמית במקרא: קו קצר ומבודד, ולידו (באותו גובה) כיתוב של מילים. מחזיר את הכיתוב
+  function legendName(b, lines){
+    if(b.x1 - b.x0 > 50 || b.y1 - b.y0 > 5 || b.x1 - b.x0 < 3) return null;
+    const cy = (b.y0 + b.y1) / 2;
+    let best = null, bg = 1e9;
+    for(const l of lines){
+      if(Math.abs(l.y - cy) > Math.max(2.5, l.h)) continue;
+      if(l.word === undefined){ const lb = parseLabel(l.s); l.word = /[א-תA-Za-z]{2}/.test(l.s) && l.s.length <= 40 && !((lb.dia || lb.slope) && !/[א-ת]{3}/.test(l.s)); }
+      if(!l.word) continue;
+      const gap = l.x1 < b.x0 ? b.x0 - l.x1 : l.x0 > b.x1 ? l.x0 - b.x1 : -1;
+      if(gap < -0.5 || gap > 30) continue;
+      if(gap < bg){ bg = gap; best = l.s; }
+    }
+    return best && best.replace(/^[\s\-–—•·:.]+|[\s\-–—•·:.]+$/g, "");
+  }
+  // דוגמיות אמיתיות של מקרא מסודרות זו מתחת לזו — משאירים רק מועמדות שיש לידן עוד אחת בטור
+  const legendStack = C => C.filter(c => C.some(d => d !== c && Math.abs(d.cy - c.cy) < 60 && Math.abs(d.cy - c.cy) > 1 && Math.abs(d.x0 - c.x0) < 2.5 && Math.abs(d.x1 - c.x1) < 2.5));
+
+  // ── קריאת כל הקווים, הצורות והכיתוב של עמוד, במ"מ על הנייר (ציר Y למטה, כולל סיבוב העמוד) ──
+  async function planScan(plan, pageNo){
+    const pdfjs = await loadPdfJs(), O = pdfjs.OPS;
+    const page = await plan.doc.getPage(pageNo);
+    const vp = page.getViewport({ scale:PT_MM });
+    const wMm = vp.width, hMm = vp.height;
+    const tc = await page.getTextContent();
+    const texts = [];
+    for(const it of tc.items){
+      const s = (it.str || "").trim(); if(!s) continue;
+      const t = pdfjs.Util.transform(vp.transform, it.transform);
+      const fl = Math.hypot(t[0], t[1]) || 1, dx = t[0] / fl, dy = t[1] / fl;
+      const w = (it.width || 0) * PT_MM, h = (it.height || Math.hypot(it.transform[2], it.transform[3]) || 0) * PT_MM;
+      texts.push({ s, x:t[4] + dx * w / 2 + dy * h / 2, y:t[5] + dy * w / 2 - dx * h / 2, w, h, dx, dy });
+    }
+    const allTxt = texts.map(t => t.s).join(" ");
+    const sm = allTxt.match(/1\s*:\s*(20|25|50|75|100|200|250|500)\b/);
+    if(plan.ocg === undefined){ try{ plan.ocg = await plan.doc.getOptionalContentConfig(); }catch(e){ plan.ocg = null; } }
+    const ocg = plan.ocg;
+    const ocInfo = p => {
+      try{
+        const id = p && (p.id || (p.ids && p.ids[0])), g = id && ocg && ocg.getGroup(id);
+        let hid = false; try{ hid = !!(ocg && p && !ocg.isVisible(p)); }catch(e){}
+        return { name: g && g.name || "", hid };
+      }catch(e){ return { name:"", hid:false }; }
+    };
+    const ol = await page.getOperatorList();
+    const fa = ol.fnArray, aa = ol.argsArray;
+    const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+    const col = a => {
+      if(a && a.length === 1) a = a[0];
+      if(typeof a === "string") return a.length === 7 ? a.toLowerCase() : "#000000";
+      if(a && a.length >= 3) return hexOf(Math.round(a[0]), Math.round(a[1]), Math.round(a[2]));
+      return "#000000";
+    };
+    let ctm = vp.transform.slice(), stroke = "#000000", fill = "#000000", lw = 1, layer = "", hidden = false;
+    const stack = [], ocs = [];
+    const setLayer = () => { layer = ""; hidden = false; for(let i = ocs.length - 1; i >= 0; i--){ const o = ocs[i]; if(o && o.hid) hidden = true; if(o && o.name && !layer) layer = o.name; } };
+    const gmap = new Map(), G = [], segs = [], shapes = [];
+    let imgArea = 0, pend = null;
+    function gidx(ly, c){
+      const key = ly + "|" + c;
+      let i = gmap.get(key);
+      if(i === undefined){
+        const [r, g, b] = rgbOf(c), gray = Math.max(r, g, b) - Math.min(r, g, b) < 40;
+        const ok = ly !== "0" && !LAYER_X.test(ly) && (gray ? (!!ly && LAYER_P.test(ly) && Math.max(r, g, b) < 200) : Math.min(r, g, b) < 225);
+        i = ok ? G.length : -1;
+        if(ok) G.push({ key, layer:ly, color:c, gray });
+        gmap.set(key, i);
+      }
+      return i;
+    }
+    function subpaths(ops, cs){
+      const out = []; let cur = null, ci = 0;
+      const pt = (x, y) => [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]];
+      for(const op of ops){
+        if(op === O.moveTo){ cur && out.push(cur); cur = { pts:[pt(cs[ci], cs[ci + 1])], cv:false, closed:false }; ci += 2; }
+        else if(op === O.lineTo){ cur && cur.pts.push(pt(cs[ci], cs[ci + 1])); ci += 2; }
+        else if(op === O.curveTo){ if(cur){ cur.pts.push(pt(cs[ci + 4], cs[ci + 5])); cur.cv = true; } ci += 6; }
+        else if(op === O.curveTo2 || op === O.curveTo3){ if(cur){ cur.pts.push(pt(cs[ci + 2], cs[ci + 3])); cur.cv = true; } ci += 4; }
+        else if(op === O.closePath){ if(cur) cur.closed = true; }
+        else if(op === O.rectangle){ cur && out.push(cur); const [x, y, w, h] = cs.slice(ci, ci + 4); cur = { pts:[pt(x, y), pt(x + w, y), pt(x + w, y + h), pt(x, y + h)], cv:false, closed:true }; ci += 4; }
+      }
+      cur && out.push(cur);
+      return out;
+    }
+    function addPath(sp, isFill, c, lwMm){
+      const P = sp.pts; if(P.length < 2) return;
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      P.forEach(([x, y]) => { if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; });
+      const big = Math.max(x1 - x0, y1 - y0);
+      if(big < 0.05) return;
+      const last = P[P.length - 1], closed = isFill || sp.closed || Math.hypot(P[0][0] - last[0], P[0][1] - last[1]) < 0.15;
+      if(closed){
+        const U = [];
+        P.forEach(p => { if(!U.some(q => Math.abs(q[0] - p[0]) < 0.02 && Math.abs(q[1] - p[1]) < 0.02)) U.push(p); });
+        if(U.length >= 3){
+          const q = pca(U);
+          if(q.W >= 0.6 * q.L){   // צורה קומפקטית: סמל (לא נכנס לאורך)
+            if(layer !== "0" && !LAYER_X.test(layer)) shapes.push({ x:q.cx, y:q.cy, size:q.L, curve:sp.cv, n:U.length, color:c, layer });
+            return;
+          }
+          if(q.W <= 4 && q.L >= Math.max(1.5 * q.W, 0.5)){   // רצועה דקה = קטע צינור מלא
+            const gi = gidx(layer, c);
+            if(gi >= 0) segs.push({ g:gi, ax:q.ax, ay:q.ay, bx:q.bx, by:q.by, w:Math.max(q.W, lwMm), band:true });
+            return;
+          }
+        }
+        if(isFill) return;   // מילוי גדול (רקע, קיר) — לא צנרת
+      }
+      if(isFill) return;
+      if(big < 2.5 && P.length >= 4) return;   // אות בכתב משורטט
+      const gi = gidx(layer, c); if(gi < 0) return;
+      for(let j = 1; j < P.length; j++){
+        const a = P[j - 1], b = P[j];
+        if(Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) < 0.01) continue;
+        segs.push({ g:gi, ax:a[0], ay:a[1], bx:b[0], by:b[1], w:lwMm, band:false });
+      }
+      if(sp.closed && Math.hypot(P[0][0] - last[0], P[0][1] - last[1]) > 0.01) segs.push({ g:gi, ax:last[0], ay:last[1], bx:P[0][0], by:P[0][1], w:lwMm, band:false });
+    }
+    const ST = new Set([O.stroke, O.closeStroke, O.fillStroke, O.eoFillStroke, O.closeFillStroke, O.closeEOFillStroke]);
+    const FL = new Set([O.fill, O.eoFill, O.fillStroke, O.eoFillStroke, O.closeFillStroke, O.closeEOFillStroke]);
+    const IMG = new Set([O.paintImageXObject, O.paintInlineImageXObject, O.paintImageMaskXObject, O.paintJpegXObject, O.paintImageXObjectRepeat, O.paintInlineImageXObjectGroup].filter(x => x != null));
+    for(let i = 0; i < fa.length; i++){
+      const fn = fa[i], a = aa[i];
+      if(fn === O.save) stack.push([ctm, stroke, fill, lw]);
+      else if(fn === O.restore){ const t = stack.pop(); if(t) [ctm, stroke, fill, lw] = t; }
+      else if(fn === O.transform) ctm = mul(ctm, a);
+      else if(fn === O.paintFormXObjectBegin){ stack.push([ctm, stroke, fill, lw]); if(a && a[0] && a[0].length === 6) ctm = mul(ctm, a[0]); }
+      else if(fn === O.paintFormXObjectEnd){ const t = stack.pop(); if(t) [ctm, stroke, fill, lw] = t; }
+      else if(fn === O.setStrokeRGBColor) stroke = col(a);
+      else if(fn === O.setFillRGBColor) fill = col(a);
+      else if(fn === O.setLineWidth) lw = +a[0] || 0;
+      else if(fn === O.setGState && a && a[0]){ for(const kv of a[0]) if(kv && kv[0] === "LW") lw = +kv[1] || 0; }
+      else if(fn === O.beginMarkedContentProps){ ocs.push(a && a[0] === "OC" ? ocInfo(a[1]) : null); setLayer(); }
+      else if(fn === O.beginMarkedContent){ ocs.push(null); }
+      else if(fn === O.endMarkedContent){ ocs.pop(); setLayer(); }
+      else if(IMG.has(fn)){ if(!hidden) imgArea += Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2]); }
+      else if(fn === O.constructPath) pend = subpaths(a[0], a[1]);
+      else if(pend && (ST.has(fn) || FL.has(fn))){
+        if(!hidden){
+          const isF = FL.has(fn), lwMm = Math.max(0.05, lw * Math.sqrt(Math.abs(ctm[0] * ctm[3] - ctm[1] * ctm[2])));
+          let P = pend;
+          // מילוי שמצויר כמשולשים צמודים (אוטוקאד: מלבן = שני משולשים) — צורה אחת
+          if(isF && P.length > 1 && P.every(sp => sp.pts.length <= 5 && !sp.cv)){
+            const key = q => Math.round(q[0] * 50) + "," + Math.round(q[1] * 50), shared = new Set(P[0].pts.map(key));
+            if(P.slice(1).every(sp => sp.pts.some(q => shared.has(key(q))) && (sp.pts.forEach(q => shared.add(key(q))), true))) P = [{ pts:P.flatMap(sp => sp.pts), cv:false, closed:true }];
+          }
+          for(const sp of P){ if(fn === O.closeStroke || fn === O.closeFillStroke || fn === O.closeEOFillStroke) sp.closed = true; addPath(sp, isF, isF ? fill : stroke, lwMm); }
+        }
+        pend = null;
+      }
+      else if(fn === O.endPath) pend = null;
+    }
+    // כפילויות (אותו קטע מצויר פעמיים)
+    const seen = new Set(), S = [];
+    for(const s of segs){
+      const r = v => Math.round(v * 20), k1 = r(s.ax) + "," + r(s.ay), k2 = r(s.bx) + "," + r(s.by);
+      const k = s.g + ":" + (k1 < k2 ? k1 + ";" + k2 : k2 + ";" + k1) + (s.band ? "b" : "");
+      if(seen.has(k)) continue; seen.add(k); S.push(s);
+    }
+    // קו מתאר של רצועת צינור כבר נמדד ברצועה עצמה
+    const BG = new Map();
+    S.forEach(s => { if(s.band) cellsAlong(s, 6, new Set()).forEach(c => { const k = s.g + ":" + c; (BG.get(k) || BG.set(k, []).get(k)).push(s); }); });
+    const on = (x, y, b) => distSeg(x, y, b) <= b.w / 2 + 0.4;
+    const out = BG.size ? S.filter(s => {
+      if(s.band) return true;
+      const L = BG.get(s.g + ":" + Math.floor((s.ax + s.bx) / 12) + ":" + Math.floor((s.ay + s.by) / 12));
+      return !(L && L.some(b => on(s.ax, s.ay, b) && on(s.bx, s.by, b)));
+    }) : S;
+    return { page, vp, wMm, hMm, texts, scale: sm ? +sm[1] : null, allTxt, segs:out, groups:G, shapes, imgFrac: imgArea / (wMm * hMm) };
+  }
+
+  // ── שיטה וקטורית: אורך, מקרא, קוטר/שיפוע מהכיתוב, זוויות וטי ──
+  function vecAnalyze(sc, scale, view){
+    const { segs, groups:G, texts } = sc, lines = textLines(texts);
+    segs.forEach(s => { s.len = Math.hypot(s.bx - s.ax, s.by - s.ay); s.dia = null; s.sl = null; s.dd = 1e9; s.sd = 1e9; s.lg = false; });
+    // צמתים: קצוות קרובים של אותה קבוצה
+    const NG = new Map(), nodes = [];
+    function node(g, x, y, tol){
+      const cx = Math.floor(x / 2.5), cy = Math.floor(y / 2.5);
+      let best = -1, bd = tol;
+      for(let i = -1; i <= 1; i++) for(let j = -1; j <= 1; j++){
+        const L = NG.get(g + ":" + (cx + i) + ":" + (cy + j));
+        if(L) for(const n of L){ const d = Math.hypot(nodes[n].x - x, nodes[n].y - y); if(d <= bd){ bd = d; best = n; } }
+      }
+      if(best >= 0) return best;
+      nodes.push({ g, x, y, e:[] });
+      const k = g + ":" + cx + ":" + cy; (NG.get(k) || NG.set(k, []).get(k)).push(nodes.length - 1);
+      return nodes.length - 1;
+    }
+    segs.forEach((s, i) => {
+      const tol = Math.min(2.5, Math.max(0.8, s.w));
+      s.n0 = node(s.g, s.ax, s.ay, tol); s.n1 = node(s.g, s.bx, s.by, tol);
+      if(s.n0 !== s.n1){ nodes[s.n0].e.push([i, 0]); nodes[s.n1].e.push([i, 1]); }
+    });
+    // רשת מרחבית של הקטעים
+    const SG = new Map(), SC = 5;
+    segs.forEach((s, i) => cellsAlong(s, SC, new Set()).forEach(c => (SG.get(c) || SG.set(c, []).get(c)).push(i)));
+    const near = (x, y, r, fn) => {
+      const c0 = Math.floor((x - r) / SC), c1 = Math.floor((x + r) / SC), d0 = Math.floor((y - r) / SC), d1 = Math.floor((y + r) / SC), done = new Set();
+      for(let i = c0; i <= c1; i++) for(let j = d0; j <= d1; j++){ const L = SG.get(i + ":" + j); if(L) for(const si of L){ if(done.has(si)) continue; done.add(si); fn(si); } }
+    };
+    // רכיבים מחוברים (לאיתור דוגמיות מקרא)
+    const par = segs.map((_, i) => i), find = i => { while(par[i] !== i) i = par[i] = par[par[i]]; return i; };
+    nodes.forEach(n => { for(let k = 1; k < n.e.length; k++){ const a = find(n.e[0][0]), b = find(n.e[k][0]); if(a !== b) par[a] = b; } });
+    const comps = new Map();
+    segs.forEach((s, i) => { const r = find(i); let c = comps.get(r); if(!c){ c = { g:s.g, ids:[], x0:1e9, y0:1e9, x1:-1e9, y1:-1e9 }; comps.set(r, c); } c.ids.push(i);
+      c.x0 = Math.min(c.x0, s.ax, s.bx); c.x1 = Math.max(c.x1, s.ax, s.bx); c.y0 = Math.min(c.y0, s.ay, s.by); c.y1 = Math.max(c.y1, s.ay, s.by); });
+    const cand = [];
+    comps.forEach(c => { if(c.ids.length > 8) return; const nm = legendName(c, lines); if(nm) cand.push({ ...c, nm, cy:(c.y0 + c.y1) / 2 }); });
+    const legend = {};
+    legendStack(cand).forEach(c => { c.ids.forEach(i => segs[i].lg = true); if(!legend[c.g]) legend[c.g] = c.nm; });
+    // הסתעפות T: קצה פתוח שנוגע באמצע קטע אחר של אותה קבוצה
+    const tees = [];
+    nodes.forEach((n, ni) => {
+      if(n.e.length !== 1) return;
+      const s0 = n.e[0][0], tol = Math.min(2.5, Math.max(0.8, segs[s0].w));
+      let hit = -1, hd = tol;
+      near(n.x, n.y, tol, si => {
+        const s = segs[si]; if(s.g !== n.g || si === s0 || s.n0 === ni || s.n1 === ni) return;
+        if(Math.hypot(s.ax - n.x, s.ay - n.y) < tol || Math.hypot(s.bx - n.x, s.by - n.y) < tol) return;
+        const d = distSeg(n.x, n.y, s); if(d < hd){ hd = d; hit = si; }
+      });
+      if(hit >= 0) tees.push([s0, hit, ni]);
+    });
+    // שכנים לכל קטע (דרך צמתים והסתעפויות)
+    const adj = segs.map(() => []);
+    nodes.forEach(n => { for(let a = 0; a < n.e.length; a++) for(let b = 0; b < n.e.length; b++) if(a !== b) adj[n.e[a][0]].push(n.e[b][0]); });
+    tees.forEach(([a, b]) => { adj[a].push(b); adj[b].push(a); });
+    // כיתוב קוטר/שיפוע ← הקטע הקרוב ביותר (עד 6 מ"מ על הנייר)
+    planLabels(texts).forEach(t => {
+      const lb = t;
+      let best = -1, bd = 6;
+      near(t.x, t.y, 6, si => { const s = segs[si]; if(s.lg || G[s.g].gray && !G[s.g].layer) return; const d = distSeg(t.x, t.y, s); if(d < bd){ bd = d; best = si; } });
+      if(best < 0) return;
+      const s = segs[best];
+      if(lb.dia && bd < s.dd){ s.dia = lb.dia; s.dd = bd; }
+      if(lb.slope && bd < s.sd){ s.sl = lb.slope; s.sd = bd; }
+    });
+    // הפצה לאורך הקו המחובר: כל קטע מקבל את הכיתוב של הקטע המסומן הקרוב אליו
+    const spread = key => {
+      const q = []; segs.forEach((s, i) => { if(s[key] && !s.lg) q.push(i); });
+      for(let h = 0; h < q.length; h++){ const s = segs[q[h]]; for(const j of adj[q[h]]){ const t = segs[j]; if(!t[key] && !t.lg && t.g === s.g){ t[key] = s[key]; q.push(j); } } }
+    };
+    spread("dia"); spread("sl");
+    // זוויות, טי וצלבים
+    const fits = G.map(() => new Map());
+    const addFit = (g, type, dias) => { const d = dias.filter(Boolean).sort((a, b) => diaMm(b) - diaMm(a))[0] || ""; const k = type + "|" + d; fits[g].set(k, (fits[g].get(k) || 0) + 1); };
+    nodes.forEach(n => {
+      const E = n.e.filter(([si]) => !segs[si].lg); if(E.length < 2) return;
+      const ds = E.map(([si]) => segs[si].dia);
+      if(E.length === 2){
+        const dir = ([si, end]) => { const s = segs[si], vx = end ? s.ax - s.bx : s.bx - s.ax, vy = end ? s.ay - s.by : s.by - s.ay, L = Math.hypot(vx, vy) || 1; return [vx / L, vy / L]; };
+        const [a, b] = [dir(E[0]), dir(E[1])], dev = 180 - Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1]))) * 180 / Math.PI;
+        if(dev > 20) addFit(n.g, dev >= 67.5 ? "זווית 90°" : "זווית 45°", ds);
+      } else addFit(n.g, E.length === 3 ? "טי" : "צלב", ds);
+    });
+    tees.forEach(([a, b]) => { if(!segs[a].lg && !segs[b].lg) addFit(segs[a].g, "טי", [segs[a].dia, segs[b].dia]); });
+    // סיכום לכל קבוצה (שכבה + צבע)
+    const toM = scale / 1000, cmm = view.cell / view.pxMm;
+    const acc = G.map(() => ({ len:0, parts:new Map(), cells:new Set() }));
+    segs.forEach(s => {
+      if(s.lg) return;
+      const A = acc[s.g]; A.len += s.len;
+      const k = s.dia || ""; let p = A.parts.get(k); if(!p){ p = { dia:k, len:0, sl:new Map() }; A.parts.set(k, p); }
+      p.len += s.len; if(s.sl) p.sl.set(s.sl, (p.sl.get(s.sl) || 0) + s.len);
+      const n = Math.max(1, Math.ceil(s.len / cmm));
+      for(let i = 0; i <= n; i++){ const t = i / n; A.cells.add(Math.floor((s.ay + (s.by - s.ay) * t) / cmm) * view.gw + Math.floor((s.ax + (s.bx - s.ax) * t) / cmm)); }
+    });
+    const items = [];
+    G.forEach((g, gi) => {
+      const A = acc[gi], lenM = A.len * toM;
+      if(lenM < 0.5) return;
+      const parts = [...A.parts.values()].map(p => ({ dia:p.dia, lenM:Math.round(p.len * toM * 10) / 10,
+        slope:[...p.sl.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])[0] || "" })).filter(p => p.lenM >= 0.1).sort((a, b) => diaMm(b.dia) - diaMm(a.dia));
+      const partsT = tidyParts(parts);
+      const ft = [...fits[gi].entries()].map(([k, n]) => { const [type, dia] = k.split("|"); return { type, dia, n }; }).sort((a, b) => a.type.localeCompare(b.type, "he") || diaMm(b.dia) - diaMm(a.dia));
+      items.push({ id:"v:" + g.key, color:g.color, layer:g.layer, gray:g.gray, hint:layerHint(g.layer), legend:legend[gi] || "", lenM:Math.round(lenM * 10) / 10, parts:partsT, fits:ft, cells:A.cells });
+    });
+    items.sort((a, b) => (a.gray - b.gray) || b.lenM - a.lenM);
+    return { items, legendN:Object.keys(legend).length };
+  }
+
+  // ── שיטת תמונה: צנרת ששמורה כתמונה בתוך ה-PDF ──
+  // מתאים צבע של פיקסל לצבע בסיס: ערבוב עם לבן (שולי קו) או עם שחור (צל). מחזיר את השארית
+  function blendRes(P, D){
+    let best = 1e9;
+    const W = [255 - D[0], 255 - D[1], 255 - D[2]], w2 = W[0] * W[0] + W[1] * W[1] + W[2] * W[2];
+    if(w2 > 0){
+      const t = ((255 - P[0]) * W[0] + (255 - P[1]) * W[1] + (255 - P[2]) * W[2]) / w2;
+      if(t >= 0.25 && t <= 1.25) best = Math.max(Math.abs(255 - P[0] - t * W[0]), Math.abs(255 - P[1] - t * W[1]), Math.abs(255 - P[2] - t * W[2]));
+    }
+    const d2 = D[0] * D[0] + D[1] * D[1] + D[2] * D[2];
+    if(d2 > 0){
+      const t = (P[0] * D[0] + P[1] * D[1] + P[2] * D[2]) / d2;
+      if(t >= 0.4 && t <= 1.7) best = Math.min(best, Math.max(Math.abs(P[0] - t * D[0]), Math.abs(P[1] - t * D[1]), Math.abs(P[2] - t * D[2])));
+    }
+    return best;
+  }
+  const chroma = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); return mx - mn >= 40 && mx >= 90; };
+  async function rasterMeasure(sc, scale, view, onProgress){
+    const page = sc.page, pxMm = view.pxMm, CELL = view.cell, gw = view.gw;
+    const W = Math.ceil(sc.wMm * pxMm), H = Math.ceil(sc.hMm * pxMm), T = 2048;
+    const cv = document.createElement("canvas"), ctx = cv.getContext("2d", { willReadFrequently:true });
+    // מעבר מקדים ברזולוציה נמוכה: צבעי הבסיס של הגיליון (כל צבע בלי הגוונים שלו)
+    const lo = 2, lw = Math.ceil(sc.wMm * lo), lh = Math.ceil(sc.hMm * lo), hist = new Map();
+    for(let ty = 0; ty < lh; ty += T) for(let tx = 0; tx < lw; tx += T){
+      const w = Math.min(T, lw - tx), h = Math.min(T, lh - ty);
+      cv.width = w; cv.height = h; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+      await page.render({ canvasContext:ctx, viewport:page.getViewport({ scale:lo * PT_MM, offsetX:-tx, offsetY:-ty }), background:"rgba(255,255,255,1)" }).promise;
+      const px = ctx.getImageData(0, 0, w, h).data;
+      for(let p = 0; p < px.length; p += 4) if(chroma(px[p], px[p + 1], px[p + 2])){ const k = (px[p] << 16) | (px[p + 1] << 8) | px[p + 2]; hist.set(k, (hist.get(k) || 0) + 1); }
+    }
+    const dom = [];
+    for(const [k, n] of [...hist.entries()].sort((a, b) => b[1] - a[1])){
+      if(n < 30 || dom.length >= 24) break;
+      const c = [k >> 16 & 255, k >> 8 & 255, k & 255];
+      // אותו צבע בגוון כהה/בהיר יותר (למשל מילוי כחול עם מסגרת כחול כהה) — צבע אחד
+      if(dom.some(d => blendRes(c, d) <= 22 || blendRes(d, c) <= 22 || Math.abs(c[0] - d[0]) + Math.abs(c[1] - d[1]) + Math.abs(c[2] - d[2]) < 30)) continue;
+      dom.push(c);
+    }
+    const cache = new Map();
+    const clusterOf = (r, g, b) => {
+      const k = (r << 16) | (g << 8) | b; let v = cache.get(k);
+      if(v === undefined){ let bi = -1, br = 26; dom.forEach((d, i) => { const e = blendRes([r, g, b], d); if(e < br){ br = e; bi = i; } }); v = bi; cache.set(k, v); }
+      return v;
+    };
+    const stats = dom.map(d => ({ d, n:0, hist:new Uint32Array(64), cells:new Map() })), cellCol = new Map();
+    const gstats = new Map();
     const GBANDS = [[Math.round(pxMm * 0.4), Math.round(pxMm * 0.65)], [Math.round(pxMm * 0.65) + 1, Math.round(pxMm * 1.0)], [Math.round(pxMm * 1.0) + 1, Math.round(pxMm * 1.4)], [Math.round(pxMm * 1.4) + 1, Math.min(63, Math.round(pxMm * 2.2))]];
     const tiles = [];
     for(let ty = 0; ty < H; ty += T) for(let tx = 0; tx < W; tx += T) tiles.push([tx, ty]);
-    const cv = document.createElement("canvas"), ctx = cv.getContext("2d", { willReadFrequently:true });
-    // תמונה מוקטנת של כל הגיליון, להצגת המיקום של כל צבע
-    const ov = document.createElement("canvas"); ov.width = gw; ov.height = gh;
-    const octx = ov.getContext("2d"); octx.fillStyle = "#fff"; octx.fillRect(0, 0, gw, gh);
+    const ov = document.createElement("canvas"); ov.width = view.gw; ov.height = view.gh;
+    const octx = ov.getContext("2d"); octx.fillStyle = "#fff"; octx.fillRect(0, 0, ov.width, ov.height);
     let done = 0;
     for(const [tx, ty] of tiles){
       const w = Math.min(T, W - tx), h = Math.min(T, H - ty);
       cv.width = w; cv.height = h;
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
-      const vp = page.getViewport({ scale:k, offsetX:-tx, offsetY:-ty });
-      await page.render({ canvasContext:ctx, viewport:vp, background:"rgba(255,255,255,1)" }).promise;
+      await page.render({ canvasContext:ctx, viewport:page.getViewport({ scale:pxMm * PT_MM, offsetX:-tx, offsetY:-ty }), background:"rgba(255,255,255,1)" }).promise;
       octx.drawImage(cv, 0, 0, w, h, tx / CELL, ty / CELL, w / CELL, h / CELL);
       const px = ctx.getImageData(0, 0, w, h).data;
-      // מפתח צבע לכל פיקסל (0 = לא רלוונטי: לבן, אפור, שחור)
+      // מפתח לכל פיקסל: מספר צבע בסיס (חיובי) / דרגת אפור (שלילי) / 0 = רקע
       const key = new Int32Array(w * h);
       for(let i = 0, p = 0; i < key.length; i++, p += 4){
-        const r = px[p], g = px[p + 1], b = px[p + 2];
-        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-        if(mx - mn < 40 || mx < 90){
-          // אפור/שחור: 3 דרגות כהות. בהיר מאוד = רקע
-          key[i] = mx >= 200 ? 0 : -(mx < 70 ? 1 : mx < 140 ? 2 : 3);
-        } else key[i] = ((r << 16) | (g << 8) | b) + 1;
+        const r = px[p], g = px[p + 1], b = px[p + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        // צבעוני (גם כהה — שולי קו כהים) או שוליים בהירים של קו צבעוני → צבע הבסיס הקרוב
+        if(mx - mn >= 40 || (mx - mn >= 20 && mx >= 150 && mx < 235)){ const c = clusterOf(r, g, b); if(c >= 0){ key[i] = c + 1; continue; } }
+        if(mx - mn < 40 || mx < 90) key[i] = mx >= 200 ? 0 : -(mx < 70 ? 1 : mx < 140 ? 2 : 3);
+        else key[i] = 0;
       }
-      // אורך הרצף האופקי והאנכי בכל פיקסל — המינימום ביניהם הוא עובי הקו
       const hr = new Uint16Array(w * h);
       for(let y = 0; y < h; y++){
         let x = 0;
         while(x < w){
-          const i0 = y * w + x, kk = key[i0];
+          const kk = key[y * w + x];
           let e = x + 1; while(e < w && key[y * w + e] === kk) e++;
           if(kk !== 0) for(let j = x; j < e; j++) hr[y * w + j] = e - x;
           x = e;
@@ -1633,18 +2061,21 @@
         while(y < h){
           const kk = key[y * w + x];
           let e = y + 1; while(e < h && key[e * w + x] === kk) e++;
+          const vr = e - y;
           if(kk > 0){
-            let st = stats.get(kk);
-            if(!st){ const v = kk - 1; st = { r:v >> 16 & 255, g:v >> 8 & 255, b:v & 255, n:0, hist:new Uint32Array(64), cells:new Set() }; stats.set(kk, st); }
-            const vr = e - y;
+            const st = stats[kk - 1];
+            // כל פיקסל תורם 1/(עובי הקו במקום שלו) — סכום זה אורך הקו בפיקסלים, גם כשהעובי משתנה
             for(let j = y; j < e; j++){
               const m = Math.min(vr, hr[j * w + x]);
               st.hist[m > 63 ? 63 : m]++; st.n++;
-              st.cells.add(Math.floor((ty + j) / CELL) * gw + Math.floor((tx + x) / CELL));
+              if(m < 2) continue;   // שוליים של פיקסל אחד
+              const ci = Math.floor((ty + j) / CELL) * gw + Math.floor((tx + x) / CELL);
+              st.cells.set(ci, (st.cells.get(ci) || 0) + 1 / m);
+              // הצבע האמיתי בכל משבצת (לזיהוי הדוגמית במקרא)
+              const pi = (j * w + x) * 4; let cc = cellCol.get(ci); if(!cc){ cc = [0, 0, 0, 0]; cellCol.set(ci, cc); }
+              cc[0] += px[pi]; cc[1] += px[pi + 1]; cc[2] += px[pi + 2]; cc[3]++;
             }
           } else if(kk < 0){
-            // שחור/אפור: מפרידים לפי עובי הקו (צנרת עבה יותר מקווי האדריכלות, קירות מלאים עבים בהרבה)
-            const vr = e - y;
             for(let j = y; j < e; j++){
               const m = Math.min(vr, hr[j * w + x]);
               const band = GBANDS.findIndex(b => m >= b[0] && m <= b[1]);
@@ -1663,158 +2094,279 @@
       done++; onProgress && onProgress(done, tiles.length);
       await new Promise(r => setTimeout(r, 0));
     }
-    const out = [];
-    for(const st of stats.values()){
-      if(st.n < 400) continue;
-      // עובי = החציון של "רצף קצר" (משקל לפי פיקסלים)
-      let acc = 0, th = 1;
-      for(let t = 1; t < 64; t++){ acc += st.hist[t]; if(acc >= st.n / 2){ th = t; break; } }
-      if(th < 2) continue;   // עובי פיקסל אחד = שולי קו מוחלקים, לא קו
-      // עובי ממוצע (לא שלם) סביב החציון: חתכים בעובי t תורמים t פיקסלים כל אחד
-      let pn = 0, cuts = 0;
-      for(let t = Math.max(2, th - 1); t <= Math.min(63, th + 1); t++){ pn += st.hist[t]; cuts += st.hist[t] / t; }
-      const thick = pn / cuts;
-      const lenM = st.n / thick / pxMm * scale / 1000;
-      if(lenM < 1) continue;
-      out.push({ color: hexOf(st.r, st.g, st.b), lenM: Math.round(lenM * 10) / 10, thickMm: Math.round(th / pxMm * scale), th, cells: st.cells, n: st.n });
-    }
-    // צבעים כמעט זהים (גוונים של קצה הקו) — מאחדים לצבע הדומיננטי
-    out.sort((a, b) => b.n - a.n);
-    const merged = [];
-    const dist = (a, b) => { const p = x => [parseInt(x.slice(1, 3), 16), parseInt(x.slice(3, 5), 16), parseInt(x.slice(5, 7), 16)]; const A = p(a), B = p(b); return Math.abs(A[0] - B[0]) + Math.abs(A[1] - B[1]) + Math.abs(A[2] - B[2]); };
-    const rgb = x => [parseInt(x.slice(1, 3), 16), parseInt(x.slice(3, 5), 16), parseInt(x.slice(5, 7), 16)];
-    // גוון שהוא ערבוב של צבע גדול עם לבן או עם שחור (שולי קו) — לא צבע בפני עצמו
-    const blendOf = (o, m) => {
-      const O = rgb(o.color), M = rgb(m.color), tw = [], tb = [];
-      let w = true, k = true;   // ערבוב עם לבן רק מבהיר; ערבוב עם שחור רק מכהה
-      for(let c = 0; c < 3; c++){
-        if(255 - M[c] > 30) tw.push((O[c] - M[c]) / (255 - M[c])); else if(O[c] < M[c] - 20) w = false;
-        if(M[c] > 30) tb.push(O[c] / M[c]); else if(O[c] > M[c] + 20) k = false;
-      }
-      const ok = t => t.length >= 2 && Math.max(...t) - Math.min(...t) < 0.05 && Math.min(...t) > 0.04 && Math.max(...t) < 0.96;
-      return (w && ok(tw)) || (k && ok(tb));
-    };
-    out.forEach(o => { if(merged.some(m => o.th < m.th * 0.7 && o.n < m.n * 0.25 && blendOf(o, m))) return; const m = merged.find(x => dist(x.color, o.color) < 24); if(m){ m.lenM = Math.round((m.lenM + o.lenM) * 10) / 10; o.cells.forEach(c => m.cells.add(c)); } else merged.push(o); });
-    merged.sort((a, b) => b.lenM - a.lenM);
-    merged.forEach(m => { m.id = m.color; });
-    // שחור/אפור — כל טווח עובי הוא שורה נפרדת (כבויה כברירת מחדל: רובם קווי אדריכלות)
-    const GHEX = { 1:"#000000", 2:"#6e6e6e", 3:"#b0b0b0" }, GNAME = { 1:"שחור", 2:"אפור כהה", 3:"אפור" };
-    const grays = [];
-    const cellM = CELL / pxMm * scale / 1000;   // גודל משבצת במטרים אמיתיים
-    for(const st of gstats.values()){
-      let pn = 0, cuts = 0;
-      for(let t = 0; t < 64; t++) if(st.hist[t]){ pn += st.hist[t]; cuts += st.hist[t] / t; }
-      // משאירים רק קווים רציפים באורך 3 מ׳ לפחות — מסנן טקסט, מידות וקטעי קיר קצרים
-      const seen = new Set(), keep = new Set();
-      let keptPx = 0;
-      for(const c0 of st.cells.keys()){
+    const cellMm = CELL / pxMm, toM = scale / 1000;
+    // רכיבים מחוברים במפת המשבצות (מגשר על רווח של משבצת אחת)
+    function compsOf(cells){
+      const seen = new Set(), out = [];
+      for(const c0 of cells.keys()){
         if(seen.has(c0)) continue;
         const comp = [c0]; seen.add(c0);
-        let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
         for(let q = 0; q < comp.length; q++){
           const c = comp[q], cx = c % gw, cy = (c - cx) / gw;
-          if(cx < x0) x0 = cx; if(cx > x1) x1 = cx; if(cy < y0) y0 = cy; if(cy > y1) y1 = cy;
-          for(let dy = -2; dy <= 2; dy++) for(let dx = -2; dx <= 2; dx++){   // מגשר על רווחים קטנים (כיתוב P-S, קו מקווקו)
+          for(let dy = -2; dy <= 2; dy++) for(let dx = -2; dx <= 2; dx++){
             const nx = cx + dx, ny = cy + dy, nc = ny * gw + nx;
-            if(nx < 0 || nx >= gw || ny < 0 || seen.has(nc) || !st.cells.has(nc)) continue;
+            if(nx < 0 || nx >= gw || ny < 0 || seen.has(nc) || !cells.has(nc)) continue;
             seen.add(nc); comp.push(nc);
           }
         }
-        if(Math.max(x1 - x0, y1 - y0) * cellM >= 3) comp.forEach(c => { keep.add(c); keptPx += st.cells.get(c); });
+        out.push(comp);
       }
-      if(!keep.size) continue;
-      const tmm = (pn / cuts) / pxMm;   // עובי ממוצע על הנייר
-      cuts *= keptPx / st.n;
-      st.cells = keep;
-      const lenM = Math.round(cuts / pxMm * scale / 1000 * 10) / 10;
-      if(lenM < 3) continue;
-      grays.push({ id: GHEX[st.level] + "@" + st.band, color: GHEX[st.level], gray: GNAME[st.level] + " · קו בעובי " + tmm.toFixed(1) + " מ״מ", lenM, thickMm: Math.round(tmm * scale), cells: st.cells, n: st.n });
-    }
-    grays.sort((a, b) => a.color.localeCompare(b.color) || a.thickMm - b.thickMm);
-    return { items: merged, grays, overview: ov, gw, gh, cell: CELL };
-  }
-
-  // סמלים קטנים בשרטוט (עיגולי ירידה/עלייה, קולטנים, ארונות כיבוי…) — נקראים ישירות מהקווים של ה-PDF
-  async function planSymbols(plan, scale, view){
-    const pdfjs = window.pdfjsLib, O = pdfjs.OPS, page = plan.page;
-    const ol = await page.getOperatorList();
-    const toM = 25.4 / 72 * scale / 1000;              // נקודת PDF → מטר אמיתי
-    const H = plan.hMm * 72 / 25.4;                     // גובה העמוד בנקודות (ציר Y הפוך)
-    const col = a => {
-      if(typeof a === "string") return a.length === 7 ? a.toLowerCase() : "#000000";
-      if(a && a.length >= 3) return hexOf(Math.round(a[0]), Math.round(a[1]), Math.round(a[2]));
-      return "#000000";
-    };
-    const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
-    let ctm = [1, 0, 0, 1, 0, 0], stroke = "#000000", fill = "#000000";
-    const stack = [], found = [];
-    let pend = null;   // הנתיב האחרון שנבנה, מחכה לפקודת ציור
-    const PAINT_S = new Set([O.stroke, O.closeStroke, O.fillStroke, O.eoFillStroke, O.closeFillStroke, O.closeEOFillStroke]);
-    const PAINT_F = new Set([O.fill, O.eoFill, O.fillStroke, O.eoFillStroke, O.closeFillStroke, O.closeEOFillStroke]);
-    function subpaths(ops, cs){
-      const out = []; let cur = null, ci = 0;
-      const pt = (x, y) => [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]];
-      const add = (p, curve) => { if(!cur) return; cur.pts.push(p); if(curve) cur.curve = true; };
-      for(const op of ops){
-        if(op === O.moveTo){ cur && out.push(cur); cur = { pts:[pt(cs[ci], cs[ci + 1])], curve:false, closed:false }; ci += 2; }
-        else if(op === O.lineTo){ add(pt(cs[ci], cs[ci + 1])); ci += 2; }
-        else if(op === O.curveTo){ add(pt(cs[ci + 4], cs[ci + 5]), true); ci += 6; }
-        else if(op === O.curveTo2 || op === O.curveTo3){ add(pt(cs[ci + 2], cs[ci + 3]), true); ci += 4; }
-        else if(op === O.closePath){ if(cur) cur.closed = true; }
-        else if(op === O.rectangle){ cur && out.push(cur); const [x, y, w, h] = cs.slice(ci, ci + 4); cur = { pts:[pt(x, y), pt(x + w, y), pt(x + w, y + h), pt(x, y + h)], curve:false, closed:true, rect:true }; ci += 4; }
-      }
-      cur && out.push(cur);
       return out;
     }
-    const fa = ol.fnArray, aa = ol.argsArray;
-    for(let i = 0; i < fa.length; i++){
-      const fn = fa[i], a = aa[i];
-      if(fn === O.save) stack.push([ctm, stroke, fill]);
-      else if(fn === O.restore){ const t = stack.pop(); if(t){ [ctm, stroke, fill] = t; } }
-      else if(fn === O.transform) ctm = mul(ctm, a);
-      else if(fn === O.setStrokeRGBColor) stroke = col(a.length === 1 ? a[0] : a);
-      else if(fn === O.setFillRGBColor) fill = col(a.length === 1 ? a[0] : a);
-      else if(fn === O.constructPath) pend = subpaths(a[0], a[1]);
-      else if(pend && (PAINT_S.has(fn) || PAINT_F.has(fn))){
-        const c = PAINT_S.has(fn) ? stroke : fill;
-        for(const sp of pend){
-          if(sp.pts.length < 3) continue;
-          let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-          sp.pts.forEach(([x, y]) => { if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; });
-          const w = (x1 - x0) * toM, h = (y1 - y0) * toM, big = Math.max(w, h), small = Math.min(w, h);
-          // רק עיגולים (ירידות/עליות, קולטנים, מגופים) — מצולעים קטנים הם בעיקר קטעי צנרת
-          if(!sp.curve || big < 0.04 || big > 1.2 || small / big < 0.75) continue;
-          const first = sp.pts[0], last = sp.pts[sp.pts.length - 1];
-          const closed = sp.closed || sp.rect || Math.hypot(first[0] - last[0], first[1] - last[1]) * toM < 0.02;
-          if(!closed) continue;
-          found.push({ color:c, curve:sp.curve, size:Math.round(big * 20) / 20, cx:(x0 + x1) / 2, cy:(y0 + y1) / 2 });
-        }
-        pend = null;
+    const lines = textLines(sc.texts), labels = planLabels(sc.texts).filter(l => l.dia).map(l => ({ t:l, lb:l }));
+    // מסגרות הכיתוב (אופקי/אנכי), עם שוליים קטנים
+    const tbox = sc.texts.filter(t => t.w > 0 && t.h > 0).map(t => { const hz = Math.abs(t.dx) > 0.7, a = (hz ? t.w : t.h) / 2 + 0.6, b = (hz ? t.h : t.w) / 2 + 0.6; return [t.x - a, t.x + a, t.y - b, t.y + b]; });
+    const bbOf = comp => {
+      let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, px = 0;
+      comp.forEach(c => { const cx = c % gw, cy = (c - cx) / gw; px += st0.cells.get(c) || 0; if(cx < x0) x0 = cx; if(cx > x1) x1 = cx; if(cy < y0) y0 = cy; if(cy > y1) y1 = cy; });
+      return { x0, x1, y0, y1, px, b:{ x0:x0 * cellMm, x1:(x1 + 1) * cellMm, y0:y0 * cellMm, y1:(y1 + 1) * cellMm } };
+    };
+    let st0 = null;
+    // 1. דוגמיות מקרא — בכל הצבעים, גם בצבע שמופיע רק במקרא (בתוכנית הסרוקה הגוון של הקו לפעמים כהה מהדוגמית)
+    const cand0 = [];
+    stats.forEach((st, si) => {
+      if(st.n < 30) return;
+      st0 = st;
+      compsOf(st.cells).forEach(comp => { const q = bbOf(comp), nm = legendName(q.b, lines); if(!nm) return;
+        const a = [0, 0, 0, 0]; comp.forEach(c => { const cc = cellCol.get(c); if(cc) for(let k = 0; k < 4; k++) a[k] += cc[k]; });
+        cand0.push({ ...q.b, cy:(q.b.y0 + q.b.y1) / 2, nm, comp, si, d: a[3] ? [a[0] / a[3], a[1] / a[3], a[2] / a[3]] : st.d }); });
+    });
+    const allCand = legendStack(cand0);
+    allCand.forEach(c => c.comp.forEach(ci => stats[c.si].cells.delete(ci)));
+    // 2. הצבעים עצמם: בלי כתמים ממולאים (לוגו), נקודות (אותיות) וכיתוב צבעוני
+    const pre = [];
+    stats.forEach((st, si) => {
+      if(st.n < 400) return;
+      let acc = 0, th = 1;
+      for(let t = 1; t < 64; t++){ acc += st.hist[t]; if(acc >= st.n / 2){ th = t; break; } }
+      if(th < 2) return;
+      st0 = st;
+      compsOf(st.cells).forEach(comp => {
+        const { x0, x1, y0, y1, px, b } = bbOf(comp);
+        const span = (b.x1 - b.x0) + (b.y1 - b.y0), est = px / pxMm;
+        // כיתוב צבעוני (שם פרויקט, לוגו) — רוב הרכיב בתוך מסגרות של כיתוב
+        const inTxt = comp.filter(c => { const x = (c % gw + 0.5) * cellMm, y = (Math.floor(c / gw) + 0.5) * cellMm; return tbox.some(t => x >= t[0] && x <= t[1] && y >= t[2] && y <= t[3]); }).length;
+        // לוגו / סמל ממולא: רכיב רחב בשני הכיוונים שרובו "מלא" — צינור הוא קו דק
+        const bw = x1 - x0 + 1, bh = y1 - y0 + 1, dense = Math.min(bw, bh) >= 6 && comp.length > bw * bh * 0.35;
+        if(span < 3 || (est > 4 * span && span < 60) || dense || inTxt > comp.length * 0.5) comp.forEach(c => st.cells.delete(c));
+      });
+      pre.push({ st, si, th });
+    });
+    const items = [];
+    pre.forEach(p => {
+      const st = p.st, myLeg = allCand.filter(c => c.si === p.si);
+      let n = 0; st.cells.forEach(v => n += v);
+      const lenM = n / pxMm * toM;
+      if(lenM < 1) return;
+      // קוטר מהכיתוב: הכיתוב נצמד למשבצת הקרובה של הצבע, ומשם מתפשט לאורך הקו (הקרוב ביותר זוכה)
+      const lab = new Map(), q = [], R = Math.ceil(6 / cellMm);
+      labels.forEach(({ t, lb }) => {
+        const cx = Math.floor(t.x / cellMm), cy = Math.floor(t.y / cellMm);
+        let best = -1, bd = 1e9;
+        for(let dy = -R; dy <= R; dy++) for(let dx = -R; dx <= R; dx++){ const c = (cy + dy) * gw + cx + dx; if(st.cells.has(c)){ const d = dx * dx + dy * dy; if(d < bd){ bd = d; best = c; } } }
+        if(best >= 0 && !lab.has(best)){ lab.set(best, lb.dia); q.push(best); }
+      });
+      for(let h = 0; h < q.length; h++){
+        const c = q[h], cx = c % gw, cy = (c - cx) / gw, d = lab.get(c);
+        for(let dy = -2; dy <= 2; dy++) for(let dx = -2; dx <= 2; dx++){ const nc = (cy + dy) * gw + cx + dx; if(st.cells.has(nc) && !lab.has(nc)){ lab.set(nc, d); q.push(nc); } }
       }
-      else if(fn === O.endPath) pend = null;
+      const pm = new Map();
+      st.cells.forEach((v, c) => { const d = lab.get(c) || ""; pm.set(d, (pm.get(d) || 0) + v); });
+      const parts = [...pm.entries()].map(([dia, v]) => ({ dia, lenM:Math.round(v / pxMm * toM * 10) / 10, slope:"" })).filter(x => x.lenM >= 0.1).sort((a, b) => diaMm(b.dia) - diaMm(a.dia));
+      const partsT = tidyParts(parts), color = hexOf(...st.d);
+      items.push({ id:color, color, layer:"", gray:false, hint:"", legend:myLeg.length ? myLeg[0].nm : "", lenM:Math.round(lenM * 10) / 10, parts:partsT, fits:[], cells:new Set(st.cells.keys()), thickMm:Math.round(p.th / pxMm * scale) });
+    });
+    // שם מהמקרא: כל צבע מקבל את הדוגמית הקרובה אליו בצבע האמיתי שלה (כל דוגמית פעם אחת, הזוגות הקרובים קודם)
+    const cdist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), pairs = [];
+    items.forEach(i => { i.legend = ""; const c = rgbOf(i.color); allCand.forEach(l => { const d = cdist(c, l.d) - (l.si === stats.indexOf(stats.find(st => hexOf(...st.d) === i.color)) ? 25 : 0); if(d < 150) pairs.push([d, i, l]); }); });
+    const usedI = new Set(), usedL = new Set();
+    pairs.sort((a, b) => a[0] - b[0]).forEach(([d, i, l]) => { if(usedI.has(i) || usedL.has(l.nm)) return; i.legend = l.nm; usedI.add(i); usedL.add(l.nm); });
+    items.sort((a, b) => b.lenM - a.lenM);
+    // שחור/אפור — כל טווח עובי בשורה נפרדת (כבויה כברירת מחדל: רובם קווי אדריכלות)
+    const GHEX = { 1:"#000000", 2:"#6e6e6e", 3:"#b0b0b0" }, GNAME = { 1:"שחור", 2:"אפור כהה", 3:"אפור" };
+    const grays = [];
+    for(const st of gstats.values()){
+      let pn = 0, cuts = 0;
+      for(let t = 0; t < 64; t++) if(st.hist[t]){ pn += st.hist[t]; cuts += st.hist[t] / t; }
+      const keep = new Set(); let keptPx = 0;
+      compsOf(st.cells).forEach(comp => {
+        let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+        comp.forEach(c => { const cx = c % gw, cy = (c - cx) / gw; if(cx < x0) x0 = cx; if(cx > x1) x1 = cx; if(cy < y0) y0 = cy; if(cy > y1) y1 = cy; });
+        if(Math.max(x1 - x0, y1 - y0) * cellMm * toM >= 3) comp.forEach(c => { keep.add(c); keptPx += st.cells.get(c); });
+      });
+      if(!keep.size) continue;
+      const tmm = (pn / cuts) / pxMm;
+      cuts *= keptPx / st.n;
+      const lenM = Math.round(cuts / pxMm * toM * 10) / 10;
+      if(lenM < 3) continue;
+      grays.push({ id:GHEX[st.level] + "@" + st.band, color:GHEX[st.level], gray:GNAME[st.level] + " · קו בעובי " + tmm.toFixed(1) + " מ״מ", layer:"", hint:"", legend:"",
+        lenM, parts:[{ dia:"", lenM, slope:"" }], fits:[], cells:keep });
     }
-    // קיבוץ לפי צבע, צורה וגודל; אותו סמל שמצויר פעמיים (מילוי + קו) נספר פעם אחת
-    const groups = new Map();
-    for(const f of found){
-      const r = parseInt(f.color.slice(1, 3), 16), gg = parseInt(f.color.slice(3, 5), 16), b = parseInt(f.color.slice(5, 7), 16);
-      const gray = Math.max(r, gg, b) - Math.min(r, gg, b) < 40;
-      if(gray && Math.max(r, gg, b) >= 200) continue;   // אפור בהיר = רקע אדריכלי
-      const id = "sym:" + f.color + "@" + f.size + (f.curve ? "o" : "s");
-      let g = groups.get(id);
-      if(!g){ g = { id, color:f.color, curve:f.curve, size:f.size, gray, pts:[] }; groups.set(id, g); }
-      if(!g.pts.some(p => Math.hypot(p[0] - f.cx, p[1] - f.cy) * toM < 0.05)) g.pts.push([f.cx, f.cy]);
+    grays.sort((a, b) => a.color.localeCompare(b.color) || a.lenM - b.lenM);
+    return { items:items.concat(grays), overview:ov, legendN:allCand.length };
+  }
+
+  // ── סמלים: צורות סגורות קטנות (עיגולי ירידה/עלייה, ספרינקלרים, קולטנים, ארונות) ──
+  function planSymbols(sc, scale, view){
+    const toM = scale / 1000, groups = new Map();
+    const shortTag = s => s.length <= 5 && /^[A-Za-zא-ת0-9.\-\/']+$/.test(s) && !parseLabel(s).dia;
+    for(const f of sc.shapes){
+      const size = f.size * toM;
+      const [r, g, b] = rgbOf(f.color), gray = Math.max(r, g, b) - Math.min(r, g, b) < 40;
+      if(gray && Math.max(r, g, b) >= 200) continue;          // אפור בהיר = רקע אדריכלי
+      if(size < 0.04 || size > 1.2) continue;
+      if(!f.curve && (gray || f.n > 12)) continue;            // מצולע: רק צבעוני ופשוט
+      const sz = Math.round(size * 20) / 20, kind = f.curve ? "o" : "s";
+      const id = "sym:" + f.color + "@" + sz + kind + (f.layer ? "|" + f.layer : "");
+      let gr = groups.get(id);
+      if(!gr){ gr = { id, color:f.color, curve:f.curve, size:sz, gray, layer:f.layer, pts:[], tag:0 }; groups.set(id, gr); }
+      if(gr.pts.some(p => Math.hypot(p[0] - f.x, p[1] - f.y) * toM < 0.05)) continue;   // אותו סמל במילוי + קו
+      gr.pts.push([f.x, f.y]);
+      // כיתוב קצר בתוך העיגול = בועת ציר / תגית
+      if(sc.texts.some(t => Math.hypot(t.x - f.x, t.y - f.y) < f.size * 0.45 && t.h < f.size && shortTag(t.s))) gr.tag++;
     }
-    const out = [];
+    const cmm = view.cell / view.pxMm, out = [];
     for(const g of groups.values()){
-      if(g.pts.length < 1) continue;
-      const cells = new Set(g.pts.map(([x, y]) => {
-        const gx = Math.floor(x * 25.4 / 72 * view.pxMm / view.cell), gy = Math.floor((H - y) * 25.4 / 72 * view.pxMm / view.cell);
-        return gy * view.gw + gx;
-      }));
-      out.push({ id:g.id, color:g.color, curve:g.curve, size:g.size, gray:g.gray, count:g.pts.length, cells });
+      const cells = new Set(g.pts.map(([x, y]) => Math.floor(y / cmm) * view.gw + Math.floor(x / cmm)));
+      out.push({ id:g.id, color:g.color, curve:g.curve, size:g.size, gray:g.gray, layer:g.layer, hint:layerHint(g.layer), count:g.pts.length, pts:g.pts, tagged:g.tag >= g.pts.length / 2, cells });
     }
-    out.sort((a, b) => (a.gray - b.gray) || b.count - a.count);
+    out.sort((a, b) => (a.tagged - b.tagged) || (a.gray - b.gray) || b.count - a.count);
     return out;
+  }
+
+  // ── ניתוח עמוד אחד ──
+  async function analyzePage(plan, pageNo, onProgress){
+    const sc = await planScan(plan, pageNo);
+    const scale = sc.scale || 100, pxMm = PLAN_PX, cell = PLAN_CELL;
+    const gw = Math.ceil(sc.wMm * pxMm / cell), gh = Math.ceil(sc.hMm * pxMm / cell), view = { pxMm, cell, gw, gh };
+    const vec = vecAnalyze(sc, scale, view);
+    const vecLen = vec.items.filter(i => !i.gray).reduce((s, i) => s + i.lenM, 0);
+    const raster = (sc.imgFrac > 0.05 && vecLen < 150) || vecLen < 3;   // תמונות שמכסות את הגיליון ומעט קווים וקטוריים = הצנרת בתמונה
+    let items, overview, legendN;
+    if(raster){
+      const r = await rasterMeasure(sc, scale, view, onProgress);
+      items = r.items; overview = r.overview; legendN = r.legendN;
+    } else {
+      items = vec.items; legendN = vec.legendN;
+      overview = document.createElement("canvas"); overview.width = gw; overview.height = gh;
+      const g = overview.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, gw, gh);
+      await sc.page.render({ canvasContext:g, viewport:sc.page.getViewport({ scale:pxMm / cell * PT_MM }), background:"rgba(255,255,255,1)" }).promise;
+      onProgress && onProgress(1, 1);
+    }
+    let syms = [];
+    try{ syms = planSymbols(sc, scale, view); }catch(e){ console.warn(e); }
+    const head = sc.texts.slice().sort((a, b) => b.h - a.h).map(t => t.s);
+    let floor = "";
+    for(const s of head){ floor = floorOf(s, true); if(floor) break; }
+    if(!floor && plan.pages === 1) floor = floorOf(plan.name);
+    return { no:pageNo, mode: raster ? "ras" : "vec", scale0:scale, detected:!!sc.scale, floor, items, syms, overview, gw, gh, cell, legendN,
+      layers: !!plan.ocg && vec.items.some(i => i.layer) };
+  }
+
+  // ── שאלות על כתבי הכמויות של אתר ──
+  // כל השורות השמורות, בטבלה אחת
+  function boqFlat(list){
+    return (list || []).flatMap(b => (b.rows || []).map(r => ({ plan:b.plan, pid:b.id, at:b.at, f:r.f || (b.floors && b.floors.length === 1 ? b.floors[0] : ""),
+      name:r.name, dia:r.dia || "", sl:r.sl || "", qty:+r.qty || 0, unit:r.unit, k:r.k || (r.unit === "מ״א" ? "p" : "s") })));
+  }
+  const BOQ_K = { p:"צנרת", h:"תליות", s:"סמלים/פריטים", v:"צנרת אנכית", f:"ספחים", x:"ידני" };
+  const BOQ_COLS = { f:"קומה", name:"פריט", dia:"קוטר", sl:"שיפוע", plan:"תוכנית", k:"סוג" };
+  const heStem = w => w.replace(/[״"'׳]/g, "").replace(/(ים|ות|יות)$/, "");
+  function boqVocab(flat){
+    const u = a => [...new Set(a.filter(Boolean))];
+    return { plans:u(flat.map(r => r.plan)), floors:u(flat.map(r => r.f)), names:u(flat.map(r => r.name)), dias:u(flat.map(r => r.dia)), kinds:Object.keys(BOQ_K) };
+  }
+  // פענוח שאלה בלי AI: קומה, קוטר, מערכת, סוג, "לפי…", השוואה
+  function boqParse(q, flat){
+    const s = " " + String(q).replace(/[״”″]/g, '"').replace(/''/g, '"') + " ", V = boqVocab(flat);
+    const spec = { floors:[], names:[], must:[], dias:[], kinds:[], plans:[], group:[], compare:/השוו|השווה|הבדל|לעומת|מול/.test(s) };
+    for(const m of s.matchAll(/((?:\d+\s+)?\d+\/\d+|\d+(?:\.\d+)?)\s*(?:"|אינץ'?|אינטש|inch)/g)) spec.dias.push(m[1] + '"');
+    for(const m of s.matchAll(/(?:[Øø∅]\s*|קוטר\s*)(\d{2,3})|(\d{2,3})\s*(?:מ"מ|מ'מ|mm)/g)) spec.dias.push("Ø" + (m[1] || m[2]));
+    for(const m of s.matchAll(/קומ(?:ה|ת)\s*(-?\d+)/g)) spec.floors.push("קומה " + (+m[1]));
+    for(const m of s.matchAll(/מרתף\s*(-?\d+)/g)) spec.floors.push("מרתף " + (m[1].startsWith("-") ? m[1] : "-" + m[1]));
+    if(/קרקע/.test(s)) spec.floors.push("קרקע");
+    if(/קומת\s*גג|בגג[\s?]/.test(s)) spec.floors.push("גג");
+    if(/ספח|זווית|זוויות|זויות|(^|\s)טי(\s|$)|צלב/.test(s)) spec.kinds.push("f");
+    if(/תלי/.test(s)) spec.kinds.push("h");
+    if(/אנכי/.test(s)) spec.kinds.push("v");
+    if(!spec.kinds.length && /מטר|מ"א|אורך|צינור|צנרת/.test(s)) spec.kinds.push("p", "v");
+    const ang = s.match(/זווי\S*\s*(?:של\s*)?(90|45)/); if(ang) spec.must.push(ang[1] + "°");
+    // בלי בקשה מפורשת — בלי שורות מחושבות (תליות, ספחים)
+    if(!spec.kinds.length) spec.kinds.push("p", "v", "s", "x");
+    const STOP = new Set("כמה מטר מטרים צינור צינורות צנרת רשימת רשימה לפי קומה בקומה קומות של את כל בכל לכל סהכ סה\"כ השווה השוו בין תוכנית תוכניות יחידות כמות קוטר מה יש עם בלי גם אני רוצה תן תראה הצג מול לעומת זווית זוויות זויות ספחים ספח תליות תלייה אנכית אנכי צלב צלבים".split(" "));
+    const words = s.split(/[\s,.?!:;()\-]+/).map(w => w.replace(/^[בלמהו](?=[א-ת]{3})/, "")).filter(w => w.length >= 3 && !STOP.has(w) && /[א-תA-Za-z]/.test(w)).map(heStem);
+    V.names.forEach(n => { const st = n.split(/[\s\-—·,()]+/).map(heStem).filter(x => x.length >= 3); if(words.some(w => st.some(x => x.includes(w) || w.includes(x)))) spec.names.push(n); });
+    // תוכנית: השם המלא בשאלה, או לפחות שתי מילים מהשם
+    V.plans.forEach(p => { const st = p.split(/[\s\-—·,()]+/).map(heStem).filter(x => x.length >= 3); if(s.includes(p) || st.filter(x => words.includes(x)).length >= 2) spec.plans.push(p); });
+    if(/(?:לפי|בכל|לכל)\s*(?:ה)?קומ/.test(s)) spec.group.push("f");
+    if(/לפי\s*קוטר/.test(s)) spec.group.push("dia");
+    if(/לפי\s*(?:מערכת|סוג|פריט)/.test(s)) spec.group.push("name");
+    if(/לפי\s*תוכני/.test(s)) spec.group.push("plan");
+    if(/רשימ/.test(s) && spec.group.length && !spec.group.includes("name")) spec.group.push("name");
+    return spec;
+  }
+  // הרצת "מפרט שאלה" על הטבלה — אותו מפרט מגיע מהפענוח המקומי או מה-AI
+  function boqRun(spec, flat){
+    const inA = (a, v, fn) => !a || !a.length || a.some(x => fn(x, v));
+    const fk = spec.floors && spec.floors.map(floorKey);
+    let R = flat.filter(r => (!fk || !fk.length || fk.includes(floorKey(r.f)))
+      && inA(spec.dias, r.dia, (x, v) => diaNorm(x) === diaNorm(v))
+      && inA(spec.kinds, r.k, (x, v) => x === v)
+      && inA(spec.names, r.name, (x, v) => v === x || heStem(v).includes(heStem(x)))
+      && (!spec.must || spec.must.every(m => r.name.includes(m)))
+      && (spec.compare || inA(spec.plans, r.plan, (x, v) => x === v)));
+    let plans = [];
+    if(spec.compare){
+      const all = [...new Map(flat.map(r => [r.plan, r.at])).entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+      plans = (spec.plans && spec.plans.length >= 2 ? spec.plans : (spec.plans || []).concat(all.filter(p => !(spec.plans || []).includes(p)))).slice(0, 2);
+      R = R.filter(r => plans.includes(r.plan));
+    }
+    let G = (spec.group && spec.group.length ? spec.group : ["name", "dia"]).filter(g => BOQ_COLS[g] && !(spec.compare && g === "plan"));
+    if(!G.includes("name") && !(spec.group && spec.group.length)) G.unshift("name");
+    const keyOf = r => G.map(g => g === "k" ? BOQ_K[r.k] || r.k : r[g] || "").concat(r.unit).join("\u0001");
+    const M = new Map();
+    R.forEach(r => { const k = keyOf(r); let m = M.get(k); if(!m){ m = { cells:G.map(g => g === "k" ? BOQ_K[r.k] || r.k : r[g] || "—"), unit:r.unit, q:{} }; M.set(k, m); }
+      const pk = spec.compare ? r.plan : "_"; m.q[pk] = (m.q[pk] || 0) + r.qty; });
+    const fsort = (a, b) => { for(let i = 0; i < G.length; i++){ const g = G[i], x = a.cells[i], y = b.cells[i];
+      const c = g === "f" ? (parseFloat(floorKey(x)) || 0) - (parseFloat(floorKey(y)) || 0) : g === "dia" ? diaMm(y) - diaMm(x) : String(x).localeCompare(String(y), "he"); if(c) return c; } return 0; };
+    const rows = [...M.values()].sort(fsort);
+    const r1 = v => Math.round(v * 10) / 10;
+    const head = G.map(g => BOQ_COLS[g]).concat(spec.compare ? [plans[0] || "א", plans[1] || "ב", "הפרש"] : ["כמות"], ["יחידה"]);
+    const body = rows.map(m => m.cells.concat(spec.compare ? [r1(m.q[plans[0]] || 0), r1(m.q[plans[1]] || 0), r1((m.q[plans[1]] || 0) - (m.q[plans[0]] || 0))] : [r1(m.q._ || 0)], [m.unit]));
+    const tot = {};
+    rows.forEach(m => { tot[m.unit] = (tot[m.unit] || 0) + (spec.compare ? (m.q[plans[1]] || 0) - (m.q[plans[0]] || 0) : m.q._ || 0); });
+    return { head, body, totals:Object.entries(tot).map(([u, v]) => r1(v) + " " + u), plans, n:R.length };
+  }
+  // תיאור קריא של מה שחיפשנו
+  function boqSpecText(spec){
+    const p = [];
+    if(spec.floors && spec.floors.length) p.push("קומה: " + spec.floors.join(", "));
+    if(spec.names && spec.names.length) p.push("פריט: " + spec.names.slice(0, 3).join(", ") + (spec.names.length > 3 ? " ועוד " + (spec.names.length - 3) : ""));
+    if(spec.must && spec.must.length) p.push("רק: " + spec.must.join(", "));
+    if(spec.dias && spec.dias.length) p.push("קוטר: " + spec.dias.join(", "));
+    if(spec.kinds && spec.kinds.length) p.push("סוג: " + spec.kinds.map(k => BOQ_K[k] || k).join(", "));
+    if(spec.plans && spec.plans.length) p.push("תוכנית: " + spec.plans.join(", "));
+    if(spec.group && spec.group.length) p.push("לפי " + spec.group.map(g => BOQ_COLS[g] || g).join(" + "));
+    if(spec.compare) p.push("השוואה בין תוכניות");
+    return p.join(" · ") || "הכול";
+  }
+  // שאלה חופשית דרך Claude (Haiku) — עובר בשרת הביניים (Apps Script) שמחזיק את המפתח ובודק שהמשתמש מחובר.
+  // ה-AI רק מתרגם את השאלה למפרט; החישוב עצמו רץ כאן במכשיר. בלי כתובת / בלי חיבור — פענוח מקומי.
+  const BOQ_AI_URL = "";
+  async function boqAsk(q, flat){
+    const local = () => ({ spec:boqParse(q, flat), ai:false });
+    if(!BOQ_AI_URL || !Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) return local();
+    try{
+      const token = await firebase.auth().currentUser.getIdToken();
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 15000);
+      const res = await fetch(BOQ_AI_URL, { method:"POST", body:JSON.stringify({ action:"boq_query", token, q, vocab:boqVocab(flat) }), signal:ctl.signal });
+      clearTimeout(tm);
+      const j = await res.json();
+      const s = j && j.spec;
+      if(!s || typeof s !== "object") return local();
+      const arr = a => Array.isArray(a) ? a.filter(x => typeof x === "string").slice(0, 30) : [];
+      return { spec:{ floors:arr(s.floors), names:arr(s.names), must:arr(s.must), dias:arr(s.dias), kinds:arr(s.kinds), plans:arr(s.plans), group:arr(s.group), compare:!!s.compare }, ai:true };
+    }catch(e){ return local(); }
   }
 
   /* ═════════════ מסך העובד (קישור אישי) ═════════════ */
@@ -3743,6 +4295,8 @@ ${l}`
         s.boq = s.boq || [];
         s.boq.unshift({ id:"q" + Date.now().toString(36), at:Date.now(), by:who, ...entry });
         if(s.boq.length > 30) s.boq.length = 30;
+        // מסמך האתר מוגבל ל-1MB — כתבי כמויות ישנים יוצאים כשהם תופסים יותר מדי
+        while(s.boq.length > 1 && JSON.stringify(s.boq).length > 300000) s.boq.pop();
         s.boqColors = { ...(s.boqColors || {}), ...colors };
         pushLog(d, who, "הפיק כתב כמויות מתוכנית: " + entry.plan + " (" + entry.rows.length + " סעיפים)", siteId);
         return d;
@@ -4351,19 +4905,41 @@ ${l}`
   function PlanBoq({ site, onSave, onDelete, onBack, notify }){
     const [phase, setPhase] = useState("list");   // list | busy | review
     const [prog, setProg] = useState("");
-    const [res, setRes] = useState(null);
+    const [pages, setPages] = useState([]);       // לכל עמוד בקובץ: קומה, קנה מידה, צנרת, סמלים
+    const [cur, setCur] = useState(0);
     const [name, setName] = useState("");
-    const [scale, setScale] = useState(100);
-    const [rows, setRows] = useState([]);         // צנרת (צבעים + שחור/אפור)
-    const [syms, setSyms] = useState([]);         // סמלים שנספרו
     const [extra, setExtra] = useState([]);
     const [height, setHeight] = useState("3");    // גובה לכל ירידה/עלייה
     const [hang, setHang] = useState(true);
+    const [fitOn, setFitOn] = useState(true);
     const [showGray, setShowGray] = useState(false);
     const [sel, setSel] = useState(null);
+    const [q, setQ] = useState("");
+    const [ans, setAns] = useState(null);
+    const [asking, setAsking] = useState(false);
+    const [openB, setOpenB] = useState({});       // כתבי כמויות שפתוחים במלואם
     const fileRef = useRef(null), cvRef = useRef(null);
     const known = site.boqColors || {};
+    const list = site.boq || [];
+    const pg = pages[cur];
 
+    function mkPage(r){
+      const kn = id => known[id] || {};
+      const byId = {};
+      r.items.forEach(x => byId[x.id] = x.cells);
+      r.syms.forEach(x => byId[x.id] = x.cells);
+      return { no:r.no, mode:r.mode, scale0:r.scale0, scale:r.scale0, detected:r.detected, floor:r.floor, include:true, overview:r.overview, gw:r.gw, gh:r.gh, cell:r.cell,
+        legendN:r.legendN, layers:r.layers, byId,
+        rows: r.items.map(it => { const k = kn(it.id); return { id:it.id, color:it.color, layer:it.layer, gray:it.gray, hint:it.hint, legend:it.legend,
+          // ברירת מחדל: צבעוני — כן; שכבה שאינה של צנרת / ארונות / אדום בלי שכבות (בדרך כלל הערות) — לא
+          on: k.on != null ? k.on !== false : (!it.gray && (it.hint ? it.hint !== "ארונות כיבוי" : !it.layer && it.color.toLowerCase() !== "#ff0000")),
+          name: k.name || it.legend || it.hint || "", sp: k.sp || "2",
+          parts: it.parts.map(p => ({ dia: p.dia || k.dia || "", orig:p.dia, slope:p.slope, base:p.lenM, len:"" })),
+          fits: it.fits.map(f => ({ ...f, on:true })) }; }),
+        syms: r.syms.map(x => { const k = kn(x.id); return { id:x.id, color:x.color, size:x.size, curve:x.curve, count:x.count, gray:x.gray, tagged:x.tagged, hint:x.hint, pts:x.pts,
+          on: k.on != null ? k.on !== false : (!x.gray && !x.tagged && x.count >= 2), name: k.name || "", dia: k.dia || "",
+          kind: k.kind || (x.size <= 0.2 ? "vert" : "unit") }; }) };
+    }
     async function onFile(e){
       const file = e.target.files && e.target.files[0]; e.target.value = "";
       if(!file) return;
@@ -4371,102 +4947,170 @@ ${l}`
       setPhase("busy"); setProg("פותח את התוכנית…");
       try{
         const plan = await openPlan(file);
-        const sc = plan.scale || 100, pxMm = 6;
-        const r = await measurePlan(plan, sc, (d, n) => setProg("מודד את הצנרת… " + Math.round(100 * d / n) + "%"), pxMm);
-        setProg("סופר סמלים…");
-        let sy = [];
-        try{ sy = await planSymbols(plan, sc, { pxMm, cell:r.cell, gw:r.gw }); }catch(err){ console.warn(err); }
-        const byId = {};
-        r.items.concat(r.grays).forEach(x => byId[x.id] = x.cells);
-        sy.forEach(x => byId[x.id] = x.cells);
-        setRes({ ...r, byId, scale0: sc, detected: !!plan.scale, pages: plan.pages });
-        setName(file.name.replace(/\.pdf$/i, ""));
-        setScale(sc);
-        const kn = id => known[id] || null;
-        setRows(r.items.map(it => ({ id:it.id, color:it.color, base:it.lenM, gray:false,
-            on: kn(it.id) ? kn(it.id).on !== false : it.color.toLowerCase() !== "#ff0000",
-            name: (kn(it.id) && kn(it.id).name) || "", dia: (kn(it.id) && kn(it.id).dia) || "", sp: (kn(it.id) && kn(it.id).sp) || "2" }))
-          .concat(r.grays.map(it => ({ id:it.id, color:it.color, base:it.lenM, gray:it.gray,
-            on: !!(kn(it.id) && kn(it.id).on), name: (kn(it.id) && kn(it.id).name) || "", dia: (kn(it.id) && kn(it.id).dia) || "", sp: (kn(it.id) && kn(it.id).sp) || "2" }))));
-        setSyms(sy.map(x => ({ id:x.id, color:x.color, size:x.size, count:x.count, gray:x.gray,
-          on: kn(x.id) ? kn(x.id).on !== false : (!x.gray && x.count >= 2), name: (kn(x.id) && kn(x.id).name) || "", dia: (kn(x.id) && kn(x.id).dia) || "",
-          kind: (kn(x.id) && kn(x.id).kind) || (x.size <= 0.2 ? "vert" : "unit") })));
+        const N = Math.min(plan.pages, 20), out = [];
+        for(let p = 1; p <= N; p++){
+          const pre = N > 1 ? "עמוד " + p + " מתוך " + N + " · " : "";
+          setProg(pre + "קורא את השרטוט…");
+          const r = await analyzePage(plan, p, (d, n) => setProg(pre + "מודד את הצנרת… " + Math.round(100 * d / n) + "%"));
+          out.push(mkPage(r));
+        }
+        setPages(out); setCur(0);
+        setName(plan.name);
         setExtra([]); setSel(null); setShowGray(false);
         setPhase("review");
-        if(!r.items.length && !sy.length) notify("לא נמצאו קווים או סמלים צבעוניים — ייתכן שזו תוכנית סרוקה");
-      }catch(err){ setPhase("list"); notify("הניתוח נכשל: " + (err && err.message || err)); }
+        if(plan.pages > N) notify("בקובץ " + plan.pages + " עמודים — נמדדו " + N + " הראשונים");
+        if(!out.some(p => p.rows.some(r => !r.gray) || p.syms.length)) notify("לא נמצאו קווים או סמלים צבעוניים — ייתכן שזו תוכנית סרוקה");
+      }catch(err){ console.error(err); setPhase("list"); notify("הניתוח נכשל: " + (err && err.message || err)); }
     }
     // המפה הקטנה עם הדגשת השורה שנבחרה
     useEffect(()=>{
-      const c = cvRef.current; if(!c || !res) return;
-      c.width = res.gw; c.height = res.gh;
+      const c = cvRef.current; if(!c || !pg) return;
+      c.width = pg.gw; c.height = pg.gh;
       const g = c.getContext("2d");
       g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
-      g.globalAlpha = sel ? 0.22 : 1; g.drawImage(res.overview, 0, 0); g.globalAlpha = 1;
-      if(sel && res.byId[sel.id]){
+      g.globalAlpha = sel ? 0.22 : 1; g.drawImage(pg.overview, 0, 0); g.globalAlpha = 1;
+      if(sel && pg.byId[sel.id]){
         const isSym = sel.id.startsWith("sym:");
-        g.fillStyle = sel.color === "#000000" || sel.color === "#6e6e6e" || sel.color === "#b0b0b0" ? "#e8590c" : sel.color;
+        g.fillStyle = ["#000000", "#6e6e6e", "#b0b0b0"].includes(sel.color) ? "#e8590c" : sel.color;
         g.strokeStyle = "#e8590c"; g.lineWidth = 2;
-        res.byId[sel.id].forEach(i => {
-          const x = i % res.gw, y = Math.floor(i / res.gw);
+        pg.byId[sel.id].forEach(i => {
+          const x = i % pg.gw, y = Math.floor(i / pg.gw);
           if(isSym){ g.beginPath(); g.arc(x, y, 7, 0, 7); g.stroke(); } else g.fillRect(x - 1, y - 1, 3, 3);
         });
       }
-    }, [res, sel, phase, showGray]);
+    }, [pages, cur, sel, phase, showGray]);
+    // הקשה על המפה: הסמל או הקו הקרובים נבחרים (וסמל — גם מסומן לספירה)
+    function onMapTap(e){
+      if(!pg) return;
+      const rc = e.currentTarget.getBoundingClientRect();
+      const gx = (e.clientX - rc.left) / rc.width * pg.gw, gy = (e.clientY - rc.top) / rc.height * pg.gh;
+      const cmm = pg.cell / PLAN_PX;
+      let best = null, bd = 9;
+      pg.syms.forEach((x, i) => x.pts.forEach(([px, py]) => { const d = Math.hypot(px / cmm - gx, py / cmm - gy); if(d < bd){ bd = d; best = ["s", i]; } }));
+      if(!best){
+        const cx = Math.floor(gx), cy = Math.floor(gy);
+        pg.rows.forEach((r, i) => { const cs = pg.byId[r.id]; if(!cs || (r.gray && !showGray)) return;
+          for(let dy = -3; dy <= 3; dy++) for(let dx = -3; dx <= 3; dx++) if(cs.has((cy + dy) * pg.gw + cx + dx)){ const d = Math.hypot(dx, dy); if(d < bd){ bd = d; best = ["r", i]; } } });
+      }
+      if(!best){ setSel(null); return; }
+      const [t, i] = best, it = t === "s" ? pg.syms[i] : pg.rows[i];
+      setSel(it);
+      if(t === "s" && !it.on) setSym(i, { on:true });
+      setTimeout(() => { const el = document.getElementById("boq-" + t + i); el && el.scrollIntoView({ behavior:"smooth", block:"center" }); }, 50);
+    }
 
-    const k = res ? scale / res.scale0 : 1;
-    const qty = r => r.len != null && r.len !== "" ? +r.len : Math.round(r.base * k * 10) / 10;
-    const setRow = (i, p) => setRows(rs => rs.map((r, j) => j === i ? { ...r, ...p } : r));
-    const setSym = (i, p) => setSyms(rs => rs.map((r, j) => j === i ? { ...r, ...p } : r));
+    const kOf = p => p ? p.scale / p.scale0 : 1;
+    const qtyP = (pt, k) => pt.len != null && pt.len !== "" ? +pt.len : Math.round(pt.base * k * 10) / 10;
+    const setPage = patch => setPages(ps => ps.map((p, j) => j === cur ? { ...p, ...patch } : p));
+    const setRow = (i, patch) => setPages(ps => {
+      const old = ps[cur].rows[i];
+      return ps.map((p, j) => j === cur ? { ...p, rows:p.rows.map((r, k) => k === i ? { ...r, ...patch } : r) }
+        : patch.name !== undefined ? { ...p, rows:p.rows.map(r => r.id === old.id && (!r.name || r.name === old.name) ? { ...r, name:patch.name } : r) } : p);
+    });
+    const setPart = (i, pi, patch) => setPages(ps => ps.map((p, j) => j !== cur ? p : { ...p, rows:p.rows.map((r, k) => k !== i ? r : { ...r, parts:r.parts.map((x, m) => m === pi ? { ...x, ...patch } : x) }) }));
+    const setFit = (i, fi, patch) => setPages(ps => ps.map((p, j) => j !== cur ? p : { ...p, rows:p.rows.map((r, k) => k !== i ? r : { ...r, fits:r.fits.map((x, m) => m === fi ? { ...x, ...patch } : x) }) }));
+    const setSym = (i, patch) => setPages(ps => {
+      const old = ps[cur].syms[i];
+      return ps.map((p, j) => j === cur ? { ...p, syms:p.syms.map((r, k) => k === i ? { ...r, ...patch } : r) }
+        : patch.name !== undefined ? { ...p, syms:p.syms.map(r => r.id === old.id && (!r.name || r.name === old.name) ? { ...r, name:patch.name } : r) } : p);
+    });
     const H = +height || 0;
+    const cz = o => { Object.keys(o).forEach(k => { if(o[k] === "" || o[k] == null) delete o[k]; }); return o; };
     function save(){
-      const out = [];
-      rows.filter(r => r.on).forEach(r => {
-        const nm = r.name.trim() || (r.gray || "קו בצבע " + r.color), q = qty(r), sp = +r.sp;
-        out.push({ name:nm, dia:r.dia.trim(), qty:q, unit:"מ״א", color:r.color, src:"נמדד" });
-        if(hang && sp > 0) out.push({ name:"תליות — " + nm, dia:r.dia.trim(), qty:Math.ceil(q / sp), unit:"יח׳", src:"מחושב: תלייה כל " + sp + " מ׳" });
+      const out = [], floors = [];
+      let noName = 0;
+      pages.filter(p => p.include).forEach(p => {
+        const f = (p.floor || "").trim(), k = kOf(p);
+        if(f && !floors.includes(f)) floors.push(f);
+        const src = p.mode === "vec" ? "נמדד מהשרטוט" : "נמדד לפי צבע";
+        p.rows.filter(r => r.on).forEach(r => {
+          if(!r.name.trim()) noName++;
+          const nm = r.name.trim() || (r.gray || "קו בצבע " + r.color), sp = +r.sp;
+          r.parts.forEach(pt => {
+            const qv = qtyP(pt, k); if(!(qv > 0)) return;
+            out.push(cz({ f, name:nm, dia:pt.dia.trim(), sl:pt.slope, qty:qv, unit:"מ״א", color:r.color, src, k:"p" }));
+            if(hang && sp > 0) out.push(cz({ f, name:"תליות — " + nm, dia:pt.dia.trim(), qty:Math.ceil(qv / sp), unit:"יח׳", src:"תלייה כל " + sp + " מ׳", k:"h" }));
+          });
+          if(fitOn) r.fits.filter(x => x.on && +x.n > 0).forEach(x => out.push(cz({ f, name:x.type + " — " + nm, dia:x.dia, qty:+x.n, unit:"יח׳", color:r.color, src:"נספר מהחיבורים בשרטוט (הערכה)", k:"f" })));
+        });
+        p.syms.filter(x => x.on && +x.count > 0).forEach(x => {
+          if(!x.name.trim()) noName++;
+          const nm = x.name.trim() || "סמל Ø" + Math.round(x.size * 100) + " ס״מ";
+          out.push(cz({ f, name:nm, dia:x.dia.trim(), qty:+x.count, unit:"יח׳", color:x.color, src:"נספר בתוכנית", k:"s" }));
+          if(x.kind === "vert" && H > 0) out.push(cz({ f, name:nm + " — צנרת אנכית", dia:x.dia.trim(), qty:Math.round(+x.count * H * 10) / 10, unit:"מ״א", color:x.color, src:x.count + " × " + H + " מ׳", k:"v" }));
+        });
       });
-      syms.filter(x => x.on && +x.count > 0).forEach(x => {
-        const nm = x.name.trim() || "סמל Ø" + Math.round(x.size * 100) + " ס״מ";
-        out.push({ name:nm, dia:x.dia.trim(), qty:+x.count, unit:"יח׳", color:x.color, src:"נספר בתוכנית" });
-        if(x.kind === "vert" && H > 0) out.push({ name:nm + " — צנרת אנכית", dia:x.dia.trim(), qty:Math.round(+x.count * H * 10) / 10, unit:"מ״א", color:x.color, src:x.count + " × " + H + " מ׳" });
-      });
-      extra.filter(x => x.name.trim() && +x.qty > 0).forEach(x => out.push({ name:x.name.trim(), dia:x.dia.trim(), qty:+x.qty, unit:x.unit, src:"ידני" }));
+      extra.filter(x => x.name.trim() && +x.qty > 0).forEach(x => out.push(cz({ f:x.f || "", name:x.name.trim(), dia:x.dia.trim(), qty:+x.qty, unit:x.unit, src:"ידני", k:"x" })));
       if(!out.length){ notify("סמן לפחות שורה אחת"); return; }
-      const noName = rows.filter(r => r.on && !r.name.trim()).length + syms.filter(x => x.on && !x.name.trim()).length;
       if(noName && !confirm(noName + " שורות מסומנות בלי שם (יופיעו כ\"קו בצבע…\" / \"סמל Ø…\"). לשמור בכל זאת?")) return;
       const colors = {};
-      rows.forEach(r => { if(r.name.trim() || r.on !== !r.gray) colors[r.id] = { name:r.name.trim(), dia:r.dia.trim(), sp:r.sp, on:r.on }; });
-      syms.forEach(x => { if(x.name.trim()) colors[x.id] = { name:x.name.trim(), dia:x.dia.trim(), kind:x.kind, on:x.on }; });
-      onSave(site.id, { plan: name.trim() || "תוכנית", scale: +scale, height: H, rows: out }, colors);
-      setPhase("list"); setRes(null);
+      pages.forEach(p => {
+        p.rows.forEach(r => { const un = r.parts.find(x => !x.orig); if(r.name.trim() || r.on !== !r.gray) colors[r.id] = cz({ name:r.name.trim(), dia:un ? un.dia.trim() : "", sp:r.sp, on:r.on }); });
+        p.syms.forEach(x => { if(x.name.trim()) colors[x.id] = cz({ name:x.name.trim(), dia:x.dia.trim(), kind:x.kind, on:x.on }); });
+      });
+      const inc = pages.filter(p => p.include);
+      onSave(site.id, { plan: name.trim() || "תוכנית", scale: inc.length ? inc[0].scale : 100, height: H, floors, pages: inc.length, rows: out }, colors);
+      setPhase("list"); setPages([]);
     }
+    // ── אקסל ──
+    const info = b => [[], ["אתר: " + site.name], ["תוכנית: " + b.plan + " · קנה מידה 1:" + b.scale + (b.height ? " · גובה ירידה/עלייה " + b.height + " מ׳" : "")],
+      ["הופק: " + dmy(b.at) + "/" + new Date(b.at).getFullYear() + " · " + b.by], ["טיוטה ממדידה אוטומטית — לבדיקת המנהל"]];
+    const tbl = r => [r.head, ...r.body];
     function exportX(b){
-      saveFile(xlsxBlob([{ name: "כתב כמויות", widths: [44, 10, 10, 8, 24],
-        rows: [["פריט", "קוטר", "כמות", "יחידה", "מקור"], ...b.rows.map(r => [r.name, r.dia || "", r.qty, r.unit, r.src || ""]),
-          [], ["אתר: " + site.name], ["תוכנית: " + b.plan + " · קנה מידה 1:" + b.scale + (b.height ? " · גובה ירידה/עלייה " + b.height + " מ׳" : "")],
-          ["הופק: " + dmy(b.at) + "/" + new Date(b.at).getFullYear() + " · " + b.by], ["טיוטה ממדידה אוטומטית — לבדיקת המנהל"]] }]),
-        "כתב כמויות - " + site.name + " - " + b.plan + ".xlsx");
+      const flat = boqFlat([b]), hasF = flat.some(r => r.f);
+      const sheets = [{ name:"סיכום", widths:[40, 10, 10, 8], rows:[...tbl(boqRun({ group:["name", "dia"] }, flat)), ...info(b)] }];
+      if(hasF) sheets.push({ name:"לפי קומה", widths:[12, 40, 10, 10, 8], rows:tbl(boqRun({ group:["f", "name", "dia"] }, flat)) });
+      sheets.push({ name:"פירוט", widths:[12, 44, 10, 8, 10, 8, 14, 30], rows:[["קומה", "פריט", "קוטר", "שיפוע", "כמות", "יחידה", "סוג", "מקור"],
+        ...b.rows.map(r => [r.f || "", r.name, r.dia || "", r.sl || "", r.qty, r.unit, BOQ_K[r.k] || "", r.src || ""])] });
+      saveFile(xlsxBlob(sheets), "כתב כמויות - " + site.name + " - " + b.plan + ".xlsx");
     }
+    function exportAll(){
+      const flat = boqFlat(list);
+      saveFile(xlsxBlob([
+        { name:"סיכום כללי", widths:[40, 10, 10, 8], rows:[...tbl(boqRun({ group:["name", "dia"] }, flat)), [], ["אתר: " + site.name + " · כל התוכניות (" + list.length + ")"]] },
+        { name:"לפי תוכנית וקומה", widths:[28, 12, 40, 10, 10, 8], rows:tbl(boqRun({ group:["plan", "f", "name", "dia"] }, flat)) }
+      ]), "כתב כמויות - " + site.name + " - כל התוכניות.xlsx");
+    }
+    function exportAns(a){
+      saveFile(xlsxBlob([{ name:"תוצאה", widths:a.head.map((h, i) => i === a.head.length - 1 ? 8 : h === "פריט" ? 40 : h === "תוכנית" ? 28 : 12),
+        rows:[a.head, ...a.body, [], ["סה״כ: " + a.totals.join(" · ")], ["שאלה: " + a.q], ["סינון: " + boqSpecText(a.spec)], ["אתר: " + site.name]] }]),
+        "שאלה על כתב כמויות - " + site.name + ".xlsx");
+    }
+    async function ask(text){
+      text = (text || "").trim(); if(!text) return;
+      const flat = boqFlat(list); if(!flat.length) return;
+      setQ(text); setAsking(true);
+      try{ const { spec, ai } = await boqAsk(text, flat); setAns({ q:text, spec, ai, ...boqRun(spec, flat) }); }
+      finally{ setAsking(false); }
+    }
+
     const swatch = (color, active, onClick, round) => html`<button onClick=${onClick} title="הצג בתוכנית"
       style=${{width:30, height:30, borderRadius: round ? 15 : 7, border: active ? "3px solid var(--ink)" : "1px solid var(--line)", background:color, flex:"none"}}></button>`;
     const pipeRow = (r, i) => html`
-      <div key=${r.id} class="card" style=${{padding:"10px 12px", marginBottom:8, opacity: r.on ? 1 : .55}}>
+      <div key=${r.id} id=${"boq-r" + i} class="card" style=${{padding:"10px 12px", marginBottom:8, opacity: r.on ? 1 : .55}}>
         <div class="rowbet" style=${{gap:8}}>
           <input type="checkbox" checked=${r.on} onChange=${e=>setRow(i, { on:e.target.checked })} style=${{width:20, height:20}} />
           ${swatch(r.color, sel && sel.id === r.id, ()=>setSel(sel && sel.id === r.id ? null : r))}
           <input class="bin" type="text" style=${{flex:1}} value=${r.name} onInput=${e=>setRow(i, { name:e.target.value })} placeholder=${r.gray ? r.gray : "שם לפי המקרא (למשל: ביוב מתחת לתקרה)"} />
         </div>
-        <div class="rowbet" style=${{gap:6, marginTop:6}}>
-          <input class="bin" type="text" style=${{width:74}} value=${r.dia} onInput=${e=>setRow(i, { dia:e.target.value })} placeholder='קוטר' />
-          <input class="bin" type="number" inputmode="decimal" style=${{width:84}} value=${qty(r)} onInput=${e=>setRow(i, { len:e.target.value })} />
-          <span class="sub">מ״א</span>
-          ${hang && html`<span class="sub" style=${{marginInlineStart:"auto"}}>תלייה כל</span><input class="bin" type="number" inputmode="decimal" style=${{width:56}} value=${r.sp} onInput=${e=>setRow(i, { sp:e.target.value })} /><span class="sub">מ׳</span>`}
-        </div>
+        ${(r.layer || r.legend) && html`<div class="sub2" style=${{marginTop:3}}>${r.layer ? "שכבה: " + r.layer : ""}${r.layer && r.legend ? " · " : ""}${r.legend ? "במקרא: " + r.legend : ""}</div>`}
+        ${r.parts.map((pt, pi) => html`
+          <div key=${pi} class="rowbet" style=${{gap:6, marginTop:6}}>
+            <input class="bin" type="text" style=${{width:74}} value=${pt.dia} onInput=${e=>setPart(i, pi, { dia:e.target.value })} placeholder="קוטר" />
+            <input class="bin" type="number" inputmode="decimal" style=${{width:84}} value=${qtyP(pt, kOf(pg))} onInput=${e=>setPart(i, pi, { len:e.target.value })} />
+            <span class="sub">מ״א${pt.slope ? " · שיפוע " + pt.slope : ""}${pt.orig ? "" : r.parts.length > 1 ? " · בלי כיתוב קוטר" : ""}</span>
+            ${pi === 0 && hang && html`<span class="sub" style=${{marginInlineStart:"auto"}}>תלייה כל</span><input class="bin" type="number" inputmode="decimal" style=${{width:56}} value=${r.sp} onInput=${e=>setRow(i, { sp:e.target.value })} /><span class="sub">מ׳</span>`}
+          </div>`)}
+        ${fitOn && r.on && r.fits.length > 0 && html`
+          <div style=${{display:"flex", flexWrap:"wrap", gap:6, marginTop:8}}>
+            ${r.fits.map((x, fi) => html`<label key=${fi} class="sub" style=${{display:"inline-flex", alignItems:"center", gap:4, border:"1px solid var(--line-2)", borderRadius:8, padding:"2px 6px", opacity:x.on ? 1 : .5}}>
+              <input type="checkbox" checked=${x.on} onChange=${e=>setFit(i, fi, { on:e.target.checked })} />${x.type}${x.dia ? " " + x.dia : ""} ×
+              <input class="bin" type="number" inputmode="numeric" style=${{width:48, padding:"2px 4px"}} value=${x.n} onInput=${e=>setFit(i, fi, { n:e.target.value })} /></label>`)}
+          </div>`}
       </div>`;
-
-    const list = site.boq || [];
-    const nGrayOn = rows.filter(r => r.gray && r.on).length;
+    const cell = { padding:"4px 6px", borderBottom:"1px solid var(--line-2)", textAlign:"start" };
+    const nGrayOn = pg ? pg.rows.filter(r => r.gray && r.on).length : 0;
+    const byFloor = rows => { const m = new Map(); rows.forEach(r => { const f = r.f || ""; (m.get(f) || m.set(f, []).get(f)).push(r); }); return [...m.entries()].sort((a, b) => (parseFloat(floorKey(a[0])) || 0) - (parseFloat(floorKey(b[0])) || 0)); };
     return html`
       <div class="screen narrow">
         <div class="shead rowbet">
@@ -4480,32 +5124,71 @@ ${l}`
         ${phase === "list" && html`
           <div class="card ci" style=${{marginBottom:12}}>
             <div class="lbl">תוכנית חדשה</div>
-            <div class="hint" style=${{textAlign:"start", margin:"4px 0 10px"}}>מעלים PDF מקורי מהמתכנן (לא סריקה). המערכת מודדת את הצנרת בכל צבע ועובי קו, סופרת ירידות/עליות וסמלים, ומחשבת צנרת אנכית ותליות. אתה נותן שמות ומאשר.</div>
+            <div class="hint" style=${{textAlign:"start", margin:"4px 0 10px"}}>מעלים PDF מקורי מהמתכנן (לא סריקה), אפשר כמה עמודים/קומות בקובץ אחד. המערכת מודדת את הצנרת, לוקחת קוטר ושיפוע מהכיתוב שבתוכנית ושמות מהמקרא, סופרת סמלים, זוויות וטי, ומחשבת צנרת אנכית ותליות. אתה בודק ומאשר.</div>
             <button class="btn pri wide" onClick=${()=>fileRef.current && fileRef.current.click()}>📄 העלה תוכנית PDF</button>
           </div>
+          ${list.length > 0 && html`
+            <div class="card ci" style=${{marginBottom:12}}>
+              <div class="lbl">🔎 שאלה על הכמויות באתר</div>
+              <form class="addrow" style=${{marginTop:6}} onSubmit=${e=>{ e.preventDefault(); ask(q); }}>
+                <input type="text" value=${q} onInput=${e=>setQ(e.target.value)} placeholder='למשל: כמה מטר צינור 2" בקומה 3' maxLength=${200} />
+                <button type="submit" class="add" disabled=${!q.trim() || asking} aria-label="שאל">${asking ? "…" : "➤"}</button>
+              </form>
+              <div style=${{display:"flex", flexWrap:"wrap", gap:6, marginTop:8}}>
+                ${['כמה מטר צינור 2" בקומה 3', "רשימת ספרינקלרים לפי קומה", "השווה בין שתי התוכניות האחרונות", "סה״כ צנרת לפי קוטר"].map(x => html`<button key=${x} class="btn" style=${{flex:"none", padding:"4px 10px", fontSize:".8rem"}} onClick=${()=>ask(x)}>${x}</button>`)}
+              </div>
+              ${ans && html`
+                <div style=${{marginTop:10}}>
+                  <div class="sub2">${ans.ai ? "🤖 " : ""}${boqSpecText(ans.spec)} · ${ans.n} שורות</div>
+                  ${ans.body.length === 0 ? html`<div class="empty" style=${{padding:"10px 0"}}>לא נמצאו שורות שמתאימות לשאלה</div>` : html`
+                    <div style=${{overflowX:"auto", marginTop:6}}>
+                      <table style=${{width:"100%", borderCollapse:"collapse", fontSize:".85rem"}}>
+                        <thead><tr>${ans.head.map(h => html`<th key=${h} style=${{...cell, background:"var(--line-2)"}}>${h}</th>`)}</tr></thead>
+                        <tbody>${ans.body.map((r, i) => html`<tr key=${i}>${r.map((v, j) => html`<td key=${j} style=${cell} dir=${typeof v === "number" ? "ltr" : null}>${v}</td>`)}</tr>`)}</tbody>
+                      </table>
+                    </div>
+                    <div class="rowbet" style=${{marginTop:6}}><b>סה״כ: ${ans.totals.join(" · ")}</b><button class="btn" style=${{flex:"none"}} onClick=${()=>exportAns(ans)}>⬇ אקסל</button></div>`}
+                </div>`}
+            </div>`}
           ${list.map(b => html`
             <div key=${b.id} class="card" style=${{marginBottom:10}}>
-              <div class="rowbet"><b>${b.plan}</b><span class="sub">1:${b.scale}</span></div>
+              <div class="rowbet"><b>${b.plan}</b><span class="sub">1:${b.scale}${b.floors && b.floors.length ? " · " + b.floors.join(", ") : ""}</span></div>
               <div class="sub2" style=${{margin:"2px 0 8px"}}>${dmy(b.at)} ${hhmm(b.at)} · ${b.by}</div>
-              ${b.rows.map((r, i) => html`<div key=${i} class="rowbet" style=${{fontSize:".86rem", padding:"3px 0", borderTop:"1px solid var(--line-2)"}}>
-                <span>${r.color ? html`<i style=${{display:"inline-block", width:10, height:10, borderRadius:2, background:r.color, marginInlineEnd:6}}></i>` : null}${r.name}${r.dia ? " " + r.dia : ""}</span>
-                <b dir="ltr">${r.qty} ${r.unit}</b></div>`)}
+              ${byFloor(openB[b.id] || b.rows.length <= 10 ? b.rows : b.rows.slice(0, 8)).map(([f, rs]) => html`<div key=${f}>
+                ${f && byFloor(b.rows).length > 1 && html`<div class="sub" style=${{fontWeight:700, marginTop:6}}>${f}</div>`}
+                ${rs.map((r, i) => html`<div key=${i} class="rowbet" style=${{fontSize:".86rem", padding:"3px 0", borderTop:"1px solid var(--line-2)"}}>
+                  <span>${r.color ? html`<i style=${{display:"inline-block", width:10, height:10, borderRadius:2, background:r.color, marginInlineEnd:6}}></i>` : null}${r.name}${r.dia ? " " + r.dia : ""}</span>
+                  <b dir="ltr">${r.qty} ${r.unit}</b></div>`)}</div>`)}
+              ${b.rows.length > 10 && html`<button class="addsection" style=${{marginTop:6}} onClick=${()=>setOpenB(o => ({ ...o, [b.id]:!o[b.id] }))}>${openB[b.id] ? "▲ פחות" : "▼ הצג הכול (" + b.rows.length + " שורות)"}</button>`}
               <div class="btnrow" style=${{marginTop:10}}>
                 <button class="btn" onClick=${()=>exportX(b)}>⬇ אקסל</button>
                 <button class="btn danger" onClick=${()=>{ if(confirm("למחוק את כתב הכמויות של " + b.plan + "?")) onDelete(site.id, b.id); }}>מחק</button>
               </div>
             </div>`)}
+          ${list.length > 1 && html`<button class="btn wide" style=${{marginBottom:10}} onClick=${exportAll}>⬇ אקסל של כל התוכניות באתר</button>`}
           ${list.length === 0 && html`<div class="empty" style=${{padding:"10px 0"}}>עדיין אין כתבי כמויות לאתר הזה</div>`}
         `}
 
-        ${phase === "review" && res && html`
+        ${phase === "review" && pg && html`
+          <datalist id="boq-items">${RAKESH_ITEMS.map(n => html`<option key=${n} value=${n} />`)}</datalist>
           <div class="card" style=${{marginBottom:12}}>
             <input class="bin" type="text" value=${name} onInput=${e=>setName(e.target.value)} placeholder="שם התוכנית (למשל: מרתף 2- תקרה)" />
+            ${pages.length > 1 && html`
+              <div style=${{display:"flex", flexWrap:"wrap", gap:6, marginTop:8}}>
+                ${pages.map((p, j) => html`<button key=${j} class=${"btn" + (j === cur ? " pri" : "")} style=${{flex:"none", padding:"4px 10px", fontSize:".82rem", opacity:p.include ? 1 : .5}}
+                  onClick=${()=>{ setCur(j); setSel(null); }}>עמוד ${p.no}${p.floor ? " · " + p.floor : ""}</button>`)}
+              </div>`}
+            <div class="rowbet" style=${{marginTop:8, gap:8}}>
+              <span class="sub">קומה</span>
+              <input class="bin" type="text" style=${{flex:1}} value=${pg.floor} onInput=${e=>setPage({ floor:e.target.value })} placeholder="למשל: קומה 3 / קרקע / מרתף -2" />
+              ${pages.length > 1 && html`<label class="sub" style=${{display:"inline-flex", gap:4, alignItems:"center"}}><input type="checkbox" checked=${pg.include} onChange=${e=>setPage({ include:e.target.checked })} />לכלול</label>`}
+            </div>
             <div class="rowbet" style=${{marginTop:8, gap:8}}>
               <span class="sub">קנה מידה 1:</span>
-              <input class="bin" type="number" inputmode="numeric" style=${{width:80}} value=${scale} onInput=${e=>setScale(+e.target.value || res.scale0)} />
-              <span class="sub" style=${{flex:1}}>${res.detected ? "זוהה מהתוכנית" : "לא זוהה — בדוק באבן הפינה"}</span>
+              <input class="bin" type="number" inputmode="numeric" style=${{width:80}} value=${pg.scale} onInput=${e=>setPage({ scale:+e.target.value || pg.scale0 })} />
+              <span class="sub" style=${{flex:1}}>${pg.detected ? "זוהה מהתוכנית" : "לא זוהה — בדוק באבן הפינה"}</span>
             </div>
+            <div class="sub2" style=${{marginTop:6}}>${pg.mode === "vec" ? "📏 שרטוט וקטורי — כל קטע נמדד מהקובץ" + (pg.layers ? " לפי שכבות" : "") : "🖼️ הצנרת שמורה בקובץ כתמונה — נמדד לפי צבע (דיוק נמוך יותר)"}${pg.legendN ? " · " + pg.legendN + " דוגמיות מקרא לא נספרו" : ""}</div>
             <div class="rowbet" style=${{marginTop:8, gap:8}}>
               <span class="sub">גובה כל ירידה/עלייה</span>
               <input class="bin" type="number" inputmode="decimal" style=${{width:70}} value=${height} onInput=${e=>setHeight(e.target.value)} />
@@ -4515,27 +5198,31 @@ ${l}`
               <input type="checkbox" checked=${hang} onChange=${e=>setHang(e.target.checked)} style=${{width:20, height:20}} />
               <span class="sub">לחשב תליות לכל קו (לפי מרחק בין תליות)</span>
             </label>
-            ${res.pages > 1 && html`<div class="alert warn" style=${{marginTop:8}}><span class="b"></span>בקובץ ${res.pages} עמודים — נמדד רק העמוד הראשון.</div>`}
+            <label class="rowbet" style=${{marginTop:8, gap:8, justifyContent:"flex-start"}}>
+              <input type="checkbox" checked=${fitOn} onChange=${e=>setFitOn(e.target.checked)} style=${{width:20, height:20}} />
+              <span class="sub">לספור זוויות וטי מהחיבורים בשרטוט (הערכה, רק בשרטוט וקטורי)</span>
+            </label>
           </div>
-          <canvas ref=${cvRef} style=${{width:"100%", border:"1px solid var(--line-2)", borderRadius:10, background:"#fff", position:"sticky", top:4, zIndex:2}}></canvas>
-          <div class="hint" style=${{textAlign:"start"}}>לחץ על ריבוע/עיגול הצבע כדי לראות איפה זה בתוכנית. תן שם לפי המקרא — בפעם הבאה באתר הזה השמות יופיעו לבד.</div>
+          <canvas ref=${cvRef} onClick=${onMapTap} style=${{width:"100%", border:"1px solid var(--line-2)", borderRadius:10, background:"#fff", position:"sticky", top:4, zIndex:2, cursor:"pointer"}}></canvas>
+          <div class="hint" style=${{textAlign:"start"}}>הקש על סמל או קו במפה — הוא ייבחר ויודגש (סמל גם יסומן לספירה, וכל הזהים לו נספרים). או לחץ על ריבוע/עיגול הצבע כדי לראות איפה זה בתוכנית. שמות שתיתן ייזכרו לפעם הבאה באתר הזה.</div>
 
           <div class="lbl" style=${{marginTop:10}}>צנרת אופקית — נמדד מהתוכנית</div>
-          ${rows.map((r, i) => r.gray ? null : pipeRow(r, i))}
-          <button class="addsection" onClick=${()=>setShowGray(v => !v)}>${showGray ? "▲ הסתר קווים שחורים/אפורים" : "▼ קווים שחורים/אפורים (" + rows.filter(r => r.gray).length + (nGrayOn ? ", " + nGrayOn + " מסומנים" : "") + ")"}</button>
+          ${pg.rows.map((r, i) => r.gray ? null : pipeRow(r, i))}
+          ${pg.rows.some(r => r.gray) && html`<button class="addsection" onClick=${()=>setShowGray(v => !v)}>${showGray ? "▲ הסתר קווים שחורים/אפורים" : "▼ קווים שחורים/אפורים (" + pg.rows.filter(r => r.gray).length + (nGrayOn ? ", " + nGrayOn + " מסומנים" : "") + ")"}</button>`}
           ${showGray && html`
-            <div class="hint" style=${{textAlign:"start"}}>שחור ואפור משמשים גם לשרטוט האדריכלי, לכן הם מחולקים לפי עובי הקו. לחץ על הריבוע, ואם מסומנת צנרת (ולא קירות) — סמן ותן שם.</div>
-            ${rows.map((r, i) => r.gray ? pipeRow(r, i) : null)}`}
+            <div class="hint" style=${{textAlign:"start"}}>שחור ואפור משמשים גם לשרטוט האדריכלי. לחץ על הריבוע, ואם מסומנת צנרת (ולא קירות) — סמן ותן שם.</div>
+            ${pg.rows.map((r, i) => r.gray ? pipeRow(r, i) : null)}`}
 
-          <div class="lbl" style=${{marginTop:12}}>סמלים שנספרו בתוכנית (עיגולים)</div>
-          <div class="hint" style=${{textAlign:"start", marginTop:0}}>ירידה/עלייה = כמות × הגובה שלמעלה, נכנס כצנרת אנכית. קולטן, מגוף וכו׳ = יחידות.</div>
-          ${syms.map((x, i) => html`
-            <div key=${x.id} class="card" style=${{padding:"10px 12px", marginBottom:8, opacity: x.on ? 1 : .55}}>
+          <div class="lbl" style=${{marginTop:12}}>סמלים שנספרו בתוכנית</div>
+          <div class="hint" style=${{textAlign:"start", marginTop:0}}>ירידה/עלייה = כמות × הגובה שלמעלה, נכנס כצנרת אנכית. ספרינקלר, קולטן, מגוף וכו׳ = יחידות.</div>
+          ${pg.syms.map((x, i) => html`
+            <div key=${x.id} id=${"boq-s" + i} class="card" style=${{padding:"10px 12px", marginBottom:8, opacity: x.on ? 1 : .55}}>
               <div class="rowbet" style=${{gap:8}}>
                 <input type="checkbox" checked=${x.on} onChange=${e=>setSym(i, { on:e.target.checked })} style=${{width:20, height:20}} />
-                ${swatch(x.color, sel && sel.id === x.id, ()=>setSel(sel && sel.id === x.id ? null : x), true)}
-                <input class="bin" type="text" style=${{flex:1}} value=${x.name} onInput=${e=>setSym(i, { name:e.target.value })} placeholder=${"עיגול Ø" + Math.round(x.size * 100) + " ס״מ — מה זה? (ירידה 4״, קולטן…)"} />
+                ${swatch(x.color, sel && sel.id === x.id, ()=>setSel(sel && sel.id === x.id ? null : x), x.curve)}
+                <input class="bin" type="text" list="boq-items" style=${{flex:1}} value=${x.name} onInput=${e=>setSym(i, { name:e.target.value })} placeholder=${(x.curve ? "עיגול" : "צורה") + " Ø" + Math.round(x.size * 100) + " ס״מ — מה זה? (ספרינקלר, ירידה 4״, קולטן…)"} />
               </div>
+              ${(x.tagged || x.hint) && html`<div class="sub2" style=${{marginTop:3}}>${x.tagged ? "עם כיתוב בפנים — כנראה בועות צירים/תגיות" : "שכבה: " + x.hint}</div>`}
               <div class="rowbet" style=${{gap:6, marginTop:6}}>
                 <input class="bin" type="text" style=${{width:64}} value=${x.dia} onInput=${e=>setSym(i, { dia:e.target.value })} placeholder="קוטר" />
                 <input class="bin" type="number" inputmode="numeric" style=${{width:64}} value=${x.count} onInput=${e=>setSym(i, { count:e.target.value })} />
@@ -4546,22 +5233,22 @@ ${l}`
               </div>
               ${x.kind === "vert" && x.on && H > 0 && html`<div class="sub" style=${{marginTop:4}}>צנרת אנכית: ${x.count} × ${H} = <b>${Math.round(x.count * H * 10) / 10} מ״א</b></div>`}
             </div>`)}
-          ${syms.length === 0 && html`<div class="empty" style=${{padding:"8px 0"}}>לא נמצאו עיגולים בתוכנית</div>`}
+          ${pg.syms.length === 0 && html`<div class="empty" style=${{padding:"8px 0"}}>לא נמצאו סמלים בתוכנית</div>`}
 
           <div class="lbl" style=${{marginTop:12}}>פריטים נוספים (ארונות כיבוי, בורות, משאבות…)</div>
           ${extra.map((x, i) => html`
             <div key=${i} class="rowbet" style=${{gap:6, marginBottom:6}}>
-              <input class="bin" type="text" style=${{flex:1}} value=${x.name} onInput=${e=>setExtra(xs => xs.map((y, j) => j === i ? { ...y, name:e.target.value } : y))} placeholder="פריט" />
+              <input class="bin" type="text" list="boq-items" style=${{flex:1}} value=${x.name} onInput=${e=>setExtra(xs => xs.map((y, j) => j === i ? { ...y, name:e.target.value } : y))} placeholder="פריט" />
               <input class="bin" type="text" style=${{width:60}} value=${x.dia} onInput=${e=>setExtra(xs => xs.map((y, j) => j === i ? { ...y, dia:e.target.value } : y))} placeholder="קוטר" />
               <input class="bin" type="number" inputmode="decimal" style=${{width:64}} value=${x.qty} onInput=${e=>setExtra(xs => xs.map((y, j) => j === i ? { ...y, qty:e.target.value } : y))} placeholder="כמות" />
               <select class="bin" style=${{width:70}} value=${x.unit} onChange=${e=>setExtra(xs => xs.map((y, j) => j === i ? { ...y, unit:e.target.value } : y))}><option>יח׳</option><option>מ״א</option></select>
             </div>`)}
-          <button class="addsection" onClick=${()=>setExtra(xs => [...xs, { name:"", dia:"", qty:"", unit:"יח׳" }])}>＋ הוסף פריט</button>
+          <button class="addsection" onClick=${()=>setExtra(xs => [...xs, { name:"", dia:"", qty:"", unit:"יח׳", f:(pg.floor || "").trim() }])}>＋ הוסף פריט</button>
           <div class="btnrow" style=${{marginTop:12}}>
-            <button class="btn" onClick=${()=>{ setPhase("list"); setRes(null); }}>ביטול</button>
+            <button class="btn" onClick=${()=>{ setPhase("list"); setPages([]); }}>ביטול</button>
             <button class="btn pri" onClick=${save}>✓ שמור כתב כמויות</button>
           </div>
-          <div class="hint">דיוק המדידה כ-±10%. טקסט בצבע של קו (למשל "F.H") מוסיף מעט לאורך — אפשר לתקן כל מספר ידנית. צנרת אנכית = מספר העיגולים × הגובה; תליות = אורך ÷ מרחק בין תליות.</div>
+          <div class="hint">בשרטוט וקטורי האורך נמדד מהקווים עצמם. כשהצנרת שמורה כתמונה הדיוק כ-±10%. קוטר בלי כיתוב לידו — אפשר להשלים ידנית. אפשר לתקן כל מספר. צנרת אנכית = מספר העיגולים × הגובה; תליות = אורך ÷ מרחק בין תליות.</div>
         `}
       </div>`;
   }
