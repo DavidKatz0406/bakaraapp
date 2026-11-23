@@ -832,33 +832,114 @@
     if(/קולטנ|דלוחין|צנרת\s*מים|הידרנט|ביוב|ניקוז|גז\b/.test(s)) return "complets";
     return "";
   }
-  // שורות של גיליון חשבון → { title, items:[{ c, d, u, q, p, base, t, ch }] } לפי שורת הכותרת "מספר סעיף"
+  // שורות של גיליון חשבון → { title, items:[{ c, d, u, q, p, base, t, ch }] }
+  // מבנים נתמכים (לפי שורת הכותרת):
+  //  • טבלת סעיפים: מספר סעיף / מס' / מס"ד / סעיף · תאור · יח' · כמות (או כמות חוזית) · מחיר (או עלות) · מצטבר.
+  //    כותרות שממשיכות בשורה שמתחת (קבוצה/סעיף, כמות קודמת/נוכחית/מצטברת) נקראות גם הן.
+  //    כמה כותרות באותו גיליון = כמה מבנים (השם מהשורה שמעל הכותרת) — מספר הסעיף מקבל את שם המבנה.
+  //  • אחוזים לפי קומה (קומה · סעיף · סה"כ ₪ לסעיף) ואבני דרך (% אבן דרך · שלבי ביצוע · חשבון מצטבר):
+  //    כל שורה = סעיף באחוזים — כמות 100, מחיר = סכום השורה / 100, מצטבר = האחוז שבוצע.
   function billParse(rows){
     rows = rows.map(r => Array.from(r || [], x => String(x == null ? "" : x).trim()));
-    const hi = rows.findIndex(r => r.some(c => /מס.{0,3}\s*סעיף/.test(c)));
-    if(hi < 0) return { err:"לא נמצאה בגיליון שורת כותרת עם \"מספר סעיף\"." };
-    const h = rows[hi], f = re => h.findIndex(c => re.test(c));
-    const cC = f(/מס.{0,3}\s*סעיף/), cD = f(/תאור|תיאור/), cU = f(/יחידת|^יח/), cQ = f(/^כמות$/), cP = f(/מחיר/),
-          cCum = f(/מצטבר/), cPrev = f(/קודמת/), cCur = f(/נוכחית/);
-    if(cD < 0 || cQ < 0) return { err:"חסרות בגיליון העמודות \"תאור הסעיף\" או \"כמות\"." };
     const num = v => { const n = parseFloat(String(v || "").replace(/,/g, "")); return isFinite(n) ? n : 0; };
+    const has = (r, re) => r.some(c => re.test(c));
+    const RQ = /^כמות(\s*חוזית)?$/, RD = /^(תאור|תיאור)/, RU = /^(יחידת|יחידה|יח['׳"]?$)/, RP = /^(מחיר|עלות)/;
+    const RFL = /^קומה$/, RSEC = /^סעיף$/, RMS = /אבן\s*דרך/;
+    const kind = r => has(r, RFL) && has(r, RSEC) ? "F" : has(r, RMS) ? "M"
+      : has(r, RQ) && (has(r, RD) || (has(r, RU) && has(r, RP))) ? "S" : "";
+    const heads = [];
+    rows.forEach((r, i) => { const k = kind(r); if(k) heads.push({ i, k }); });
+    if(!heads.length) return { err:"לא נמצאה בגיליון שורת כותרת (תאור + כמות, קומה + סעיף, או אבני דרך)." };
     let title = "";
-    rows.slice(0, hi).forEach(r => r.forEach(c => { if(!title && /חשבון/.test(c)) title = c.replace(/\s+/g, " "); }));
-    const items = [], seen = {};
-    let ch = "";
-    rows.slice(hi + 1).forEach(r => {
-      const d = (r[cD] || "").replace(/\s+/g, " ").trim(), u = cU >= 0 ? (r[cU] || "").trim() : "";
-      if(!d && !(r[cC] || "")) return;
-      if(u === "פרק"){ if(d) ch = d; return; }
-      if(/^סה"?״?כ/.test(d)) return;
-      const q = num(r[cQ]);
-      if(!d || !(q > 0)) return;
-      let c = cC >= 0 && r[cC] ? r[cC].trim() : "+" + d.slice(0, 40);
-      if(seen[c]) c = c + "#" + (++seen[c]); else seen[c] = 1;
-      const base = cCum >= 0 && r[cCum] !== "" && r[cCum] != null ? num(r[cCum]) : num(cPrev >= 0 ? r[cPrev] : 0) + num(cCur >= 0 ? r[cCur] : 0);
-      items.push({ c, d, u, q, p: cP >= 0 ? num(r[cP]) : 0, base: r2(base), t: billTrack(d, ch), ch });
+    rows.slice(0, heads[0].i).forEach(r => r.forEach(c => { if(!title && /חשבון/.test(c)) title = c.replace(/\s+/g, " "); }));
+    const LBLROW = r => r.some(c => /^כמות\s+\S/.test(c) || /^(קבוצה|סעיף)$/.test(c));
+    // cur = "כמות נוכחית" של כל סעיף (בגיליון "תוכנית עבודה" זו הכמות המתוכננת לחודש)
+    const items = [], seen = {}, cur = {};
+    const add = ({ cu, ...it }) => {
+      let c = it.c; if(seen[c]) c = c + "#" + (++seen[c]); else seen[c] = 1;
+      items.push({ ...it, c, base: r2(it.base) });
+      if(cu > 0) cur[c] = r2(cu);
+    };
+    heads.forEach((h, hn) => {
+      const end = hn + 1 < heads.length ? heads[hn + 1].i : rows.length;
+      // תוויות לכל עמודה: שורת הכותרת + עד 3 שורות תוויות שמתחתיה
+      const L = [rows[h.i]];
+      for(let j = h.i + 1; j < Math.min(end, h.i + 4); j++) if(LBLROW(rows[j])) L.push(rows[j]);
+      const f = re => { const w = Math.max(...L.map(r => r.length)); for(let j = 0; j < w; j++) if(L.some(r => re.test(r[j] || ""))) return j; return -1; };
+      const fx = (...res) => { for(const re of res){ const j = f(re); if(j >= 0) return j; } return -1; };
+      // שם המבנה כשיש כמה כותרות בגיליון: התא הראשון בשורה שמעל הכותרת
+      const prevRow = rows[h.i - 1] || [], block = heads.length > 1 ? (prevRow.find(c => c && !/^-?[\d.]+$/.test(c)) || "") : "";
+      const pre = block ? block + "/" : "";
+      let ch = "", sub = "", grp = "";
+      if(h.k === "S"){
+        let cC = f(/מס.{0,3}\s*סעיף|^מס["״'׳]?ד?$|^מס['׳]$|^סעיף$/);
+        const cG = f(/^קבוצה$/), cU = f(RU), cQ = f(RQ), cP = f(RP);
+        let cD = f(RD); if(cD < 0 && cU > 0) cD = cU - 1;
+        // בלי כותרת למספר הסעיף: העמודה (לפני התאור) שיש בה מספרים כמו 1.07.01.0010
+        for(let j = 0; cC < 0 && j < cD; j++) if(rows.slice(h.i + 1, end).filter(r => /^\d+(\.\d+){2,}$/.test(r[j] || "")).length >= 3) cC = j;
+        const cCum = fx(/^כמות\s*מצטבר/, /^(ביצוע\s*)?מצטבר/), cPrev = fx(/^כמות\s*(קודמת|עד)/, /קודמת/), cCur = fx(/^כמות\s*(נוכחית|.*להזנה)/, /נוכחית/);
+        const cumIsQty = cCum >= 0 && L.some(r => /כמות/.test(r[cCum] || ""));
+        if(cD < 0 || cQ < 0) return;
+        for(let j = h.i + 1; j < end; j++){
+          const r = rows[j];
+          if(cG >= 0 && r[cG]) grp = r[cG];
+          let d = (r[cD] || "").replace(/\s+/g, " ").trim();
+          const u = cU >= 0 ? (r[cU] || "").trim() : "", code = cC >= 0 ? (r[cC] || "").trim() : "";
+          if(!d && !code) continue;
+          if(u === "פרק"){ if(d) ch = d; continue; }
+          if(/^סה"?״?כ/.test(d)) continue;
+          const q = num(r[cQ]);
+          if(!(q > 0)){ if(d && !u && !code) sub = d; continue; }
+          if(!d) continue;
+          // מיקום/סוג שבין מספר הסעיף לתאור (למשל "כיבוי אש ראשי") — נוסף לתאור
+          const mid = cC >= 0 && cD > cC + 1 ? r.slice(cC + 1, cD).filter(x => x && !/^(רגיל|פרק|תת-פרק)$/.test(x) && !/^-?[\d.]+$/.test(x)).join(" ") : "";
+          const p = cP >= 0 ? num(r[cP]) : 0;
+          let base = cCum >= 0 && r[cCum] !== "" && r[cCum] != null ? num(r[cCum]) : num(cPrev >= 0 ? r[cPrev] : 0) + num(cCur >= 0 ? r[cCur] : 0);
+          if(!cumIsQty && p > 0 && base > q * 1.001) base = base / p;   // עמודת "ביצוע מצטבר" בשקלים
+          const dd = (block ? block + " · " : "") + (sub ? sub + " · " : "") + d + (mid ? " (" + mid + ")" : "");
+          add({ cu: cCur >= 0 ? num(r[cCur]) : 0, c: code ? pre + (grp ? grp + "/" : "") + code : "+" + dd.slice(0, 40), d: dd, u, q, p, base, t: billTrack(d, ch) || (/חניו[נן]|מרת[פף]/.test(sub + " " + block) ? "parking" : ""), ch: ch || block });
+        }
+      }
+      else if(h.k === "F"){
+        const cFl = f(RFL), cD = f(RSEC), cV = f(/לסעיף/), cCum = f(/^כמות\s*מצטבר/), cCur = f(/^כמות\s*נוכחית/);
+        if(cD < 0 || cV < 0) return;
+        let cC = -1;
+        for(let j = 0; j < Math.min(cFl, cD) && cC < 0; j++) if(rows.slice(h.i + 1, end).some(r => /^\d+(\.\d+){2,}$/.test(r[j] || ""))) cC = j;
+        let floor = "";
+        for(let j = h.i + 1; j < end; j++){
+          const r = rows[j];
+          if(cFl >= 0 && r[cFl]) floor = r[cFl];
+          const d = (r[cD] || "").replace(/\s+/g, " ").trim(), v = num(r[cV]);
+          if(!d || /^סה"?״?כ/.test(d)) continue;
+          if(!(v > 0)){ ch = d; continue; }
+          const dd = (floor ? floor + " · " : "") + d, cum = num(r[cCum]), cu = cCur >= 0 ? num(r[cCur]) : 0;
+          add({ cu: cu > 1.0001 ? cu : cu * 100, c: cC >= 0 && r[cC] ? pre + r[cC] : "+" + (floor + " " + d).slice(0, 40), d: dd, u:"%", q:100, p: r2(v / 100), base: Math.min(100, cum > 1.0001 ? cum : cum * 100), t: billTrack(d, ch) || (/חניו[נן]|מרת[פף]/.test(floor + " " + ch) ? "parking" : ""), ch });
+        }
+      }
+      else {
+        const cD = f(RD), cS = f(/שלבי/), cCum = f(/^חשבון\s*מצ[טת]בר/);
+        if(cD < 0 || cCum < 1) return;
+        let ms = "";
+        for(let j = h.i + 1; j < end; j++){
+          const r = rows[j];
+          if(r[cD]) ms = r[cD].replace(/\s+/g, " ").trim();
+          if(!ms || /^סה"?״?כ/.test(ms)) continue;
+          const v = num(r[cCum - 1]); if(!(v > 0)) continue;
+          const st = cS >= 0 ? (r[cS] || "").trim() : "", d = (block ? block + " · " : "") + ms + (st ? " · " + st : ""), cum = num(r[cCum]);
+          add({ c: "+" + d.slice(0, 40), d, u:"%", q:100, p: r2(v / 100), base: Math.min(100, cum > 1.0001 ? cum : cum * 100), t: billTrack(ms, ""), ch: block });
+        }
+      }
     });
-    return items.length ? { title, items } : { err:"לא נמצאו סעיפים עם כמות מתחת לשורת הכותרת." };
+    return items.length ? { title, items, cur } : { err:"לא נמצאו סעיפים עם כמות מתחת לשורת הכותרת." };
+  }
+  // איזה גיליון בקובץ הוא החשבון: האחרון ששמו "חשבון…" או שם של חודש (ולא "תוכנית…"), אחרת הראשון שנקרא
+  const MONTHS_RE = /ינואר|פברואר|מרץ|אפריל|מאי|יוני|יולי|אוגוסט|ספטמבר|אוקטובר|נובמבר|דצמבר/;
+  function billPickSheet(sheets){
+    let i = -1;
+    sheets.forEach((s, j) => { if(!/תוכנית/.test(s.name) && (/חשבון/.test(s.name) || MONTHS_RE.test(s.name)) && !billParse(s.rows).err) i = j; });
+    if(i < 0) i = sheets.findIndex(s => !/תוכנית/.test(s.name) && !billParse(s.rows).err);
+    if(i < 0) i = Math.max(0, sheets.findIndex(s => !billParse(s.rows).err));
+    return i;
   }
   // כל הדוחות השבועיים של האתר (היסטוריה + האחרון), אחד לכל שבוע
   function billWeeks(site){
@@ -5637,10 +5718,7 @@ ${l}`
       const f = e.target.files && e.target.files[0]; e.target.value = "";
       if(!f) return;
       f.arrayBuffer().then(b => xlsxRows(b, true)).then(sheets => {
-        let i = -1;
-        sheets.forEach((s, j) => { if(/חשבון/.test(s.name) && !billParse(s.rows).err) i = j; });
-        if(i < 0) i = Math.max(0, sheets.findIndex(s => !billParse(s.rows).err));
-        setImp({ sheets, i, file: f.name.replace(/\.xlsx$/i, "") });
+        setImp({ sheets, i: billPickSheet(sheets), file: f.name.replace(/\.xlsx$/i, "") });
       }).catch(()=> notify("לא הצלחתי לקרוא את הקובץ. צריך קובץ אקסל (xlsx)"));
     }
     const impRes = imp ? billParse(imp.sheets[imp.i].rows) : null;
@@ -5748,7 +5826,7 @@ ${l}`
                     return html`
                       <div class="bit" key=${i.c}>
                         <div class="bd">${i.d}
-                          <small>${fmtQ(done)}/${fmtQ(i.q)} ${unitTxt(i.u)}${left > 0 ? " · נשאר " + fmtQ(left) : " · הושלם"}${sums.month[i.c] ? " · החודש " + fmtQ(sums.month[i.c]) : ""}${!plan && curPlan[i.c] ? " · יעד " + fmtQ(curPlan[i.c]) : ""}${i.p ? " · " + nisR(i.p) + " ליח׳" : ""}</small>
+                          <small>${fmtQ(done)}/${fmtQ(i.q)} ${unitTxt(i.u)}${left > 0 ? " · נשאר " + fmtQ(left) : " · הושלם"}${sums.month[i.c] ? " · החודש " + fmtQ(sums.month[i.c]) : ""}${!plan && curPlan[i.c] ? " · יעד " + fmtQ(curPlan[i.c]) : ""}${i.p ? " · " + nisR(i.p) + (i.u === "%" ? " לכל 1%" : " ליח׳") : ""}</small>
                         </div>
                         ${office && plan ? html`<input type="number" inputMode="decimal" min="0" step="any" value=${plan[i.c] || ""} placeholder="יעד"
                             aria-label=${"יעד החודש · " + i.d} onInput=${e => setPlan({ ...plan, [i.c]: e.target.value })} />`
