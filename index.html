@@ -524,6 +524,23 @@
   .agph span{ aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:.7rem; }
   .agph small{ font-family:"Heebo",sans-serif; font-size:.64rem; padding:3px 4px; color:var(--ink-2); }
   .asheet{ max-height:88vh; overflow:auto; }
+  /* מסמכים אישיים */
+  .pdlist{ display:flex; flex-direction:column; gap:6px; }
+  .pdrow{ display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line-2); border-radius:12px; padding:8px 10px; }
+  .pdrow.new{ border-color:var(--warn); }
+  .pdopen{ flex:1; min-width:0; display:flex; align-items:center; gap:10px; background:none; border:0; padding:2px 0; text-align:start; color:inherit; font:inherit; cursor:pointer; }
+  .pde{ width:36px; height:36px; flex:none; border-radius:10px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:1.1rem; font-weight:700; }
+  .pdt{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .pdt b{ font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pdt small{ font-family:"Heebo",sans-serif; font-size:.72rem; color:var(--ink-3); }
+  .pdview{ position:fixed; inset:0; z-index:95; background:#1b1e24; display:flex; flex-direction:column; }
+  .pdbar{ display:flex; align-items:center; gap:10px; padding:10px 12px; background:#111317; color:#fff; }
+  .pdbar b{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.9rem; }
+  .pdbar .ic0{ color:#fff; background:rgba(255,255,255,.16); border-color:transparent; }
+  .pdbody{ flex:1; overflow:auto; padding:12px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .pdpage{ width:100%; max-width:900px; height:auto; background:#fff; border-radius:4px; box-shadow:0 2px 12px rgba(0,0,0,.4); }
+  .pdnew{ position:absolute; top:-4px; inset-inline-start:-4px; min-width:17px; height:17px; padding:0 4px; border-radius:9px; background:var(--crit); color:#fff; font-style:normal; font-size:.62rem; font-weight:700; line-height:17px; text-align:center; }
+  .pdban{ width:100%; border:0; border-bottom:1px solid var(--warn); cursor:pointer; font-weight:700; }
   .apunch{ display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-2); font-size:.86rem; }
   .apunch small{ color:var(--ink-3); font-size:.7rem; }
   .apunch .thumb{ width:72px; height:72px; }
@@ -4344,6 +4361,528 @@ ${l}`
     return m;
   }
 
+  /* ───── מסמכים אישיים: תלושי שכר, הפרשות, 106, חוזה, רכב והוצאות ─────
+     כל משתמש רואה רק את המסמכים שלו; המשרד מעלה ורואה את של כולם (האכיפה בחוקי המסד — pdocs/{טלפון}).
+     תוכן הקבצים נקרא ונכתב ישירות מול ה-REST של Firestore עם אסימון הכניסה — כך הוא לא נשמר במטמון
+     הקבוע של הדפדפן (IndexedDB). רק פרטי המסמך (סוג, חודש, שם קובץ) עוברים דרך ה-SDK.
+     PDF מרוכז מתוכנת השכר מפוצל בדפדפן לפי עובד: ת.ז. (נשמרת רק כגיבוב SHA-256), מספר עובד או שם מלא. */
+  const PD_TYPES = [
+    { k:"pay",      n:"תלוש שכר",                     e:"💰", per:"m" },
+    { k:"pens",     n:"הפרשות פנסיה / גמל / השתלמות", e:"🏦", per:"m" },
+    { k:"f106",     n:"טופס 106",                     e:"🧾", per:"y" },
+    { k:"f101",     n:"טופס 101",                     e:"📝", per:"y" },
+    { k:"contract", n:"חוזה העסקה",                   e:"✍️", per:"" },
+    { k:"car",      n:"רכב",                          e:"🚗", per:"" },
+    { k:"exp",      n:"הוצאות והחזרים",               e:"🧮", per:"m" },
+    { k:"other",    n:"אחר",                          e:"📎", per:"" }
+  ];
+  const PD = {}; PD_TYPES.forEach(t => { PD[t.k] = t; });
+  const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const pdPer = p => /^\d{4}-\d{2}$/.test(p || "") ? HE_MONTHS[+p.slice(5) - 1] + " " + p.slice(0, 4) : (p || "");
+  const pdPrevMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  const pdDefPer = k => PD[k].per === "m" ? pdPrevMonth() : PD[k].per === "y" ? String(new Date().getFullYear() - 1) : "";
+  const pdTitle = f => (PD[f.type] || PD.other).n + (f.period ? " · " + pdPer(f.period) : "") + (f.note ? " · " + f.note : "");
+  const pdSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+  const PD_PART = 750000;          // בתים לחלק (מסמך Firestore מוגבל ל-1MB)
+  const PD_MAX = 20 * 1048576;     // קובץ בודד עד 20MB
+  const pdCol = p => firebase.firestore().collection("pdocs").doc(p).collection("files");
+
+  function pdB64(u8){ let s = ""; for(let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+  function pdUnB64(b){ const s = atob(b), u = new Uint8Array(s.length); for(let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+  // קריאה/כתיבה של חלקי הקובץ ב-REST (עם אסימון הכניסה — החוקים חלים כרגיל)
+  async function pdRest(path, method, body){
+    const u = firebase.auth().currentUser; if(!u) throw new Error("לא מחובר");
+    const tok = await u.getIdToken();
+    const url = (window.__fsEmu || "https://firestore.googleapis.com") + "/v1/projects/" + FB_CONFIG.projectId + "/databases/(default)/documents/" + path.split("/").map(encodeURIComponent).join("/");
+    const r = await fetch(url, { method: method || "GET", cache:"no-store",
+      headers: { Authorization:"Bearer " + tok, ...(body ? { "Content-Type":"application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+    if(!r.ok){
+      if(method === "DELETE" && r.status === 404) return null;
+      let m = ""; try{ m = (await r.json()).error.message || ""; }catch(e){}
+      throw new Error(r.status === 403 ? "אין הרשאה למסמך הזה" : "שגיאה " + r.status + (m ? " — " + m.slice(0, 120) : ""));
+    }
+    return method === "DELETE" ? null : r.json();
+  }
+  async function pdLoad(p, f){
+    const parts = await Promise.all(Array.from({ length: f.parts || 1 }, (_, i) =>
+      pdRest("pdocs/" + p + "/files/" + f.id + "/parts/" + i).then(j => pdUnB64(j.fields.d.bytesValue))));
+    const out = new Uint8Array(parts.reduce((a, x) => a + x.length, 0));
+    let o = 0; parts.forEach(x => { out.set(x, o); o += x.length; });
+    return out;
+  }
+  // שמירה: קודם החלקים, ורק בסוף פרטי המסמך — כך מסמך חלקי לא מופיע אצל המנהל
+  async function pdSave(p, meta, bytes, who){
+    const col = pdCol(p), ref = meta.id ? col.doc(meta.id) : col.doc(), id = ref.id;
+    const n = Math.max(1, Math.ceil(bytes.length / PD_PART));
+    let old = 0;
+    try{ const o = await ref.get({ source:"server" }); if(o.exists) old = o.data().parts || 0; }catch(e){}
+    for(let i = 0; i < n; i++)
+      await pdRest("pdocs/" + p + "/files/" + id + "/parts/" + i, "PATCH", { fields: { d: { bytesValue: pdB64(bytes.subarray(i * PD_PART, (i + 1) * PD_PART)) } } });
+    for(let i = n; i < old; i++) await pdRest("pdocs/" + p + "/files/" + id + "/parts/" + i, "DELETE").catch(()=>{});
+    await ref.set({ id, type:meta.type, period:meta.period || "", note:meta.note || "", fname:meta.fname || "", mime:meta.mime || "application/pdf",
+      pages:meta.pages || 0, parts:n, size:bytes.length, seen:null, at:firebase.firestore.FieldValue.serverTimestamp(), by:who });
+    const prof = firebase.firestore().collection("pdocs").doc(p);
+    const cur = await prof.get({ source:"server" }).then(d => d.exists ? d.data() : {}).catch(()=>({}));
+    const last = (cur.last || {})[meta.type] || "";
+    await prof.set({ n: firebase.firestore.FieldValue.increment(old ? 0 : 1), at:Date.now(),
+      ...(meta.period && meta.period > last ? { last: { [meta.type]: meta.period } } : {}) }, { merge:true });
+    return id;
+  }
+  async function pdDelete(p, f){
+    for(let i = 0; i < (f.parts || 1); i++) await pdRest("pdocs/" + p + "/files/" + f.id + "/parts/" + i, "DELETE");
+    await pdCol(p).doc(f.id).delete();
+    await firebase.firestore().collection("pdocs").doc(p).set({ n: firebase.firestore.FieldValue.increment(-1) }, { merge:true }).catch(()=>{});
+  }
+
+  // ת.ז. ישראלית: ספרת ביקורת. נשמרת במסד רק כגיבוב
+  function isIlId(s){
+    s = String(s).padStart(9, "0");
+    if(!/^\d{9}$/.test(s) || /^0+$/.test(s)) return false;
+    let t = 0; for(let i = 0; i < 9; i++){ const x = +s[i] * (i % 2 + 1); t += x > 9 ? x - 9 : x; }
+    return t % 10 === 0;
+  }
+  async function pdIdHash(id){
+    const d = String(id).replace(/\D/g, "").padStart(9, "0");
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("miron-pdocs:" + d));
+    return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+  const pdRev = s => [...s].reverse().join("");
+  const pdNorm = s => String(s || "").replace(/[֑-ׇ]/g, "").replace(/[״"'׳`]/g, "").replace(/\s+/g, " ").trim();
+  // מספרים שעשויים להיות ת.ז. בעמוד (גם בסדר הפוך — PDF בעברית שומר לפעמים את הספרות הפוך)
+  function pdIdsOf(text){
+    const out = new Set();
+    (text.match(/\d+/g) || []).filter(r => r.length >= 5 && r.length <= 9).forEach(r => { [r, pdRev(r)].forEach(x => { if(isIlId(x)) out.add(x.padStart(9, "0")); }); });
+    return [...out];
+  }
+  // מספרים שליד המילה "עובד" (מספר עובד בתוכנת השכר)
+  function pdEmpNos(text){
+    const out = new Set(), re = /עובד|דבוע/g; let m;
+    while((m = re.exec(text))){
+      const win = text.slice(Math.max(0, m.index - 25), m.index + 30);
+      (win.match(/\d{1,7}/g) || []).forEach(r => { out.add(String(+r)); out.add(String(+pdRev(r))); });
+    }
+    return out;
+  }
+  // לכל עמוד: מי העובד. ת.ז. > מספר עובד > שם מלא. יותר מאדם אחד באותה רמה = התנגשות (בחירה ידנית)
+  function pdMatch(page, people){
+    const words = new Set(pdNorm(page.text).split(/[^א-תA-Za-z]+/).filter(Boolean));
+    const emp = pdEmpNos(page.text), hits = { id:[], emp:[], name:[] };
+    people.forEach(pp => {
+      if(pp.idH && page.hashes.includes(pp.idH)) hits.id.push(pp.phone);
+      if(pp.empNo && emp.has(String(+pp.empNo))) hits.emp.push(pp.phone);
+      const toks = pdNorm(pp.fullName).split(" ").filter(t => t.length >= 2);
+      if(toks.length >= 2 && toks.every(t => words.has(t) || words.has(pdRev(t)))) hits.name.push(pp.phone);
+    });
+    for(const how of ["id", "emp", "name"]){
+      const u = [...new Set(hits[how])];
+      if(u.length === 1) return { phone:u[0], how };
+      if(u.length > 1) return { phone:"", how:"conflict", conflict:u };
+    }
+    return { phone:"", how:"" };
+  }
+
+  let _pdflib = null;
+  function loadPdfLib(){
+    if(window.PDFLib) return Promise.resolve(window.PDFLib);
+    if(_pdflib) return _pdflib;
+    _pdflib = new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js";
+      s.onload = () => res(window.PDFLib);
+      s.onerror = () => { _pdflib = null; rej(new Error("לא הצלחתי לטעון את כלי פיצול ה-PDF — בדוק חיבור לאינטרנט")); };
+      document.head.appendChild(s);
+    });
+    return _pdflib;
+  }
+  async function pdOpenPdf(bytes){
+    const pdfjs = await loadPdfJs();
+    let password;
+    for(;;){
+      try{ return await pdfjs.getDocument({ data: bytes.slice(), password }).promise; }
+      catch(e){
+        if(e && e.name === "PasswordException"){
+          password = prompt(e.code === 2 ? "הסיסמה שגויה. נסה שוב:" : "הקובץ מוגן בסיסמה. הקלד את הסיסמה:");
+          if(password == null) throw new Error("הקובץ מוגן בסיסמה");
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+  async function pdRender(pdf, n, width){
+    const page = await pdf.getPage(n), v1 = page.getViewport({ scale:1 });
+    const scale = width / v1.width, vp = page.getViewport({ scale });
+    const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext:ctx, viewport:vp }).promise;
+    return { c, w:v1.width, h:v1.height };
+  }
+  // קובץ חדש עם העמודים של עובד אחד. קובץ מוצפן (pdf-lib לא מפצל אותו) — העמודים עוברים כתמונה
+  async function pdExtract(src, pdf, idxs){
+    const L = await loadPdfLib(), out = await L.PDFDocument.create();
+    if(src){ (await out.copyPages(src, idxs)).forEach(p => out.addPage(p)); }
+    else for(const i of idxs){
+      const r = await pdRender(pdf, i + 1, 1600);
+      const jpg = await out.embedJpg(await new Promise(res => r.c.toBlob(b => b.arrayBuffer().then(res), "image/jpeg", .85)));
+      const pg = out.addPage([r.w, r.h]); pg.drawImage(jpg, { x:0, y:0, width:r.w, height:r.h });
+    }
+    return new Uint8Array(await out.save());
+  }
+
+  /* תצוגת מסמך: PDF מצויר בעמודים (עובד גם באייפון מתוך האפליקציה), תמונה כמו שהיא */
+  function PdViewer({ p, f, mine, onClose, notify }){
+    const [st, setSt] = useState({ s:"load" });
+    const box = useRef(null);
+    useEffect(()=>{
+      let dead = false, url = null;
+      (async ()=>{
+        try{
+          const bytes = await pdLoad(p, f);
+          if(dead) return;
+          const blob = new Blob([bytes], { type: f.mime || "application/pdf" });
+          url = URL.createObjectURL(blob);
+          setSt({ s:"ok", url, blob });
+          if(mine && !f.seen) pdCol(p).doc(f.id).update({ seen: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+          if((f.mime || "application/pdf") === "application/pdf"){
+            const pdf = await pdOpenPdf(bytes);
+            const w = Math.min(900, (box.current ? box.current.clientWidth : 360) || 360) * Math.min(2, window.devicePixelRatio || 1);
+            for(let i = 1; i <= pdf.numPages && !dead; i++){
+              const r = await pdRender(pdf, i, w);
+              r.c.className = "pdpage"; if(box.current) box.current.appendChild(r.c);
+            }
+          }
+        }catch(e){ if(!dead) setSt({ s:"err", err: e.message || String(e) }); }
+      })();
+      return ()=>{ dead = true; if(url) URL.revokeObjectURL(url); };
+    }, []);
+    const fname = f.fname || (pdTitle(f) + ((f.mime || "").startsWith("image/") ? ".jpg" : ".pdf"));
+    async function share(){
+      try{
+        const file = new File([st.blob], fname, { type: st.blob.type });
+        if(navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:pdTitle(f) }); return; }
+      }catch(e){ if(e && e.name === "AbortError") return; }
+      save();
+    }
+    function save(){ const a = document.createElement("a"); a.href = st.url; a.download = fname; document.body.appendChild(a); a.click(); a.remove(); notify && notify("הקובץ נשמר בהורדות"); }
+    return html`
+      <div class="pdview" role="dialog" aria-label=${pdTitle(f)}>
+        <div class="pdbar">
+          <button class="ic0" title="סגור" onClick=${onClose}>✕</button>
+          <b>${(PD[f.type] || PD.other).e} ${pdTitle(f)}</b>
+          ${st.s === "ok" && html`<button class="btn" style=${{flex:"none", padding:"7px 12px"}} onClick=${share}>📤 שתף / שמור</button>`}
+        </div>
+        <div class="pdbody" ref=${box}>
+          ${st.s === "load" && html`<div class="empty" style=${{color:"#ddd"}}>טוען מסמך…</div>`}
+          ${st.s === "err" && html`<div class="empty" style=${{color:"#f88"}}>לא הצלחתי לפתוח: ${st.err}</div>`}
+          ${st.s === "ok" && (f.mime || "").startsWith("image/") && html`<img class="pdpage" src=${st.url} alt=${pdTitle(f)} />`}
+        </div>
+      </div>`;
+  }
+
+  /* רשימת מסמכים של אדם אחד — המסך "המסמכים שלי", וגם בכרטיס עובד אצל המשרד (עם מחיקה) */
+  function PdList({ p, files, mine, office, notify }){
+    const [flt, setFlt] = useState("all");
+    const [open, setOpen] = useState(null);
+    if(!files) return html`<div class="empty">טוען…</div>`;
+    const types = PD_TYPES.filter(t => files.some(f => f.type === t.k));
+    const list = files.filter(f => flt === "all" || f.type === flt)
+      .sort((a, b) => String(b.period || "").localeCompare(String(a.period || "")) || ((b.at && b.at.seconds) || 0) - ((a.at && a.at.seconds) || 0));
+    const yearOf = f => (f.period || "").slice(0, 4) || "ללא תקופה";
+    const years = [...new Set(list.map(yearOf))];
+    async function del(f){
+      if(!confirm("למחוק את \"" + pdTitle(f) + "\"? אי אפשר לשחזר.")) return;
+      try{ await pdDelete(p, f); notify("המסמך נמחק"); }catch(e){ notify("המחיקה נכשלה: " + (e.message || e)); }
+    }
+    return html`
+      ${types.length > 1 && html`<div class="chips">
+        <button class=${"chip " + (flt === "all" ? "on" : "")} onClick=${()=>setFlt("all")}>הכול (${files.length})</button>
+        ${types.map(t => html`<button key=${t.k} class=${"chip " + (flt === t.k ? "on" : "")} onClick=${()=>setFlt(t.k)}>${t.e} ${t.n}</button>`)}
+      </div>`}
+      ${!list.length && html`<div class="empty">${mine ? "עדיין אין לך מסמכים. כשהמשרד יעלה תלוש או מסמך — הוא יופיע כאן." : "אין מסמכים"}</div>`}
+      ${years.map(y => html`<div key=${y}>
+        <div class="lbl" style=${{marginTop:14}}>${y}</div>
+        <div class="pdlist">
+          ${list.filter(f => yearOf(f) === y).map(f => html`
+            <div key=${f.id} class=${"pdrow" + (mine && !f.seen ? " new" : "")}>
+              <button class="pdopen" onClick=${()=>setOpen(f)}>
+                <span class="pde">${(PD[f.type] || PD.other).e}</span>
+                <span class="pdt"><b>${(PD[f.type] || PD.other).n}${f.note ? " · " + f.note : ""}</b>
+                  <small>${f.period ? pdPer(f.period) : "ללא תקופה"}${f.pages ? " · " + f.pages + " עמ׳" : ""} · <bdi dir="ltr">${pdSize(f.size || 0)}</bdi>${office ? (f.seen ? " · ✓ נצפה" : " · טרם נצפה") : ""}</small></span>
+                ${mine && !f.seen && html`<span class="pill warn">חדש</span>`}
+              </button>
+              ${office && html`<button class="ic0" title="מחק" onClick=${()=>del(f)}>🗑</button>`}
+            </div>`)}
+        </div></div>`)}
+      ${open && html`<${PdViewer} p=${p} f=${open} mine=${mine} notify=${notify} onClose=${()=>setOpen(null)} />`}`;
+  }
+
+  function MyDocs({ phone, name, files, notify }){
+    return html`<div class="screen narrow">
+      <div class="shead"><div><h2>📁 המסמכים שלי</h2><span class="sub">${name} · תלושים, הפרשות, טפסים וחוזה</span></div></div>
+      <div class="sub2">🔒 רק אתה ומשרד ט.ש. מי-רון רואים את המסמכים האלה. מנהלים אחרים לא רואים אותם.</div>
+      <${PdList} p=${phone} files=${files} mine=${true} notify=${notify} />
+    </div>`;
+  }
+
+  /* ───── המשרד: סקירה, כרטיסי עובדים, העלאה ───── */
+  function DocsAdmin({ who, myPhone, notify }){
+    const [staff, setStaff] = useState(null), [profs, setProfs] = useState({});
+    const [tab, setTab] = useState("all");               // all | split | one
+    const [person, setPerson] = useState(null);           // טלפון — כרטיס עובד פתוח
+    const [edit, setEdit] = useState(null);               // טלפון — עריכת פרטי זיהוי
+    const [mon, setMon] = useState(pdPrevMonth());
+    useEffect(()=> firebase.firestore().collection("staff").onSnapshot(
+      q => setStaff(q.docs.map(d => ({ phone:d.id, ...d.data() })).filter(s => s.role !== "agency" && s.role !== "viewer" && s.active !== false)
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), "he"))),
+      e => notify("אין הרשאה לרשימת המשתמשים: " + (e.code || e.message))), []);
+    useEffect(()=> firebase.firestore().collection("pdocs").onSnapshot(
+      q => { const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); setProfs(m); },
+      e => notify("אין הרשאה למסמכים: " + (e.code || e.message))), []);
+    const people = (staff || []).map(s => ({ ...s, ...(profs[s.phone] || {}), name:s.name, fullName:(profs[s.phone] || {}).fullName || "" }));
+    const has = (pp, k) => ((pp.last || {})[k] || "") >= mon;
+    const nPay = people.filter(pp => has(pp, "pay")).length, nPens = people.filter(pp => has(pp, "pens")).length;
+    const noId = people.filter(pp => !pp.idH && !pp.empNo && !pp.fullName).length;
+    if(person){
+      const pp = people.find(x => x.phone === person) || { phone:person, name:"?" };
+      return html`<div class="screen narrow">
+        <div class="shead rowbet"><div><h2>${pp.fullName || pp.name}</h2><span class="sub">מסמכים אישיים · <span dir="ltr">${fmtPhone(pp.phone)}</span></span></div>
+          <button class="btn" style=${{flex:"none", padding:"8px 14px"}} onClick=${()=>setPerson(null)}>→ חזרה</button></div>
+        <div class="btnrow" style=${{margin:"6px 0 4px"}}>
+          <button class="btn" onClick=${()=>setEdit(pp.phone)}>🪪 פרטי זיהוי</button>
+          <button class="btn pri" onClick=${()=>{ setTab("one:" + pp.phone); setPerson(null); }}>⬆ העלה מסמך</button>
+        </div>
+        <${PersonFiles} p=${pp.phone} notify=${notify} />
+        ${edit && html`<${PdIdSheet} pp=${people.find(x => x.phone === edit)} who=${who} notify=${notify} onClose=${()=>setEdit(null)} />`}
+      </div>`;
+    }
+    return html`<div class="screen">
+      <div class="shead rowbet"><div><h2>📁 מסמכים אישיים</h2><span class="sub">${people.length} משתמשים · רק המשרד ובעל המסמך רואים</span></div></div>
+      <div class="chips">
+        <button class=${"chip " + (tab === "all" ? "on" : "")} onClick=${()=>setTab("all")}>סקירה</button>
+        <button class=${"chip " + (tab === "split" ? "on" : "")} onClick=${()=>setTab("split")}>⬆ PDF מרוכז מתוכנת השכר</button>
+        <button class=${"chip " + (tab.startsWith("one") ? "on" : "")} onClick=${()=>setTab("one")}>⬆ מסמך לעובד אחד</button>
+      </div>
+      ${tab === "split" && html`<${PdSplit} people=${people} who=${who} notify=${notify} onDone=${()=>setTab("all")} />`}
+      ${tab.startsWith("one") && html`<${PdOne} people=${people} who=${who} notify=${notify} initial=${tab.slice(4)} onDone=${p=>{ setTab("all"); setPerson(p); }} />`}
+      ${tab === "all" && html`
+        <div class="kpis" style=${{marginTop:8}}>
+          <div class=${"kpi " + (nPay < people.length ? "warn" : "")}><b>${nPay}/${people.length}</b><span>תלוש ${pdPer(mon)}</span></div>
+          <div class=${"kpi " + (nPens < people.length ? "warn" : "")}><b>${nPens}/${people.length}</b><span>הפרשות ${pdPer(mon)}</span></div>
+          <div class=${"kpi " + (noId ? "warn" : "")}><b>${noId}</b><span>בלי פרטי זיהוי</span></div>
+        </div>
+        <div class="rowbet" style=${{margin:"12px 0 6px"}}>
+          <div class="sub2" style=${{margin:0}}>חודש לבדיקה</div>
+          <input type="month" class="tin" style=${{width:"auto", fontFamily:"inherit"}} value=${mon} onChange=${e=>e.target.value && setMon(e.target.value)} />
+        </div>
+        ${noId > 0 && html`<div class="alert warn" style=${{margin:"6px 0 10px"}}><span class="b"></span>כדי שהפיצול האוטומטי יזהה כל עובד — מלא לכל אחד שם מלא כמו בתלוש, ת.ז. או מספר עובד (🪪). ת.ז. נשמרת מוצפנת.</div>`}
+        ${!staff ? html`<div class="empty">טוען…</div>` : html`<div class="pdlist">
+          ${people.map(pp => html`<div key=${pp.phone} class="pdrow">
+            <button class="pdopen" onClick=${()=>setPerson(pp.phone)}>
+              <span class="pde">${pp.name.slice(0, 1)}</span>
+              <span class="pdt"><b>${pp.fullName || pp.name}</b>
+                <small>${pp.role === "office" ? "משרד" : "מנהל"} · ${pp.n || 0} מסמכים${!pp.idH && !pp.empNo && !pp.fullName ? " · ⚠ בלי פרטי זיהוי" : (pp.idH ? " · ת.ז. ✓" : "") + (pp.empNo ? " · עובד " + pp.empNo : "")}</small></span>
+              <span class=${"pill " + (has(pp, "pay") ? "ok" : "inactive")} title="תלוש">💰 ${has(pp, "pay") ? "✓" : "—"}</span>
+              <span class=${"pill " + (has(pp, "pens") ? "ok" : "inactive")} title="הפרשות">🏦 ${has(pp, "pens") ? "✓" : "—"}</span>
+            </button>
+            <button class="ic0" title="פרטי זיהוי" onClick=${()=>setEdit(pp.phone)}>🪪</button>
+          </div>`)}
+        </div>`}`}
+      ${edit && html`<${PdIdSheet} pp=${people.find(x => x.phone === edit)} who=${who} notify=${notify} onClose=${()=>setEdit(null)} />`}
+    </div>`;
+  }
+  function PersonFiles({ p, notify }){
+    const [files, setFiles] = useState(null);
+    useEffect(()=> pdCol(p).onSnapshot(q => setFiles(q.docs.map(d => d.data())), e => notify("אין הרשאה: " + (e.code || e.message))), [p]);
+    return html`<${PdList} p=${p} files=${files} office=${true} notify=${notify} />`;
+  }
+  // פרטי זיהוי לפיצול האוטומטי: שם מלא כמו בתלוש, מספר עובד, ת.ז. (נשמרת רק כגיבוב)
+  function PdIdSheet({ pp, who, notify, onClose }){
+    const [full, setFull] = useState(pp.fullName || ""), [emp, setEmp] = useState(pp.empNo || ""), [tz, setTz] = useState("");
+    const tzBad = tz && !isIlId(tz.replace(/\D/g, ""));
+    async function save(){
+      const d = { name:pp.name, fullName:full.trim(), empNo:emp.replace(/\D/g, ""), at:Date.now(), by:who };
+      if(tz) d.idH = await pdIdHash(tz);
+      try{ await firebase.firestore().collection("pdocs").doc(pp.phone).set(d, { merge:true }); notify("נשמר"); onClose(); }
+      catch(e){ notify("שמירה נכשלה: " + (e.code || e.message)); }
+    }
+    return html`<div class="scrim" onClick=${onClose}><div class="sheet" onClick=${e=>e.stopPropagation()}>
+      <h3>🪪 ${pp.name} — פרטי זיהוי</h3>
+      <div class="who">לפי הפרטים האלה המערכת מזהה את העמודים של ${pp.name} בתוך PDF מרוכז. מספיק אחד מהם; ת.ז. הכי מדויקת.</div>
+      <div class="lbl">שם מלא כמו בתלוש</div>
+      <input class="tin" style=${{fontFamily:"inherit"}} value=${full} onInput=${e=>setFull(e.target.value)} placeholder="שם פרטי ושם משפחה" />
+      <div class="lbl" style=${{marginTop:10}}>מספר עובד בתוכנת השכר</div>
+      <input class="tin" inputmode="numeric" dir="ltr" value=${emp} onInput=${e=>setEmp(e.target.value)} />
+      <div class="lbl" style=${{marginTop:10}}>תעודת זהות ${pp.idH ? "— שמורה ✓ (להחלפה הקלד חדשה)" : ""}</div>
+      <input class="tin" inputmode="numeric" dir="ltr" autocomplete="off" value=${tz} onInput=${e=>setTz(e.target.value)} placeholder=${pp.idH ? "•••••••••" : "9 ספרות"} />
+      <div class="sub2">${tzBad ? html`<b style=${{color:"var(--crit)"}}>ספרת הביקורת לא תקינה</b>` : "הת.ז. לא נשמרת — רק טביעה מוצפנת (SHA-256) שמאפשרת לזהות אותה בתלוש."}</div>
+      <div class="btnrow" style=${{marginTop:10}}><button class="btn" onClick=${onClose}>ביטול</button><button class="btn pri" disabled=${tzBad} onClick=${save}>שמור</button></div>
+    </div></div>`;
+  }
+
+  const PdPeriod = ({ type, val, set }) => PD[type].per === "m"
+    ? html`<input type="month" class="tin" style=${{fontFamily:"inherit"}} value=${val} onChange=${e=>set(e.target.value)} />`
+    : PD[type].per === "y"
+    ? html`<input type="number" class="tin" dir="ltr" min="2000" max="2100" value=${val} onInput=${e=>set(e.target.value)} />`
+    : html`<input class="tin" style=${{fontFamily:"inherit"}} value=${val} onInput=${e=>set(e.target.value)} placeholder="תיאור קצר (לא חובה) — למשל: רישיון רכב 2026" />`;
+  const pdPerOk = (type, v) => PD[type].per === "m" ? /^\d{4}-\d{2}$/.test(v) : PD[type].per === "y" ? /^\d{4}$/.test(v) : true;
+  const PdTypeSel = ({ type, set }) => html`<select class="tin" style=${{fontFamily:"inherit"}} value=${type} onChange=${e=>set(e.target.value)}>
+    ${PD_TYPES.map(t => html`<option key=${t.k} value=${t.k}>${t.e} ${t.n}</option>`)}</select>`;
+
+  /* מסמך לעובד אחד (PDF או צילום) */
+  function PdOne({ people, who, notify, initial, onDone }){
+    const [p, setP] = useState(initial || ""), [type, setType] = useState("pay"), [per, setPer] = useState(pdDefPer("pay"));
+    const [file, setFile] = useState(null), [busy, setBusy] = useState(false);
+    const setT = k => { setType(k); setPer(pdDefPer(k)); };
+    async function go(){
+      if(file.size > PD_MAX){ notify("הקובץ גדול מדי (עד 20MB)"); return; }
+      setBusy(true);
+      try{
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const mime = file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "application/octet-stream");
+        const per0 = PD[type].per ? per : "";
+        const id = PD[type].per ? type + "_" + per0 : undefined;
+        if(id){
+          const ex = await pdCol(p).doc(id).get({ source:"server" }).catch(()=>null);
+          if(ex && ex.exists && !confirm("כבר קיים " + PD[type].n + " ל" + pdPer(per0) + ". להחליף אותו?")){ setBusy(false); return; }
+        }
+        let pages = 0;
+        if(mime === "application/pdf"){ try{ pages = (await pdOpenPdf(bytes)).numPages; }catch(e){} }
+        await pdSave(p, { id, type, period:per0, note: PD[type].per ? "" : per.trim(), fname:file.name, mime, pages }, bytes, who);
+        notify("הועלה ל" + (people.find(x => x.phone === p) || {}).name);
+        onDone(p);
+      }catch(e){ notify("ההעלאה נכשלה: " + (e.message || e)); }
+      setBusy(false);
+    }
+    return html`<div class="card" style=${{marginTop:10, maxWidth:520}}>
+      <div class="lbl">למי</div>
+      <select class="tin" style=${{fontFamily:"inherit"}} value=${p} onChange=${e=>setP(e.target.value)}>
+        <option value="">— בחר —</option>
+        ${people.map(pp => html`<option key=${pp.phone} value=${pp.phone}>${pp.fullName || pp.name}</option>`)}
+      </select>
+      <div class="lbl" style=${{marginTop:10}}>סוג מסמך</div><${PdTypeSel} type=${type} set=${setT} />
+      <div class="lbl" style=${{marginTop:10}}>${PD[type].per === "m" ? "חודש" : PD[type].per === "y" ? "שנה" : "תיאור"}</div><${PdPeriod} type=${type} val=${per} set=${setPer} />
+      <div class="lbl" style=${{marginTop:10}}>קובץ (PDF או צילום)</div>
+      <input type="file" accept="application/pdf,image/*" onChange=${e=>setFile(e.target.files[0] || null)} />
+      <button class="btn pri wide" style=${{marginTop:14}} disabled=${!p || !file || busy || !pdPerOk(type, per)} onClick=${go}>${busy ? "מעלה…" : "⬆ העלה"}</button>
+    </div>`;
+  }
+
+  /* PDF מרוכז (כל התלושים בקובץ אחד) → קובץ נפרד לכל עובד */
+  function PdSplit({ people, who, notify, onDone }){
+    const [type, setType] = useState("pay"), [per, setPer] = useState(pdDefPer("pay"));
+    const [file, setFile] = useState(null), [pages, setPages] = useState(null);
+    const [busy, setBusy] = useState(""), [prev, setPrev] = useState(null);
+    const doc = useRef(null);
+    const setT = k => { setType(k); setPer(pdDefPer(k)); };
+    const pname = ph => { const x = people.find(pp => pp.phone === ph); return x ? (x.fullName || x.name) : "?"; };
+    async function analyze(f){
+      setFile(f); setPages(null);
+      if(!f) return;
+      if(f.size > 60 * 1048576){ notify("הקובץ גדול מדי"); return; }
+      setBusy("קורא את הקובץ…");
+      try{
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        const pdf = await pdOpenPdf(bytes);
+        let src = null;
+        try{ const L = await loadPdfLib(); src = await L.PDFDocument.load(bytes); }catch(e){ src = null; }   // מוצפן → מצב תמונה
+        doc.current = { pdf, src, name:f.name };
+        const out = [];
+        for(let i = 1; i <= pdf.numPages; i++){
+          setBusy("מזהה עובדים… עמוד " + i + " מתוך " + pdf.numPages);
+          const tc = await (await pdf.getPage(i)).getTextContent();
+          const text = pdNorm(tc.items.map(it => it.str).join(" "));
+          const ids = pdIdsOf(text);
+          const hashes = await Promise.all(ids.map(pdIdHash));
+          const pg = { i: i - 1, text, ids, hashes };
+          Object.assign(pg, pdMatch(pg, people));
+          out.push(pg);
+        }
+        if(!out.some(pg => pg.text.length > 20)) notify("אין טקסט בקובץ (סריקה?) — צריך לשייך כל עמוד ידנית");
+        setPages(out);
+      }catch(e){ notify("לא הצלחתי לקרוא את הקובץ: " + (e.message || e)); setFile(null); }
+      setBusy("");
+    }
+    const setPage = (i, phone) => setPages(ps => ps.map(pg => pg.i === i ? { ...pg, phone, how: phone ? (phone === "skip" ? "skip" : "manual") : "" } : pg));
+    function fillPrev(){
+      setPages(ps => { let last = ""; return ps.map(pg => { if(pg.phone && pg.phone !== "skip"){ last = pg.phone; return pg; } return !pg.phone && last ? { ...pg, phone:last, how:"cont" } : pg; }); });
+    }
+    async function preview(i){
+      setPrev({ i, url:null });
+      try{ const r = await pdRender(doc.current.pdf, i + 1, Math.min(1100, window.innerWidth * (window.devicePixelRatio || 1))); setPrev({ i, url:r.c.toDataURL("image/jpeg", .85) }); }
+      catch(e){ setPrev(null); notify("לא הצלחתי להציג"); }
+    }
+    const open = (pages || []).filter(pg => !pg.phone).length;
+    const groups = {}; (pages || []).forEach(pg => { if(pg.phone && pg.phone !== "skip") (groups[pg.phone] = groups[pg.phone] || []).push(pg.i); });
+    const gp = Object.keys(groups);
+    async function upload(){
+      const per0 = PD[type].per ? per : "", id = PD[type].per ? type + "_" + per0 : undefined;
+      if(id){
+        const ex = [];
+        for(const ph of gp){ const d = await pdCol(ph).doc(id).get({ source:"server" }).catch(()=>null); if(d && d.exists) ex.push(pname(ph)); }
+        if(ex.length && !confirm("כבר קיים " + PD[type].n + " ל" + pdPer(per0) + " אצל: " + ex.join(", ") + ".\nלהחליף?")) return;
+      }
+      // ת.ז. שמופיעה בעמודים של עובד אחד בלבד בקובץ — נלמדת לפעם הבאה (ח.פ. של החברה מופיע אצל כולם ולא נלמד)
+      const owners = {}; (pages || []).forEach(pg => { if(pg.phone && pg.phone !== "skip") pg.ids.forEach(x => { (owners[x] = owners[x] || new Set()).add(pg.phone); }); });
+      let done = 0, fail = [];
+      for(const ph of gp){
+        setBusy("מעלה " + (++done) + " מתוך " + gp.length + " — " + pname(ph));
+        try{
+          const bytes = await pdExtract(doc.current.src, doc.current.pdf, groups[ph]);
+          await pdSave(ph, { id, type, period:per0, note: PD[type].per ? "" : per.trim(), fname:pdTitle({ type, period:per0 }) + ".pdf", mime:"application/pdf", pages:groups[ph].length }, bytes, who);
+          const pp = people.find(x => x.phone === ph) || {};
+          // ת.ז. והיפוך שלה (PDF בעברית) הן אותו מספר — היפוך שומר על ספרת הביקורת
+          const own = [...new Set(Object.keys(owners).filter(x => owners[x].size === 1 && owners[x].has(ph)).map(x => x < pdRev(x) ? x : pdRev(x)))];
+          if(!pp.idH && own.length === 1 && gp.length > 1)
+            await firebase.firestore().collection("pdocs").doc(ph).set({ idH: await pdIdHash(own[0]), name:pp.name || "" }, { merge:true }).catch(()=>{});
+        }catch(e){ fail.push(pname(ph) + " (" + (e.message || e) + ")"); }
+      }
+      setBusy("");
+      if(fail.length){ alert("לא הועלו:\n" + fail.join("\n")); return; }
+      notify("הועלו " + gp.length + " מסמכים — " + PD[type].n + " " + pdPer(per0));
+      onDone();
+    }
+    const HOW = { id:["ok", "ת.ז."], emp:["ok", "מס׳ עובד"], name:["ok", "שם"], manual:["inactive", "ידני"], cont:["warn", "המשך?"], skip:["inactive", "דילוג"], conflict:["crit", "⚠ כמה עובדים"], "":["crit", "לא זוהה"] };
+    return html`<div style=${{marginTop:10}}>
+      ${!pages && html`<div class="card" style=${{maxWidth:560}}>
+        <div class="sub2" style=${{marginTop:0}}>מעלים קובץ PDF אחד עם כל התלושים (או דוח ההפרשות) כפי שהגיע מתוכנת השכר. המערכת מזהה כל עמוד לפי ת.ז., מספר עובד או שם מלא, מציגה לך לאישור, ושומרת לכל עובד קובץ נפרד. שום דבר לא עולה לפני שאישרת.</div>
+        <div class="lbl" style=${{marginTop:10}}>סוג מסמך</div><${PdTypeSel} type=${type} set=${setT} />
+        <div class="lbl" style=${{marginTop:10}}>${PD[type].per === "m" ? "חודש" : PD[type].per === "y" ? "שנה" : "תיאור"}</div><${PdPeriod} type=${type} val=${per} set=${setPer} />
+        <div class="lbl" style=${{marginTop:10}}>קובץ PDF מרוכז</div>
+        <input type="file" accept="application/pdf" disabled=${!!busy || !pdPerOk(type, per)} onChange=${e=>analyze(e.target.files[0] || null)} />
+        ${busy && html`<div class="sub2">${busy}</div>`}
+      </div>`}
+      ${pages && html`
+        <div class="card">
+          <div class="rowbet"><div><b>${file && file.name}</b><div class="sub2" style=${{margin:0}}>${PD[type].e} ${PD[type].n} ${PD[type].per ? pdPer(per) : per} · ${pages.length} עמודים · ${gp.length} עובדים${doc.current && !doc.current.src ? " · קובץ מוצפן — העמודים יישמרו כתמונה" : ""}</div></div>
+            <button class="btn" style=${{flex:"none", padding:"7px 12px"}} disabled=${!!busy} onClick=${()=>{ setPages(null); setFile(null); }}>החלף קובץ</button></div>
+          ${open > 0 && html`<div class="alert warn" style=${{marginTop:10}}><span class="b"></span>${open} עמודים לא שויכו. בחר עובד או "דלג" לכל אחד.
+            <button class="chip" style=${{marginInlineStart:"auto"}} onClick=${fillPrev}>שייך לעובד של העמוד הקודם</button></div>`}
+          ${pages.some(pg => pg.how === "cont") && html`<div class="sub2">"המשך?" — שויך לעובד של העמוד הקודם. ודא בתצוגה (👁) שזה באמת המשך שלו.</div>`}
+        </div>
+        <div class="pdlist" style=${{marginTop:10}}>
+          ${pages.map(pg => html`<div key=${pg.i} class="pdrow">
+            <button class="ic0" title="הצג עמוד" onClick=${()=>preview(pg.i)}>👁</button>
+            <span class="pdt" style=${{flex:"none", minWidth:54}}><b>עמ׳ ${pg.i + 1}</b></span>
+            <select class="tin" style=${{fontFamily:"inherit", flex:1, minWidth:0, padding:"7px 9px"}} value=${pg.phone} onChange=${e=>setPage(pg.i, e.target.value)}>
+              <option value="">— לא שויך —</option>
+              ${(pg.conflict || []).length > 0 && html`<optgroup label="נמצאו בעמוד">${pg.conflict.map(ph => html`<option key=${"c" + ph} value=${ph}>${pname(ph)}</option>`)}</optgroup>`}
+              ${people.map(pp => html`<option key=${pp.phone} value=${pp.phone}>${pp.fullName || pp.name}</option>`)}
+              <option value="skip">דלג — לא להעלות</option>
+            </select>
+            <span class=${"pill " + HOW[pg.how][0]}>${HOW[pg.how][1]}</span>
+          </div>`)}
+        </div>
+        <div class="card" style=${{marginTop:10, position:"sticky", bottom:8}}>
+          ${busy ? html`<div class="sub2" style=${{margin:0}}>${busy}</div>`
+            : html`<button class="btn pri wide" disabled=${open > 0 || !gp.length} onClick=${upload}>⬆ העלה ${gp.length} מסמכים נפרדים${open ? " (נשארו " + open + " עמודים לשייך)" : ""}</button>`}
+        </div>`}
+      ${prev && html`<div class="lightbox" onClick=${()=>setPrev(null)}>
+        <button class="x" onClick=${()=>setPrev(null)}>✕</button>
+        ${prev.url ? html`<img src=${prev.url} alt=${"עמוד " + (prev.i + 1)} />` : html`<div style=${{color:"#fff"}}>טוען…</div>`}
+      </div>`}
+    </div>`;
+  }
+
   function App(){
     const cloudCode = useState(readTeamCode)[0];
     // אין קוד צוות במכשיר (אייקון במסך הבית, דפדפן אחר, קישור בלי קוד) → כניסה בטלפון, והקוד נמשך מרשומת המשתמש
@@ -4375,7 +4914,8 @@ ${l}`
     // כניסה אישית: מי מחובר ומה התפקיד שלו (משרד / מנהל פרויקט)
     const [auth, setAuth] = useState(()=> ({ s: (cloudCode || needTeam) ? "checking" : "off" }));
     const [staffSheet, setStaffSheet] = useState(false);
-    const [rkOpen, setRkOpen] = useState({});      // הזמנות פתוחות מהרכש לפי אתר ("בדרך")
+    const [rkOpen, setRkOpen] = useState({});
+    const [myFiles, setMyFiles] = useState(null);  // המסמכים האישיים שלי (פרטים בלבד, בלי התוכן)      // הזמנות פתוחות מהרכש לפי אתר ("בדרך")
     const signedIn = cloudCode && auth.s === "in";
     const who = signedIn ? auth.staff.name : me.name;
     const isViewer = signedIn && auth.staff.role === "viewer";
@@ -4429,6 +4969,11 @@ ${l}`
       col.get().then(q => q.docs.forEach(d => { if(d.data().role !== "agency" && d.data().team !== cloudCode) col.doc(d.id).set({ team:cloudCode }, { merge:true }).catch(()=>{}); })).catch(()=>{});
     }, [signedIn]);
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
+    useEffect(()=>{
+      if(!signedIn) return;
+      return pdCol(auth.phone).onSnapshot(q => setMyFiles(q.docs.map(d => d.data())), ()=>setMyFiles([]));
+    }, [signedIn]);
+    const pdNew = (myFiles || []).filter(f => !f.seen).length;
 
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
@@ -4490,7 +5035,7 @@ ${l}`
         update(d => { d.requests = []; d.transfers = []; return d; });
     }, [cloud.ready, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
-    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : "stock.home";
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
     function reset(){
       if(cloudCode){
@@ -4816,6 +5361,12 @@ ${l}`
             ${cloud.status === "error" ? "שגיאת חיבור: " + (cloud.err || "לא ידועה") : navigator.onLine ? "טוען נתונים משותפים…" : "אין חיבור — מחכה לרשת"}
             <div style=${{marginTop:14}}><button class="btn" style=${{flex:"none", padding:"9px 16px"}} onClick=${goLocal}>המשך במצב מקומי</button></div>
           </div></div>`;
+    else if(nav.screen === "docs.mine" || nav.screen === "docs.admin")
+      body = !signedIn
+        ? html`<div class="screen narrow"><div class="empty">מסמכים אישיים זמינים רק אחרי כניסה עם מספר הטלפון</div></div>`
+        : nav.screen === "docs.admin" && auth.staff.role === "office"
+        ? html`<${DocsAdmin} who=${who} myPhone=${auth.phone} notify=${notify} />`
+        : html`<${MyDocs} phone=${auth.phone} name=${auth.staff.name} files=${myFiles} notify=${notify} />`;
     else if(nav.screen === "ctl.home")
       body = html`<${Control} st=${vst} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctlV} setCtl=${setCtlV} locked=${!!myMgr}
         onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} who=${who} />`;
@@ -4880,6 +5431,8 @@ ${l}`
           ${k === "att" && attOn && attTabs.map(([a, al]) => SI((ctlV.av || "day") === a, al, ()=>goCtl("att", a), "deep"))}`)}
         ${SI(role === "field", "📍 שטח", ()=>goRole("field"))}
         ${SI(role === "stock", "📦 מלאי", ()=>goRole("stock"))}
+        ${signedIn && SI(role === "docs", "📁 המסמכים שלי", ()=>goRole("docs"), "", pdNew)}
+        ${signedIn && auth.staff.role === "office" && SI(role === "docsadm", "🗂 מסמכים אישיים", ()=>goRole("docsadm"))}
         <div class="sfoot">
           <button class="meb" title="החשבון שלי · החלף" onClick=${()=>setIdSheet(true)}>
             <span class="av">${me.name.slice(0,1)}<i class=${"sdot " + cloud.status}></i></span>
@@ -4905,7 +5458,7 @@ ${l}`
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
             <button role="tab" class=${role==="stock"?"on":""} onClick=${()=>switchRole("stock")}>מלאי</button>
           </div>`}
-          ${auth.s !== "agency" && html`<button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i></button>`}
+          ${auth.s !== "agency" && html`<button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i>${pdNew > 0 && html`<i class="pdnew" title="מסמך חדש">${pdNew}</i>`}</button>`}
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
           ${isOffice && ((!cloudCode && !needTeam) || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
         </div>`}
@@ -4915,6 +5468,7 @@ ${l}`
           ? html`<div class="banner">מצב מקומי — הנתונים נשמרים רק במכשיר הזה <button class="chip" onClick=${()=>setTeamSheet(true)}>הזן קוד צוות</button></div>`
           : cloud.status === "offline" ? html`<div class="banner">אין חיבור — השינויים נשמרים במכשיר ויסונכרנו כשהרשת תחזור</div>`
           : cloud.status === "error" && cloud.ready ? html`<div class="banner err">בעיית סנכרון (${cloud.err}) — השינויים עלולים לא להישמר במסד</div>` : null}
+        ${signedIn && pdNew > 0 && role !== "docs" && html`<button class="banner pdban" onClick=${()=>switchRole("docs")}>📁 ${pdNew === 1 ? "מסמך אישי חדש מחכה לך" : pdNew + " מסמכים אישיים חדשים מחכים לך"} — לחץ לצפייה</button>`}
         ${body}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
         </div>
@@ -4938,6 +5492,8 @@ ${l}`
               ${signedIn ? html`
                 <h3>החשבון שלי</h3>
                 <div class="who">${auth.staff.name} · ${isViewer ? "צופה — רואה הכול, קריאה בלבד" : isOffice ? "משרד — רואה הכול" : "מנהל פרויקט — רואה רק את האתרים שלו (" + sites.length + ")"} · <span dir="ltr">${fmtPhone(auth.phone)}</span></div>
+                <button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("docs"); }}><span class="e">📁</span>המסמכים שלי — תלושים, הפרשות, טפסים${pdNew ? " (" + pdNew + " חדשים)" : ""}</button>
+                ${auth.staff.role === "office" && html`<button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("docsadm"); }}><span class="e">🗂</span>מסמכים אישיים של כולם — העלאה וניהול</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setStaffSheet(true); }}><span class="e">👥</span>משתמשים והרשאות</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · שיתוף קישור</button>`}
                 <button class="opt" onClick=${logout}><span class="e">🚪</span>יציאה מהחשבון</button>

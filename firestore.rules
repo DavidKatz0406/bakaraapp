@@ -196,5 +196,29 @@ service cloud.firestore {
       allow read: if isOffice() || isViewer();
       allow write: if isOffice();
     }
+
+    // ───── מסמכים אישיים (תלושי שכר, הפרשות, 106, חוזה, רכב והוצאות) ─────
+    // מחוץ ל-t/ בכוונה: החוק הכללי שם נותן קריאה לכל הצוות.
+    //   pdocs/{טלפון}                        — כרטיס: שם מלא, מספר עובד, ת.ז. מגובבת (SHA-256), החודש האחרון לכל סוג
+    //   pdocs/{טלפון}/files/{מסמך}           — פרטי המסמך (סוג, תקופה, שם קובץ, גודל, נקרא)
+    //   pdocs/{טלפון}/files/{מסמך}/parts/{i} — תוכן הקובץ, בחלקים
+    // קוראים: בעל המספר עצמו (משתמש פעיל) והמשרד בלבד. צופה, מנהלים אחרים וחברות כ״א — לא.
+    // כותבים: המשרד בלבד. בעל המסמך רק מסמן "נקרא" (שעת שרת)
+    function mine(p) { return isMember() && p == phone(); }
+    match /pdocs/{p} {
+      allow read: if mine(p) || isOffice();
+      allow write: if isOffice();
+    }
+    match /pdocs/{p}/files/{f} {
+      allow read: if mine(p) || isOffice();
+      allow write: if isOffice();
+      allow update: if mine(p)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen'])
+                    && request.resource.data.seen == request.time;
+    }
+    match /pdocs/{p}/files/{f}/parts/{i} {
+      allow read: if mine(p) || isOffice();
+      allow write: if isOffice();
+    }
   }
 }
