@@ -2352,7 +2352,7 @@
   }
   // שאלה חופשית דרך Claude (Haiku) — עובר בשרת הביניים (Apps Script) שמחזיק את המפתח ובודק שהמשתמש מחובר.
   // ה-AI רק מתרגם את השאלה למפרט; החישוב עצמו רץ כאן במכשיר. בלי כתובת / בלי חיבור — פענוח מקומי.
-  const BOQ_AI_URL = "";
+  const BOQ_AI_URL = "https://script.google.com/macros/s/AKfycbybmqEcXdPAP6xyVM_QVxXlIgshW9RSNO6atHsO2zU9mw1fKLST-ZGT-Jseg28YbnIV/exec";
   async function boqAsk(q, flat){
     const local = () => ({ spec:boqParse(q, flat), ai:false });
     if(!BOQ_AI_URL || !Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) return local();
