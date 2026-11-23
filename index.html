@@ -441,6 +441,10 @@
   .wdone{ display:flex; gap:12px; align-items:center; background:var(--ok-wash); border:1px solid var(--ok); border-radius:14px; padding:10px; font-size:.95rem; }
   .wdone img{ width:64px; height:64px; border-radius:10px; object-fit:cover; flex:none; }
   .wdone b{ color:var(--ok); font-size:1.05rem; }
+  .wgood{ background:var(--ok); color:#fff; border-radius:22px; padding:30px 16px; font-size:1.5rem; font-weight:800; text-align:center; display:flex; flex-direction:column; gap:6px; box-shadow:var(--shadow); }
+  .wq{ margin-top:8vh; background:var(--warn-wash); border:1px solid var(--warn); border-radius:16px; padding:18px 16px; text-align:center; display:flex; flex-direction:column; gap:6px; font-size:1.6rem; }
+  .wq b{ font-size:1.2rem; line-height:1.45; color:var(--ink); unicode-bidi:plaintext; }
+  .wgood small{ font-size:1rem; font-weight:600; opacity:.9; }
   .wdone small{ color:var(--warn); }
   .wflow{ display:flex; flex-direction:column; gap:12px; }
   .wflowh{ font-size:1.3rem; font-weight:800; text-align:center; }
@@ -1511,6 +1515,8 @@
   const ATT_SKEW = 5 * 60000;     // פער שעון טלפון/שרת שנחשב חשוד
   const ATT_LONG = 13;            // משמרת ארוכה מזה (שעות) = חריג
   const ATT_NOOUT_H = 20;         // מהשעה הזו כניסה בלי יציאה של היום = חריג
+  const ATT_QUICK = 15 * 60000;   // יציאה מהר כל כך אחרי כניסה = כנראה לחיצה בטעות (סימון למנהל)
+  const ATT_EARLY = 30 * 60000;   // יציאה לפני זה אחרי הכניסה = העובד מתבקש לאשר
   const FV = () => firebase.firestore.FieldValue.serverTimestamp();
   const tsMs = x => x && typeof x.toMillis === "function" ? x.toMillis() : (typeof x === "number" ? x : null);
   function rid(n){
@@ -1595,6 +1601,14 @@
         if(day < today || (day === today && lateHour)) flags.push({ k:"noout", t:"אין יציאה", sev:"crit" });
         else if(day === today) flags.push({ k:"inside", t:"בעבודה עכשיו", sev:"ok" });
       }
+      // יציאה דקות ספורות אחרי כניסה = כנראה לחיצה בטעות. אם העובד לא נכנס שוב — שעת היציאה האמיתית חסרה
+      let quick = null;
+      for(let i = 0; i + 1 < ps.length && !quick; i++) if(ps[i].type === "in" && ps[i + 1].type === "out" && ps[i + 1]._t.t - ps[i]._t.t < ATT_QUICK){
+        const reentered = ps.slice(i + 2).some(p => p.type === "in"), gap = Math.max(0, Math.round((ps[i + 1]._t.t - ps[i]._t.t) / 60000));
+        quick = { outT: ps[i + 1]._t.t, gap, reentered };
+        flags.push({ k:"quick", t:"יציאה בטעות? " + hhmm(quick.outT) + " · " + (gap < 1 ? "פחות מדקה" : gap + " דק׳") + " אחרי הכניסה" + (reentered ? "" : " · לא נכנס שוב"),
+          sev: !reentered && (day < today || lateHour) ? "crit" : "warn" });
+      }
       const seen = new Set();
       ps.forEach(p => p._f.forEach(f => { if(!seen.has(f.k)){ seen.add(f.k); flags.push(f); } }));
       const fx = fixBy.get(key) || null;
@@ -1612,7 +1626,7 @@
       const openFlags = fx ? (stillOpen ? [{ k:"noout", t:"אין יציאה", sev:"crit" }] : []) : flags.filter(f => f.sev !== "ok");
       const site = (ps.length ? ps[ps.length - 1].site : "") || (w && w.site) || "";
       rows.push({ key, w:wid, day, name: w ? w.name : (ps[0] && ps[0].name) || "?", site,
-        sites:[...new Set(ps.map(p => p.site))], inT, outT, ms, flags, openFlags, ps, fix:fx,
+        sites:[...new Set(ps.map(p => p.site))], inT, outT, ms, flags, openFlags, ps, fix:fx, quick,
         inside: !!open && day === today && !(fx && (fx.absent || fx.outT != null)) });
     });
     return rows.sort((a, b) => a.name.localeCompare(b.name, "he") || a.day.localeCompare(b.day));
@@ -2586,11 +2600,11 @@ Your personal link (keep this message and open the link from here every time):
 ${l}`
   };
   const WT = {
-    he:{ dir:"rtl", name:"עברית", hello:"שלום", in:"כניסה לעבודה", out:"יציאה מהעבודה", notIn:"עוד לא נרשמת היום", since:"בעבודה מאז", left:"יצאת ב-", site:"אתר", snap:"צלם", retake:"צלם שוב", send:"אשר ושלח", cancel:"ביטול", saved:"נרשם", savedOff:"נשמר בטלפון — יישלח כשתחזור רשת", locating:"מאתר מיקום…", locOk:"מיקום התקבל", noLoc:"אין מיקום — אשר גישה למיקום בהגדרות הטלפון", camErr:"המצלמה לא נפתחה — לחץ כאן כדי לצלם", loading:"טוען…", bad:"הקישור לא תקין — בקש קישור חדש מהמנהל", taken:"הקישור הזה מחובר לטלפון אחר. לחץ \"בקש אישור\" — המנהל יאשר את הטלפון הזה, ואז לחץ \"נסה שוב\". לא צריך קישור חדש.", relReq:"בקש אישור מהמנהל", relSent:"הבקשה נשלחה למנהל. כשהוא יאשר — לחץ \"נסה שוב\".", retry:"נסה שוב", off:"המשתמש הושבת — פנה למנהל", err:"אין חיבור למערכת — נסה שוב", face:"הפנים צריכות להיראות בבירור", hours:"שעות היום", net:"אין רשת — הרישום יישמר בטלפון", todayList:"הרישומים שלך היום", inL:"כניסה", outL:"יציאה", pending:"ממתין לשליחה" },
-    ar:{ dir:"rtl", name:"العربية", hello:"مرحبا", in:"دخول للعمل", out:"خروج من العمل", notIn:"لم تسجّل اليوم بعد", since:"في العمل منذ", left:"خرجت الساعة ", site:"الموقع", snap:"صوّر", retake:"صوّر مرة أخرى", send:"تأكيد وإرسال", cancel:"إلغاء", saved:"تم التسجيل", savedOff:"حُفظ في الهاتف — سيُرسل عند عودة الإنترنت", locating:"جارٍ تحديد الموقع…", locOk:"تم تحديد الموقع", noLoc:"لا يوجد موقع — اسمح بالوصول للموقع في إعدادات الهاتف", camErr:"الكاميرا لم تفتح — اضغط هنا للتصوير", loading:"جارٍ التحميل…", bad:"الرابط غير صالح — اطلب رابطًا جديدًا من المدير", taken:"هذا الرابط مرتبط بهاتف آخر. اضغط \"اطلب موافقة\" — سيوافق المدير على هذا الهاتف، ثم اضغط \"حاول مرة أخرى\". لا حاجة لرابط جديد.", relReq:"اطلب موافقة المدير", relSent:"تم إرسال الطلب للمدير. بعد موافقته اضغط \"حاول مرة أخرى\".", retry:"حاول مرة أخرى", off:"الحساب موقوف — راجع المدير", err:"لا يوجد اتصال بالنظام — حاول مرة أخرى", face:"يجب أن يظهر وجهك بوضوح", hours:"ساعات اليوم", net:"لا يوجد إنترنت — سيُحفظ التسجيل في الهاتف", todayList:"تسجيلاتك اليوم", inL:"دخول", outL:"خروج", pending:"بانتظار الإرسال" },
-    en:{ dir:"ltr", name:"English", hello:"Hello", in:"Clock in", out:"Clock out", notIn:"Not clocked in today", since:"Working since", left:"Clocked out at ", site:"Site", snap:"Take photo", retake:"Retake", send:"Confirm & send", cancel:"Cancel", saved:"Recorded", savedOff:"Saved on phone — will be sent when online", locating:"Getting location…", locOk:"Location received", noLoc:"No location — allow location access in phone settings", camErr:"Camera did not open — tap here to take a photo", loading:"Loading…", bad:"Invalid link — ask your manager for a new one", taken:"This link is connected to another phone. Tap \"Ask for approval\" — your manager will approve this phone, then tap \"Try again\". No new link needed.", relReq:"Ask manager for approval", relSent:"Request sent to your manager. After approval, tap \"Try again\".", retry:"Try again", off:"Account disabled — contact your manager", err:"Cannot reach the system — try again", face:"Your face must be clearly visible", hours:"Hours today", net:"Offline — the record will be saved on the phone", todayList:"Your records today", inL:"In", outL:"Out", pending:"waiting to send" },
-    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", taken:"यह लिंक किसी दूसरे फ़ोन से जुड़ा है। \"मंज़ूरी माँगें\" दबाएँ — मैनेजर इस फ़ोन को मंज़ूरी देगा, फिर \"फिर कोशिश करें\" दबाएँ। नया लिंक नहीं चाहिए।", relReq:"मैनेजर से मंज़ूरी माँगें", relSent:"अनुरोध मैनेजर को भेज दिया गया। मंज़ूरी के बाद \"फिर कोशिश करें\" दबाएँ।", retry:"फिर कोशिश करें", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" },
-    ru:{ dir:"ltr", name:"Русский", hello:"Здравствуйте", in:"Начало работы", out:"Конец работы", notIn:"Сегодня вы ещё не отметились", since:"На работе с", left:"Ушли в ", site:"Объект", snap:"Сфотографировать", retake:"Переснять", send:"Подтвердить и отправить", cancel:"Отмена", saved:"Записано", savedOff:"Сохранено в телефоне — отправится, когда появится интернет", locating:"Определяем местоположение…", locOk:"Местоположение получено", noLoc:"Нет местоположения — разрешите доступ к геолокации в настройках телефона", camErr:"Камера не открылась — нажмите здесь, чтобы сфотографироваться", loading:"Загрузка…", bad:"Ссылка недействительна — попросите новую у начальника", taken:"Эта ссылка привязана к другому телефону. Нажмите \"Запросить одобрение\" — начальник одобрит этот телефон, затем нажмите \"Попробовать снова\". Новая ссылка не нужна.", relReq:"Запросить одобрение у начальника", relSent:"Запрос отправлен начальнику. После одобрения нажмите \"Попробовать снова\".", retry:"Попробовать снова", off:"Доступ отключён — обратитесь к начальнику", err:"Нет связи с системой — попробуйте ещё раз", face:"Лицо должно быть хорошо видно", hours:"Часы за сегодня", net:"Нет интернета — отметка сохранится в телефоне", todayList:"Ваши отметки сегодня", inL:"Приход", outL:"Уход", pending:"ожидает отправки" }
+    he:{ dir:"rtl", name:"עברית", hello:"שלום", in:"כניסה לעבודה", out:"יציאה מהעבודה", notIn:"עוד לא נרשמת היום", since:"בעבודה מאז", left:"יצאת ב-", site:"אתר", snap:"צלם", retake:"צלם שוב", send:"אשר ושלח", cancel:"ביטול", saved:"נרשם", savedOff:"נשמר בטלפון — יישלח כשתחזור רשת", locating:"מאתר מיקום…", locOk:"מיקום התקבל", noLoc:"אין מיקום — אשר גישה למיקום בהגדרות הטלפון", camErr:"המצלמה לא נפתחה — לחץ כאן כדי לצלם", loading:"טוען…", bad:"הקישור לא תקין — בקש קישור חדש מהמנהל", taken:"הקישור הזה מחובר לטלפון אחר. לחץ \"בקש אישור\" — המנהל יאשר את הטלפון הזה, ואז לחץ \"נסה שוב\". לא צריך קישור חדש.", relReq:"בקש אישור מהמנהל", relSent:"הבקשה נשלחה למנהל. כשהוא יאשר — לחץ \"נסה שוב\".", retry:"נסה שוב", earlyQ:"נכנסת לעבודה לפני {m} דקות. לצאת כבר עכשיו?", stay:"לא, אני ממשיך לעבוד", leave:"כן, אני יוצא", goodDay:"יום עבודה טוב!", off:"המשתמש הושבת — פנה למנהל", err:"אין חיבור למערכת — נסה שוב", face:"הפנים צריכות להיראות בבירור", hours:"שעות היום", net:"אין רשת — הרישום יישמר בטלפון", todayList:"הרישומים שלך היום", inL:"כניסה", outL:"יציאה", pending:"ממתין לשליחה" },
+    ar:{ dir:"rtl", name:"العربية", hello:"مرحبا", in:"دخول للعمل", out:"خروج من العمل", notIn:"لم تسجّل اليوم بعد", since:"في العمل منذ", left:"خرجت الساعة ", site:"الموقع", snap:"صوّر", retake:"صوّر مرة أخرى", send:"تأكيد وإرسال", cancel:"إلغاء", saved:"تم التسجيل", savedOff:"حُفظ في الهاتف — سيُرسل عند عودة الإنترنت", locating:"جارٍ تحديد الموقع…", locOk:"تم تحديد الموقع", noLoc:"لا يوجد موقع — اسمح بالوصول للموقع في إعدادات الهاتف", camErr:"الكاميرا لم تفتح — اضغط هنا للتصوير", loading:"جارٍ التحميل…", bad:"الرابط غير صالح — اطلب رابطًا جديدًا من المدير", taken:"هذا الرابط مرتبط بهاتف آخر. اضغط \"اطلب موافقة\" — سيوافق المدير على هذا الهاتف، ثم اضغط \"حاول مرة أخرى\". لا حاجة لرابط جديد.", relReq:"اطلب موافقة المدير", relSent:"تم إرسال الطلب للمدير. بعد موافقته اضغط \"حاول مرة أخرى\".", retry:"حاول مرة أخرى", earlyQ:"سجّلت دخولك قبل {m} دقائق. هل تريد الخروج الآن؟", stay:"لا، أنا مستمر في العمل", leave:"نعم، أنا خارج", goodDay:"يوم عمل موفق!", off:"الحساب موقوف — راجع المدير", err:"لا يوجد اتصال بالنظام — حاول مرة أخرى", face:"يجب أن يظهر وجهك بوضوح", hours:"ساعات اليوم", net:"لا يوجد إنترنت — سيُحفظ التسجيل في الهاتف", todayList:"تسجيلاتك اليوم", inL:"دخول", outL:"خروج", pending:"بانتظار الإرسال" },
+    en:{ dir:"ltr", name:"English", hello:"Hello", in:"Clock in", out:"Clock out", notIn:"Not clocked in today", since:"Working since", left:"Clocked out at ", site:"Site", snap:"Take photo", retake:"Retake", send:"Confirm & send", cancel:"Cancel", saved:"Recorded", savedOff:"Saved on phone — will be sent when online", locating:"Getting location…", locOk:"Location received", noLoc:"No location — allow location access in phone settings", camErr:"Camera did not open — tap here to take a photo", loading:"Loading…", bad:"Invalid link — ask your manager for a new one", taken:"This link is connected to another phone. Tap \"Ask for approval\" — your manager will approve this phone, then tap \"Try again\". No new link needed.", relReq:"Ask manager for approval", relSent:"Request sent to your manager. After approval, tap \"Try again\".", retry:"Try again", earlyQ:"You clocked in {m} minutes ago. Clock out already?", stay:"No, I'm still working", leave:"Yes, I'm leaving", goodDay:"Have a good work day!", off:"Account disabled — contact your manager", err:"Cannot reach the system — try again", face:"Your face must be clearly visible", hours:"Hours today", net:"Offline — the record will be saved on the phone", todayList:"Your records today", inL:"In", outL:"Out", pending:"waiting to send" },
+    hi:{ dir:"ltr", name:"हिन्दी", hello:"नमस्ते", in:"काम पर आए (Clock in)", out:"काम से निकले (Clock out)", notIn:"आज अभी तक हाज़िरी नहीं लगी", since:"काम पर इस समय से", left:"निकले: ", site:"साइट", snap:"फ़ोटो लें", retake:"फिर से लें", send:"पुष्टि करें और भेजें", cancel:"रद्द करें", saved:"दर्ज हो गया", savedOff:"फ़ोन में सेव — इंटरनेट आने पर भेजा जाएगा", locating:"लोकेशन ढूंढ रहे हैं…", locOk:"लोकेशन मिल गई", noLoc:"लोकेशन नहीं मिली — फ़ोन सेटिंग में लोकेशन की अनुमति दें", camErr:"कैमरा नहीं खुला — फ़ोटो लेने के लिए यहाँ दबाएँ", loading:"लोड हो रहा है…", bad:"लिंक गलत है — मैनेजर से नया लिंक माँगें", taken:"यह लिंक किसी दूसरे फ़ोन से जुड़ा है। \"मंज़ूरी माँगें\" दबाएँ — मैनेजर इस फ़ोन को मंज़ूरी देगा, फिर \"फिर कोशिश करें\" दबाएँ। नया लिंक नहीं चाहिए।", relReq:"मैनेजर से मंज़ूरी माँगें", relSent:"अनुरोध मैनेजर को भेज दिया गया। मंज़ूरी के बाद \"फिर कोशिश करें\" दबाएँ।", retry:"फिर कोशिश करें", earlyQ:"आपने {m} मिनट पहले काम शुरू किया। क्या अभी बाहर जाना है?", stay:"नहीं, मैं काम कर रहा हूँ", leave:"हाँ, मैं जा रहा हूँ", goodDay:"आपका दिन अच्छा हो!", off:"खाता बंद है — मैनेजर से बात करें", err:"सिस्टम से कनेक्शन नहीं — फिर कोशिश करें", face:"फ़ोटो में चेहरा साफ़ दिखना चाहिए", hours:"आज के घंटे", net:"इंटरनेट नहीं — हाज़िरी फ़ोन में सेव होगी", todayList:"आज की आपकी हाज़िरी", inL:"आए", outL:"गए", pending:"भेजना बाकी" },
+    ru:{ dir:"ltr", name:"Русский", hello:"Здравствуйте", in:"Начало работы", out:"Конец работы", notIn:"Сегодня вы ещё не отметились", since:"На работе с", left:"Ушли в ", site:"Объект", snap:"Сфотографировать", retake:"Переснять", send:"Подтвердить и отправить", cancel:"Отмена", saved:"Записано", savedOff:"Сохранено в телефоне — отправится, когда появится интернет", locating:"Определяем местоположение…", locOk:"Местоположение получено", noLoc:"Нет местоположения — разрешите доступ к геолокации в настройках телефона", camErr:"Камера не открылась — нажмите здесь, чтобы сфотографироваться", loading:"Загрузка…", bad:"Ссылка недействительна — попросите новую у начальника", taken:"Эта ссылка привязана к другому телефону. Нажмите \"Запросить одобрение\" — начальник одобрит этот телефон, затем нажмите \"Попробовать снова\". Новая ссылка не нужна.", relReq:"Запросить одобрение у начальника", relSent:"Запрос отправлен начальнику. После одобрения нажмите \"Попробовать снова\".", retry:"Попробовать снова", earlyQ:"Вы отметили вход {m} мин. назад. Уже выйти?", stay:"Нет, я продолжаю работать", leave:"Да, я ухожу", goodDay:"Хорошего рабочего дня!", off:"Доступ отключён — обратитесь к начальнику", err:"Нет связи с системой — попробуйте ещё раз", face:"Лицо должно быть хорошо видно", hours:"Часы за сегодня", net:"Нет интернета — отметка сохранится в телефоне", todayList:"Ваши отметки сегодня", inL:"Приход", outL:"Уход", pending:"ожидает отправки" }
   };
 
   /* צילום ריבועי קטן (~20KB) עם חותמת תאריך ושעה */
@@ -2666,6 +2680,9 @@ ${l}`
     const dev = useMemo(deviceId, []);
     const today = dstr(now);
     // הקישור מחובר לטלפון אחר: העובד מבקש מהמנהל לאשר את הטלפון הזה (rel), ואחרי האישור לוחץ "נסה שוב"
+    const [early, setEarly] = useState(null);   // דקות מאז הכניסה כשהעובד לחץ יציאה מוקדם מדי
+    const [calm, setCalm] = useState(false);     // מיד אחרי כניסה: בלי כפתור יציאה גדול
+    const calmT = useRef(null);
     const relKey = "att_rel_" + id.w;
     const [relSent, setRelSent] = useState(()=>{ try{ return Date.now() - Number(localStorage.getItem(relKey) || 0) < 864e5; }catch(e){ return false; } });
     const [relBusy, setRelBusy] = useState(false);
@@ -2739,7 +2756,10 @@ ${l}`
     if(openAt != null) workedMs += Math.max(0, Date.now() - openAt);
     const siteName = sid => { const s = sites.find(x => x.id === sid); return s ? s.name : ""; };
 
-    function start(type){
+    function start(type, sure){
+      // יציאה זמן קצר אחרי הכניסה — קודם שואלים (רוב המקרים: לחיצה שנייה בטעות)
+      if(type === "out" && !sure && openAt != null && Date.now() - openAt < ATT_EARLY){ setEarly(Math.max(1, Math.round((Date.now() - openAt) / 60000))); return; }
+      setEarly(null); setCalm(false);
       setDone(null);
       setFlow({ type, step:"cam", photo:null, cam:"live", pos:null, posErr:null, site:null });
       if(!navigator.geolocation){ setFlow(f => f && { ...f, posErr:"na" }); return; }
@@ -2780,6 +2800,8 @@ ${l}`
           .then(()=> b.collection("workers").doc(id.w).set({ hasRef:true }, { merge:true })).catch(()=>{});
       setFlow(null);
       setDone({ type:f.type, at:t, off, photo:f.photo, site:siteName(sid) });
+      // אחרי כניסה: דקה וחצי בלי כפתור יציאה גדול, כדי שלחיצה נוספת לא תרשום יציאה
+      if(f.type === "in"){ setCalm(true); clearTimeout(calmT.current); calmT.current = setTimeout(()=> setCalm(false), 90000); }
     }
 
     const wrap = inner => html`
@@ -2800,6 +2822,10 @@ ${l}`
         <button class="btn wide" onClick=${()=>location.reload()}>↻ ${L.retry}</button>
       </div>`);
     if(phase !== "ok") return wrap(html`<div class="wmsg">${phase === "load" ? L.loading : L[phase]}</div>`);
+    if(early != null) return wrap(html`
+      <div class="wq">⚠️<b>${L.earlyQ.replace("{m}", early)}</b></div>
+      <button class="wbig in" onClick=${()=>setEarly(null)}><span>👷</span>${L.stay}</button>
+      <button class="btn wide" style=${{ flex:"none", marginTop:6 }} onClick=${()=>start("out", true)}>${L.leave}</button>`);
 
     if(flow){
       const sid = autoSite(flow);
@@ -2837,9 +2863,12 @@ ${l}`
           <div><b>✓ ${L.saved}</b><br/>${done.type === "in" ? L.inL : L.outL} · ${hhmm(done.at)}${done.site ? " · " + done.site : ""}${done.off ? html`<br/><small>${L.savedOff}</small>` : null}</div>
         </div>`}
       ${done && done.err && html`<div class="wloc bad">${L.err} (${done.err})</div>`}
-      <button class=${"wbig " + next} onClick=${()=>start(next)}>
+      ${calm && next === "out"
+        ? html`<div class="wgood">✓ ${L.inL} ${done ? hhmm(done.at) : ""}<small>${L.goodDay}</small></div>
+            <button class="btn wide" style=${{ flex:"none" }} onClick=${()=>start("out")}>${L.out}</button>`
+        : html`<button class=${"wbig " + next} onClick=${()=>start(next)}>
         <span>📸</span>${next === "in" ? L.in : L.out}
-      </button>
+      </button>`}
       ${mine.length > 0 && html`
         <div class="wlist">
           <div class="lbl">${L.todayList}</div>
@@ -3268,7 +3297,7 @@ ${l}`
       const ready = rdata && rdata.punches && rdata.ws === rws;
       const all = ready ? dayRows(rdata.punches, rdata.fixes, workers, sitesById, now).filter(r => r.openFlags.length) : [];
       // ימים בלי כניסה או בלי יציאה — חסרה שעה, אי אפשר לאשר אותם כמו שהם
-      const needTime = r => r.openFlags.some(f => f.k === "noout" || f.k === "noin");
+      const needTime = r => r.openFlags.some(f => f.k === "noout" || f.k === "noin" || (f.k === "quick" && f.sev === "crit"));
       const bySite = new Map();
       all.forEach(r => { const k = visIds.has(r.site) ? r.site : (mgr === "all" ? "_none" : null); if(k == null) return; if(!bySite.has(k)) bySite.set(k, []); bySite.get(k).push(r); });
       const list = [...visSites.filter(s => bySite.has(s.id)), ...(bySite.has("_none") ? [{ id:"_none", name:"ללא אתר / אתר לא פעיל" }] : [])];
@@ -3928,7 +3957,8 @@ ${l}`
 
   function AttRowSheet({ r, w, day, hist, photos, sitesById, onBig, onClose, onSave, refUrl, onSetRef }){
     const [inV, setInV] = useState(r && r.inT != null ? hhmm(r.inT) : "");
-    const [outV, setOutV] = useState(r && r.outT != null ? hhmm(r.outT) : "");
+    const quickOpen = !!(r && r.quick && !r.quick.reentered && !r.fix);
+    const [outV, setOutV] = useState(r && r.outT != null && !quickOpen ? hhmm(r.outT) : "");
     const [absent, setAbsent] = useState(false);
     const [reason, setReason] = useState("");
     const name = (w && w.name) || (r && r.name) || "";
@@ -3963,6 +3993,12 @@ ${l}`
           ${hist.length > 0 && html`
             <div class="lbl" style=${{ marginTop:12 }}>היסטוריית תיקונים</div>
             ${hist.map(f => html`<div key=${f.id} class="logrow"><span class="tm">${tsMs(f.at) ? dmy(tsMs(f.at)) + " " + hhmm(tsMs(f.at)) : ""}</span> · <b>${f.by}</b> · ${f.absent ? "סימן היעדרות" : f.approved ? (f.bulk ? "אישר באישור מרוכז" : "אישר כמו שהוא") : "כניסה " + hm(f.inT) + " · יציאה " + hm(f.outT)}${f.reason ? " — " + f.reason : ""}</div>`)}`}
+          ${r && r.quick && !r.fix && html`<div class="alert warn roh" style=${{ marginTop:12 }}><span class="b"></span>
+            ${r.quick.reentered
+              ? html`העובד לחץ "יציאה" ב-${hhmm(r.quick.outT)}, ${r.quick.gap < 1 ? "פחות מדקה" : r.quick.gap === 1 ? "דקה" : r.quick.gap + " דקות"} אחרי הכניסה, ואחר כך נכנס שוב — כנראה לחיצה בטעות.
+                  ${r.inT != null && r.outT != null && html`<button class="btn ok wide" style=${{ marginTop:8 }} onClick=${()=>onSave({ approved:false, absent:false, inT:r.inT, outT:r.outT, reason:"יציאה בטעות ב-" + hhmm(r.quick.outT) + " בוטלה" })}>↺ בטל את היציאה בטעות</button>`}`
+              : html`העובד לחץ "יציאה" ב-${hhmm(r.quick.outT)}, ${r.quick.gap < 1 ? "פחות מדקה" : r.quick.gap === 1 ? "דקה" : r.quick.gap + " דקות"} אחרי הכניסה, ולא נכנס שוב. אם עבד כרגיל — הזינו למטה את שעת היציאה האמיתית (למשל לפי מנהל העבודה) וסיבה.`}
+          </div>`}
           <div class="lbl roh" style=${{ marginTop:14 }}>תיקון או אישור</div>
           <div class="afix2 roh">
             <label class="afield">כניסה<input type="time" value=${inV} disabled=${absent} onInput=${e => setInV(e.target.value)} /></label>
