@@ -118,6 +118,15 @@ service cloud.firestore {
       allow update: if coll == 'workers' && canWrite()
                     && ownsSite(space, resource.data.site) && ownsSite(space, request.resource.data.site);
       allow create: if coll == 'fix' && canWrite() && ownsWorker(space, request.resource.data.w);
+      // אישור טלפון חדש לעובד (rel): המנהל של העובד סוגר בקשה פתוחה — רק סטטוס, שם (שלו) ושעה
+      allow update: if coll == 'rel' && canWrite() && ownsWorker(space, resource.data.w)
+                    && resource.data.status == 'open'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'by', 'doneAt'])
+                    && request.resource.data.status in ['done', 'rejected', 'dup']
+                    && request.resource.data.by == myName();
+      // ניתוק ידני (📱✕) נרשם ביומן על שם המנהל
+      allow create: if coll == 'rel' && canWrite() && ownsWorker(space, request.resource.data.w)
+                    && request.resource.data.status == 'manual' && request.resource.data.by == myName();
       allow write: if coll == 'ref' && canWrite() && ownsWorker(space, id);
 
       // ── עובד (כניסה אנונימית בלבד), רק במרחב הנוכחות ──
@@ -141,6 +150,18 @@ service cloud.firestore {
                         || (resource.data.get('uid', null) == null
                             && (resource.data.get('dev', null) == null
                                 || resource.data.get('dev', null) == request.resource.data.get('dev', null))));
+      // בקשה לאשר את הטלפון הזה (הקישור מחובר לטלפון אחר). העובד לא קורא את הבקשות — רק יוצר
+      allow create: if coll == 'rel' && isAnon() && isAtt(space)
+                    && request.resource.data.keys().hasOnly(['id', 'w', 'uid', 'dev', 'status', 'at', 'ua'])
+                    && request.resource.data.id == id
+                    && request.resource.data.w is string
+                    && id.matches(request.resource.data.w + '_[A-Za-z0-9]{5}')
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.dev is string && request.resource.data.dev.size() <= 40
+                    && request.resource.data.ua is string && request.resource.data.ua.size() <= 200
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.at == request.time
+                    && exists(/databases/$(db)/documents/t/$(space)/workers/$(request.resource.data.w));
       // רישום כניסה/יציאה — רק לעובד המקושר אליי, עם שעת שרת ושדות מוכרים בלבד
       allow create: if coll == 'punch' && isAnon() && isAtt(space)
                     && request.resource.data.keys().hasOnly(['id', 'w', 'name', 'site', 'siteName', 'type', 'day', 'dts', 'ts',
