@@ -2711,6 +2711,9 @@ ${l}`
     const [view, setView] = useState("day");
     const [day, setDay] = useState(()=> dstr(Date.now()));
     const [month, setMonth] = useState(()=> dstr(Date.now()).slice(0, 7));
+    const [rws, setRws] = useState(()=> addDay(wkStartOf(dstr(Date.now())), -7));
+    const [rdata, setRdata] = useState(null);
+    const [rbusy, setRbusy] = useState("");
     const [workers, setWorkers] = useState([]);
     const [asites, setAsites] = useState([]);
     const [asLoaded, setAsLoaded] = useState(false);
@@ -2792,6 +2795,35 @@ ${l}`
         .catch(e => { setMdata(null); setErr(String(e.code || e.message || e)); });
     }
     useEffect(()=>{ if(view === "month" && B) loadMonth(); }, [view, month, B]);
+    // "לבדיקה": כל הימים עם חריגים בשבוע (א׳–ש׳), לפי אתר
+    function loadRev(){
+      if(!B) return;
+      const ws = rws;
+      Promise.all([
+        B.collection("punch").where("day", ">=", ws).where("day", "<=", addDay(ws, 6)).get(),
+        B.collection("fix").where("day", ">=", ws).where("day", "<=", addDay(ws, 6)).get()
+      ]).then(([p, f]) => setRdata({ ws, punches: p.docs.map(d => d.data({ serverTimestamps:"estimate" })), fixes: f.docs.map(d => d.data({ serverTimestamps:"estimate" })) }))
+        .catch(e => { setRdata(null); setErr(String(e.code || e.message || e)); });
+    }
+    useEffect(()=>{ if(view === "rev" && B){ setRdata(null); loadRev(); } }, [view, rws, B]);
+    // אישור מרוכז: כל יום נרשם כתיקון נפרד עם שם המאשר, השעה והחריגים שאושרו — הרישום המקורי לא משתנה
+    async function bulkApprove(list, sName){
+      const kinds = {};
+      list.forEach(r => r.openFlags.forEach(f => { const t = f.t.replace(/\s*(·.*|[\d(].*)$/, ""); kinds[t] = (kinds[t] || 0) + 1; }));
+      if(!confirm("לאשר " + list.length + " ימי עבודה ב" + sName + " כמו שהם?\n\n" +
+        Object.entries(kinds).map(([t, n]) => "• " + t + " × " + n).join("\n") +
+        "\n\nכל יום נרשם כאישור על שמך (" + who + ") עם שעת השרת, ואפשר לראות אותו בהיסטוריית התיקונים.")) return;
+      setRbusy(sName);
+      const res = await Promise.allSettled(list.map(r => {
+        const id = r.day.replace(/-/g, "") + "_" + r.w + "_" + rid(5);
+        return B.collection("fix").doc(id).set({ id, w:r.w, day:r.day, approved:true, inT:null, outT:null, absent:false, bulk:true,
+          reason:"אישור מרוכז · " + r.openFlags.map(f => f.t).join(", "), by:who, at:FV() });
+      }));
+      const bad = res.filter(x => x.status === "rejected").length;
+      setRbusy("");
+      notify(bad ? (list.length - bad) + " אושרו · " + bad + " נכשלו (עובד שמשויך לאתר של מנהל אחר)" : list.length + " ימים אושרו");
+      loadRev();
+    }
     // איתור מיקום אוטומטי: אתר בלי מיקום לומד אותו מרישומי העובדים
     // (לפחות 3 רישומים עם GPS מדויק מ-2 עובדים שונים, ורובם קרובים זה לזה)
     useEffect(()=>{
@@ -3055,16 +3087,58 @@ ${l}`
           ${photoCard}`}`;
     }
 
+    if(view === "rev"){
+      const ready = rdata && rdata.punches && rdata.ws === rws;
+      const all = ready ? dayRows(rdata.punches, rdata.fixes, workers, sitesById, now).filter(r => r.openFlags.length) : [];
+      // ימים בלי כניסה או בלי יציאה — חסרה שעה, אי אפשר לאשר אותם כמו שהם
+      const needTime = r => r.openFlags.some(f => f.k === "noout" || f.k === "noin");
+      const bySite = new Map();
+      all.forEach(r => { const k = visIds.has(r.site) ? r.site : (mgr === "all" ? "_none" : null); if(k == null) return; if(!bySite.has(k)) bySite.set(k, []); bySite.get(k).push(r); });
+      const list = [...visSites.filter(s => bySite.has(s.id)), ...(bySite.has("_none") ? [{ id:"_none", name:"ללא אתר / אתר לא פעיל" }] : [])];
+      const tot = [...bySite.values()].reduce((s, a) => s + a.length, 0);
+      content = html`
+        <div class="rowbet adate">
+          <button class="chip" onClick=${()=>setRws(addDay(rws, -7))}>‹ שבוע קודם</button>
+          <b>${wkLabel(rws)}</b>
+          <button class="chip" disabled=${addDay(rws, 7) > dstr(now)} onClick=${()=>setRws(addDay(rws, 7))}>שבוע הבא ›</button>
+        </div>
+        <div class="hint" style=${{ textAlign:"start", margin:"8px 0" }}>כל הימים בשבוע שסומנו לבדיקה, לפי אתר. לוחצים על שורה כדי לראות תמונות ומיקום ולתקן. <b>"אשר את כל השלמים"</b> מאשר במכה אחת ימים שיש בהם כניסה ויציאה — כל אישור נרשם על שם המאשר ונשמר בהיסטוריה. ימים בלי יציאה צריכים שעת יציאה ידנית.</div>
+        ${!ready ? html`<div class="empty">טוען את השבוע…</div>` : tot === 0 ? html`<div class="alert empty" style=${{ marginTop:12 }}><span class="b"></span>אין ימים לבדיקה בשבוע הזה${mgr !== "all" ? " באתרים של " + mgr : ""}.</div>` : html`
+          <div class="kpis"><div class="kpi crit"><b>${tot}</b><span>ימים לבדיקה</span></div><div class="kpi"><b>${list.length}</b><span>אתרים</span></div></div>
+          <div class="asites">
+            ${list.map(s => {
+              const rs = bySite.get(s.id).slice().sort((a, b) => a.day.localeCompare(b.day) || a.name.localeCompare(b.name, "he"));
+              const okList = rs.filter(r => !needTime(r)), timeN = rs.length - okList.length;
+              return html`
+                <div key=${s.id} class="card asite">
+                  <div class="rowbet">
+                    <div><b>${s.name}</b><div class="sub2">${s.owner ? ownerName(s) + " · " : ""}${rs.length} לבדיקה${timeN ? " · " + timeN + " בלי שעת יציאה/כניסה" : ""}</div></div>
+                  </div>
+                  ${okList.length > 0 && html`<button class="btn ok wide roh" style=${{ marginTop:8 }} disabled=${!!rbusy} onClick=${()=>bulkApprove(okList, s.name)}>${rbusy === s.name ? "מאשר…" : "✓ אשר את כל השלמים (" + okList.length + ")"}</button>`}
+                  <div class="arows">
+                    ${rs.map(r => html`
+                      <button key=${r.key} class=${"arow sm " + (needTime(r) || r.openFlags.some(f => f.sev === "crit") ? "crit" : "warn")} onClick=${()=>{ setSheet({ kind:"row", key:r.key, rev:true }); loadPhotos(r.ps.map(p => p.id)); loadRefs([r.w]); }}>
+                        <span class="an">${r.name}<small>${dayLabel(r.day).replace(/\/\d{4}$/, "")}</small></span>
+                        <span class="at">${hm(r.inT)}–${hm(r.outT)}</span>
+                        <span class="ah">${r.ms ? hrs(r.ms).toFixed(2) : "—"}</span>
+                        <span class="af">${needTime(r) ? html`<span class="aflag crit">✎ חסרה שעה</span>` : null}${flagChips(r.openFlags.filter(f => !needTime(r) || (f.k !== "noout" && f.k !== "noin")), true)}</span>
+                      </button>`)}
+                  </div>
+                </div>`;
+            })}
+          </div>`}`;
+    }
+
     if(view === "ag" && mgr === "all")
       content = html`<${AttAgencies} B=${B} workers=${workers} sitesById=${sitesById} who=${who} notify=${notify} now=${now} office=${office}
-        agencies=${agencies} reps=${agReps} acks=${agAcks} />`;
+        agencies=${agencies} reps=${agReps} acks=${agAcks} onReview=${ws => { setRws(ws); setView("rev"); }} />`;
     if(view === "workers")
       content = html`<${AttWorkers} B=${B} code=${code} workers=${workers} visSites=${visSites} mgr=${mgr} who=${who} notify=${notify} />`;
 
     // ── חלוניות ──
     let sheetEl = null;
     if(sheet && sheet.kind === "row"){
-      const src = sheet.month && mdata && mdata.punches ? mdata : { punches, fixes };
+      const src = sheet.rev && rdata && rdata.punches ? rdata : sheet.month && mdata && mdata.punches ? mdata : { punches, fixes };
       const [wid, sday] = sheet.key.split("|");
       const r = dayRows(src.punches.filter(p => p.w === wid && p.day === sday), src.fixes.filter(f => f.w === wid && f.day === sday), workers, sitesById, now)[0];
       const w = workers.find(x => x.id === wid);
@@ -3075,7 +3149,7 @@ ${l}`
         onSave=${fx => {
           const id = sday.replace(/-/g, "") + "_" + wid + "_" + rid(5);
           B.collection("fix").doc(id).set({ id, w:wid, day:sday, ...fx, by:who, at:FV() })
-            .then(()=>{ if(sheet.month) loadMonth(); }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
+            .then(()=>{ if(sheet.month) loadMonth(); if(sheet.rev) loadRev(); }).catch(e => notify("שמירה נכשלה: " + (e.code || e.message)));
           setSheet(null); notify(fx.approved ? "סומן כנבדק" : "התיקון נשמר — הרישום המקורי נשאר ביומן");
         }} />`;
     }
@@ -3110,6 +3184,7 @@ ${l}`
         <div class="chips" style=${{ marginTop:0 }}>
           ${T("day", "יומי")}
           ${T("month", "חודשי ושכר")}
+          ${T("rev", "לבדיקה")}
           ${mgr === "all" && T("ag", "חברות כ״א")}
           ${T("workers", "עובדים (" + workers.filter(w => w.active !== false && (mgr === "all" || wSites(w).some(x => visIds.has(x)))).length + ")")}
         </div>
@@ -3427,7 +3502,7 @@ ${l}`
           </div>`}
       </div>`;
   }
-  function AttAgencies({ B, workers, sitesById, who, notify, now, office, agencies, reps, acks }){
+  function AttAgencies({ B, workers, sitesById, who, notify, now, office, agencies, reps, acks, onReview }){
     const today = dstr(now);
     const [ws, setWs] = useState(()=> addDay(wkStartOf(dstr(Date.now())), -7));
     const [wd, setWd] = useState(null);
@@ -3512,7 +3587,8 @@ ${l}`
                   <div class=${"kpi " + (opn.length ? "crit" : "")}><b>${opn.length}</b><span>לבדיקה</span></div>
                 </div>
                 ${!ended && html`<div class="sub2" style=${{ marginTop:8 }}>השבוע עוד לא הסתיים — נועלים אחרי מוצאי שבת.</div>`}
-                ${ended && opn.length > 0 && html`<div class="alert crit" style=${{ marginTop:8 }}><span class="b"></span>אי אפשר לנעול: ${opn.length} ימים לבדיקה — ${opn.slice(0, 6).map(r => r.name + " " + dmyS(r.day).slice(0, 5)).join(", ")}${opn.length > 6 ? "…" : ""}. מאשרים או מתקנים אותם בלשונית "יומי".</div>`}
+                ${ended && opn.length > 0 && html`<div class="alert crit" style=${{ marginTop:8 }}><span class="b"></span>אי אפשר לנעול: ${opn.length} ימים לבדיקה — ${opn.slice(0, 6).map(r => r.name + " " + dmyS(r.day).slice(0, 5)).join(", ")}${opn.length > 6 ? "…" : ""}.</div>
+                  <button class="btn wide" style=${{ marginTop:8 }} onClick=${()=>onReview && onReview(ws)}>🔍 פתח את רשימת הבדיקה של השבוע</button>`}
                 ${changed && html`<div class="alert warn" style=${{ marginTop:8 }}><span class="b"></span>השעות השתנו מאז הנעילה (תיקון אחרי נעילה). צריך לנעול מחדש — החברה תקבל גרסה ${rep.version + 1} עם פירוט השינויים.</div>`}
                 ${office && ended && (!rep || changed) && html`<button class="btn pri wide" style=${{ marginTop:10 }} disabled=${!canLock} onClick=${()=>lock(ag, built, rep)}>${busy === ag.id ? "נועל…" : rep ? "🔒 נעל מחדש ושלח (גרסה " + (rep.version + 1) + ")" : "🔒 נעל ושלח לאישור החברה"}</button>`}`}
               ${rep && html`
@@ -3523,7 +3599,7 @@ ${l}`
                 </div>
                 ${open === rep.id && html`<${AgRepView} rep=${rep} ack=${ack} acks=${acks} />`}`}
               <div class="sub2" style=${{ marginTop:10, paddingTop:8, borderTop:"1px solid var(--line-2)" }}>
-                חודש ${monthLabel(month)}: ${mo.H.toFixed(2)} שעות · ${nis(mo.A)} ·
+                חודש ${monthLabel(month)} (רק שבועות נעולים): ${mo.H.toFixed(2)} שעות · ${nis(mo.A)} ·
                 ${mo.weeks.map(x => html` <span key=${x.ws} class=${"aflag " + (x.ack && x.ack.status === "approved" ? "ok" : x.ack ? "crit" : "warn")}>${x.ws.slice(8)}/${x.ws.slice(5, 7)} ${!x.rep ? "לא נעול" : x.ack ? (x.ack.status === "approved" ? "✓" : "השגה") : "ממתין"}</span>`)}
                 ${mo.weeks.some(x => x.rep) && html` <button class="chip" onClick=${()=>agXlsx("שעות " + ag.name + " " + monthLabel(month).replace("/", "."), mo.weeks.filter(x => x.rep).map(x => ({ rep:x.rep, ack:x.ack, rows:x.rows })))}>⬇ אקסל חודשי</button>`}
               </div>
@@ -3696,7 +3772,7 @@ ${l}`
           })}
           ${hist.length > 0 && html`
             <div class="lbl" style=${{ marginTop:12 }}>היסטוריית תיקונים</div>
-            ${hist.map(f => html`<div key=${f.id} class="logrow"><span class="tm">${tsMs(f.at) ? dmy(tsMs(f.at)) + " " + hhmm(tsMs(f.at)) : ""}</span> · <b>${f.by}</b> · ${f.absent ? "סימן היעדרות" : f.approved ? "אישר כמו שהוא" : "כניסה " + hm(f.inT) + " · יציאה " + hm(f.outT)}${f.reason ? " — " + f.reason : ""}</div>`)}`}
+            ${hist.map(f => html`<div key=${f.id} class="logrow"><span class="tm">${tsMs(f.at) ? dmy(tsMs(f.at)) + " " + hhmm(tsMs(f.at)) : ""}</span> · <b>${f.by}</b> · ${f.absent ? "סימן היעדרות" : f.approved ? (f.bulk ? "אישר באישור מרוכז" : "אישר כמו שהוא") : "כניסה " + hm(f.inT) + " · יציאה " + hm(f.outT)}${f.reason ? " — " + f.reason : ""}</div>`)}`}
           <div class="lbl roh" style=${{ marginTop:14 }}>תיקון או אישור</div>
           <div class="afix2 roh">
             <label class="afield">כניסה<input type="time" value=${inV} disabled=${absent} onInput=${e => setInV(e.target.value)} /></label>
