@@ -1,6 +1,6 @@
 /* Service worker — בקרה / ט.ש. מי-רון
    Bump CACHE whenever a shell file changes. */
-const CACHE = "bakara-v48";
+const CACHE = "bakara-v49";
 
 const SHELL = [
   "./",
@@ -48,7 +48,8 @@ self.addEventListener("fetch", (e) => {
   // Page navigations: network first, fall back to cached shell when offline.
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req).catch(() => caches.match("index.html").then((r) => r || caches.match("./")))
+      // no-cache: בודק מול השרת בכל פתיחה, כדי שלא תוגש גרסה ישנה מהזיכרון של הדפדפן אחרי עדכון
+      fetch(req, { cache: "no-cache" }).catch(() => caches.match("index.html").then((r) => r || caches.match("./")))
     );
     return;
   }

@@ -542,6 +542,15 @@
   .pdnew{ position:absolute; top:-4px; inset-inline-start:-4px; min-width:17px; height:17px; padding:0 4px; border-radius:9px; background:var(--crit); color:#fff; font-style:normal; font-size:.62rem; font-weight:700; line-height:17px; text-align:center; }
   .pdban{ width:100%; border:0; border-bottom:1px solid var(--warn); cursor:pointer; font-weight:700; }
   /* חשבוניות ספקים */
+  .mgrrow{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:10px 2px; border-bottom:1px solid var(--line); }
+  .mgrname{ flex:1 1 180px; min-width:0; }
+  .mgrsel{ display:flex; align-items:center; gap:6px; font-family:"Heebo",sans-serif; font-size:.8rem; color:var(--ink-3); }
+  .mgrsel select, .mgrextra select{ width:auto; font-family:inherit; padding:5px 8px; }
+  .mgrextra{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-family:"Heebo",sans-serif; font-size:.8rem; color:var(--ink-3); }
+  .invproj{ width:100%; border-collapse:collapse; font-family:"Heebo",sans-serif; font-size:.86rem; }
+  .invproj th, .invproj td{ padding:8px 6px; border-bottom:1px solid var(--line); text-align:start; }
+  .invproj td.n{ direction:ltr; text-align:end; white-space:nowrap; }
+  .invproj tr.pr{ cursor:pointer; } .invproj tr.pr:hover{ background:var(--surface-2); }
   .invimp{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)}
   .invimp .pdt{flex:1;min-width:0}.invimp select{width:auto;flex:none;font-family:inherit;padding:4px 6px}
   .invrow .pdopen{ gap:8px; }
@@ -663,6 +672,7 @@
     if(REOPEN.includes(site.num)) site.active = true;
     if(MERGED["s" + site.num]) site.active = false;
     if(RAWBY[site.num]) site.name = RAWBY[site.num][3];
+    if(site.mgrManual) return;   // המנהלים שויכו ידנית במסך "שיוך מנהלים" — הרשימה הקבועה לא דורסת
     const m = MGR[site.num];
     site.owner = m
       ? { name:m.name, role:"מנהל פרויקט" }
@@ -5582,6 +5592,43 @@ ${l}`
     </div>`;
   }
 
+  /* חשבוניות לפי פרויקט: לכל פרויקט — כמה חשבוניות, סכום לפני מע״מ וכולל, כמה עוד באישור. לחיצה פותחת את החשבוניות שלו */
+  function InvProj({ list, sups, onOpen }){
+    const months = [...new Set(list.map(invMonthOf).filter(Boolean))].sort().reverse();
+    const [mon, setMon] = useState(months[0] || pdPrevMonth()), [openP, setOpenP] = useState("");
+    const rows = list.filter(f => f.status !== "rej" && (mon === "all" || invMonthOf(f) === mon));
+    const groups = {};
+    rows.forEach(f => { const k = f.siteName || "כללי / בלי פרויקט"; (groups[k] = groups[k] || []).push(f); });
+    const keys = Object.keys(groups).sort((a, b) => a.startsWith("כללי") ? 1 : b.startsWith("כללי") ? -1 : a.localeCompare(b, "he"));
+    const sum = (a, fn) => a.reduce((t, f) => t + (fn(f) || 0), 0);
+    const waiting = a => a.filter(f => f.status === "new" || f.status === "pm" || f.status === "tal").length;
+    return html`<div class="card">
+      <div class="rowbet" style=${{gap:8, flexWrap:"wrap"}}>
+        <div class="lbl" style=${{margin:0}}>🏗 חשבוניות לפי פרויקט</div>
+        <select class="tin" style=${{width:"auto", fontFamily:"inherit"}} value=${mon} onChange=${e=>{ setMon(e.target.value); setOpenP(""); }}>
+          ${(months.includes(mon) || mon === "all" ? months : [mon, ...months]).map(m => html`<option key=${m} value=${m}>${pdPer(m)}</option>`)}
+          <option value="all">כל החודשים</option>
+        </select>
+      </div>
+      ${!keys.length ? html`<div class="empty">אין חשבוניות ${mon === "all" ? "" : "ב" + pdPer(mon)}</div>` : html`
+      <table class="invproj">
+        <thead><tr><th>פרויקט</th><th>חשבוניות</th><th>לפני מע״מ</th><th>כולל מע״מ</th><th>באישור</th></tr></thead>
+        <tbody>
+          ${keys.map(k => { const a = groups[k], w = waiting(a); return html`
+            <tr key=${k} class="pr" onClick=${()=>setOpenP(openP === k ? "" : k)}>
+              <td><b>${openP === k ? "▾ " : "◂ "}${k}</b></td><td class="n">${a.length}</td>
+              <td class="n">${invMoney(sum(a, invNet))}</td><td class="n">${invMoney(sum(a, f => f.total))}</td>
+              <td class="n" style=${{color: w ? "var(--warn)" : "var(--ink-3)"}}>${w || "—"}</td></tr>
+            ${openP === k && html`<tr><td colspan="5" style=${{padding:"4px 0 10px"}}><div class="pdlist">
+              ${a.slice().sort((x, y) => String(y.date).localeCompare(String(x.date))).map(f => html`<${InvRow} key=${f.id} f=${f} sups=${sups} onOpen=${onOpen} />`)}
+            </div></td></tr>`}`; })}
+          <tr><td><b>סה״כ</b></td><td class="n"><b>${rows.length}</b></td><td class="n"><b>${invMoney(sum(rows, invNet))}</b></td><td class="n"><b>${invMoney(sum(rows, f => f.total))}</b></td><td class="n"><b>${waiting(rows) || "—"}</b></td></tr>
+        </tbody>
+      </table>`}
+      <div class="sub2" style=${{marginTop:8}}>הפרויקט נקבע בכל חשבונית (שדה "פרויקט"). חשבוניות בלי פרויקט נספרות ב"כללי". דוח אקסל מלא באותו מבנה של הגיליון — בלשונית "📦 לרו״ח".</div>
+    </div>`;
+  }
+
   /* העלאה ידנית (צילום / קובץ) — לחשבונית שהגיעה ביד או בווטסאפ */
   async function invUpload(files, sups, cfg, who, notify, onProg){
     let n = 0;
@@ -5664,6 +5711,7 @@ ${l}`
       ["ok", "לתשלום", by("ok").length],
       ["paid", "שולמו", by("paid").length],
       ["all", "הכול", list.length],
+      ["proj", "🏗 לפי פרויקט"],
       ["sup", "ספקים", sups.length],
       ["acc", "📦 לרו״ח"]
     ];
@@ -5742,6 +5790,7 @@ ${l}`
           ${!sups.length && html`<div class="empty">עוד אין ספקים. הכי מהיר: "📥 ייבוא מאקסל" מטבלאות הספקים הקיימות. ח.פ. ומייל של כל ספק נלמדים לבד מהחשבונית הראשונה שלו.</div>`}
         </div>`
       : cur === "acc" ? html`<${InvAcc} list=${list} sups=${sups} cfg=${cfg} who=${who} notify=${notify} />`
+      : cur === "proj" ? html`<${InvProj} list=${list} sups=${sups} onOpen=${setOpen} />`
       : html`
         <input class="tin" style=${{fontFamily:"inherit", marginBottom:10}} placeholder="🔍 חיפוש — ספק, מספר, פרויקט, סכום" value=${q} onInput=${e=>setQ(e.target.value)} />
         ${bulkSt && shown.length > 0 && html`<div class="invbulk">
@@ -5956,7 +6005,7 @@ ${l}`
     }, [nav.screen, nav.sid]);
     // מעבר מרשימת מנהלים ישנה לחדשה גם במסד המשותף
     useEffect(()=>{
-      if(cloudCode && isOffice && cloud.ready && !cloud.empty && st.rosterV !== ROSTER_V)
+      if(cloudCode && isOffice && cloud.ready && !cloud.empty && (st.rosterV || 0) < ROSTER_V)   // רק שדרוג — גרסה ישנה לא מחזירה רשימה ישנה
         update(d => { rosterSync(d); d.rosterV = ROSTER_V; return d; });
     }, [cloud.ready, cloud.empty, st.rosterV, isOffice]);
 
@@ -6321,7 +6370,7 @@ ${l}`
         ? html`<${InvAdmin} st=${vst} who=${who} notify=${notify} />`
         : html`<${InvMine} list=${invMineL} who=${who} notify=${notify} />`;
     else if(nav.screen === "ctl.home")
-      body = html`<${Control} st=${vst} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctlV} setCtl=${setCtlV} locked=${!!myMgr}
+      body = html`<${Control} st=${vst} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctlV} setCtl=${setCtlV} locked=${!!myMgr} update=${isOffice ? update : null}
         onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} who=${who} />`;
     else if(nav.screen === "ctl.site")
       body = html`<${SiteDetail} site=${bySite(nav.id)} st=${vst} now=${now} ex=${exOfSite(exceptions, nav.id)}
@@ -6484,7 +6533,52 @@ ${l}`
     };
   }
 
-  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify, who, locked }){
+  /* שיוך מנהלים לפרויקטים — רק להנהלה/משרד. השינוי נשמר באתר עצמו ומסומן "ידני", כך שהרשימה הקבועה בקוד לא דורסת אותו */
+  function MgrAssign({ st, update, who, notify }){
+    const [names, setNames] = useState(null), [q, setQ] = useState("");
+    useEffect(()=> firebase.firestore().collection("staff").onSnapshot(
+      qs => setNames(qs.docs.map(d => d.data()).filter(x => x.active !== false && x.role === "mgr" && x.name).map(x => x.name).sort((a, b) => a.localeCompare(b, "he"))),
+      () => setNames([])), []);
+    const sites = st.sites.filter(s => s.active).filter(s => !q.trim() || s.name.includes(q.trim()) || siteMgrs(s).some(n => n.includes(q.trim())))
+      .sort((a, b) => a.name.localeCompare(b.name, "he"));
+    function save(id, owner, mgrs){
+      update(d => {
+        const s = d.sites.find(x => x.id === id); if(!s) return d;
+        s.owner = owner ? { name:owner, role:"מנהל פרויקט" } : { name:"לא משויך", role:"דרוש שיוך מנהל" };
+        s.mgrs = [...new Set(mgrs.filter(n => n && n !== owner))];
+        s.mgrManual = true;
+        pushLog(d, who, "שיוך מנהלים: " + (owner || "לא משויך") + (s.mgrs.length ? " + " + s.mgrs.join(", ") : ""), id);
+        return d;
+      });
+      notify("נשמר — " + (st.sites.find(x => x.id === id) || {}).name);
+    }
+    if(!names) return html`<div class="empty">טוען את רשימת המנהלים…</div>`;
+    return html`<div class="card" style=${{marginBottom:12}}>
+      <div class="lbl">🔧 שיוך מנהלים לפרויקטים</div>
+      <div class="sub2">בכל פרויקט: מנהל ראשי (אחראי — אליו הולכים חריגים ואישורי חשבוניות) ומנהלים נוספים עם גישה מלאה לאתר. השינוי נשמר מיד ומופיע אצל כולם.</div>
+      <input class="tin" style=${{fontFamily:"inherit", margin:"8px 0"}} placeholder="🔍 חיפוש פרויקט או מנהל" value=${q} onInput=${e=>setQ(e.target.value)} />
+      ${sites.map(s => {
+        const own = ownerName(s), main = own === "לא משויך" || own === "—" ? "" : own, extra = s.mgrs || [];
+        return html`<div key=${s.id} class="mgrrow">
+          <div class="mgrname"><b>${s.name}</b>${!main ? html` <span class="tg" style=${{background:"var(--crit-wash)", color:"var(--crit)"}}>לא משויך</span>` : null}</div>
+          <label class="mgrsel">ראשי
+            <select class="tin" value=${main} onChange=${e=>save(s.id, e.target.value, extra)}>
+              <option value="">— לא משויך —</option>
+              ${(names.includes(main) || !main ? names : [main, ...names]).map(n => html`<option key=${n} value=${n}>${n}</option>`)}
+            </select></label>
+          <div class="mgrextra">נוספים:
+            ${extra.map(n => html`<button key=${n} class="chip on" title="הסר" onClick=${()=>save(s.id, main, extra.filter(x => x !== n))}>${n} ✕</button>`)}
+            <select class="tin" value="" onChange=${e=>{ if(e.target.value) save(s.id, main, [...extra, e.target.value]); }}>
+              <option value="">➕ הוסף</option>
+              ${names.filter(n => n !== main && !extra.includes(n)).map(n => html`<option key=${n} value=${n}>${n}</option>`)}
+            </select>
+          </div>
+        </div>`; })}
+    </div>`;
+  }
+
+  function Control({ st, now, exceptions, cards, ctl, setCtl, onOpen, onNudge, onResolve, notify, who, locked, update }){
+    const [assign, setAssign] = useState(false);
     const [rep, setRep] = useState(null);
     const { tab, mgr } = ctl;
     const list = exceptions.filter(e => mgr === "all" || locked || e.owner === mgr);
@@ -6558,7 +6652,10 @@ ${l}`
           <div class="hint">נושאי הבקרה לפי טופס התוכנית השבועית: ליווי שלד · קומפלטים · השלמות · ספרינקלרים · חניונים · כ״א בשטח · הערות/חריגים · בטיחות, ובנוסף מלאי באתר. חריג עובר דרג אחרי ${CFG.escL2h} שעות (דרג 2) ו-${CFG.escL3h} שעות (דרג בעלים). נקודת בטיחות עולה מיד לדרג 2.</div>
         `}
 
-        ${tab === "mgr" && html`
+        ${tab === "mgr" && update && html`
+          <button class=${"btn " + (assign ? "pri" : "")} style=${{flex:"none", marginBottom:12}} onClick=${()=>setAssign(a => !a)}>${assign ? "✓ סיום שיוך" : "🔧 שיוך מנהלים לפרויקטים"}</button>
+          ${assign && html`<${MgrAssign} st=${st} update=${update} who=${who} notify=${notify} />`}`}
+        ${tab === "mgr" && !assign && html`
           <div style=${{display:"flex", flexDirection:"column", gap:12}}>
             ${cards.map(c => html`
               <div key=${c.name} class="card mc">
