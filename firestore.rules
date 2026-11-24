@@ -220,5 +220,34 @@ service cloud.firestore {
       allow read: if mine(p) || isOffice();
       allow write: if isOffice();
     }
+
+    // ───── חשבוניות ספקים ─────
+    // מחוץ ל-t/ בכוונה (שם כל הצוות קורא). תהליך הקליטה מהמייל כותב עם הרשאת שרת — לא עובר כאן.
+    //   inv/{id}            — פרטי החשבונית          inv/{id}/parts/{i} — תוכן הקובץ
+    //   invsup/{id}         — כרטיסי ספקים           invmeta/{cfg|mail}  — הגדרות ומצב הקליטה
+    // המשרד: קורא וכותב הכול. מנהל פרויקט: קורא רק חשבוניות שנשלחו אליו (pm == השם שלו),
+    // ומעדכן רק את האישור שלו — כשהחשבונית ממתינה לו: מאשר (→ tal) או דוחה (→ rej)
+    function invPm(d) { return canWrite() && d.get('pm', '') == myName(); }
+    match /inv/{id} {
+      allow read: if isOffice() || invPm(resource.data);
+      allow write: if isOffice();
+      allow update: if invPm(resource.data) && resource.data.status == 'pm'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'pmBy', 'pmAt', 'pmNote'])
+                    && request.resource.data.status in ['tal', 'rej']
+                    && request.resource.data.pmBy == myName()
+                    && request.resource.data.pmAt == request.time
+                    && request.resource.data.pmNote is string && request.resource.data.pmNote.size() <= 500
+                    && (request.resource.data.status == 'tal' || request.resource.data.pmNote.size() > 0);
+    }
+    match /inv/{id}/parts/{i} {
+      allow read: if isOffice() || invPm(get(/databases/$(db)/documents/inv/$(id)).data);
+      allow write: if isOffice();
+    }
+    match /invsup/{id} {
+      allow read, write: if isOffice();
+    }
+    match /invmeta/{k} {
+      allow read, write: if isOffice();
+    }
   }
 }

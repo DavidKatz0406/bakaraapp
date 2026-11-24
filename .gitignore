@@ -10,3 +10,6 @@
 
 # חומרי הדרכה (סרטונים) — לא באתר
 הדרכה/
+
+# שרת (Cloud Functions)
+functions/node_modules/

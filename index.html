@@ -541,6 +541,18 @@
   .pdpage{ width:100%; max-width:900px; height:auto; background:#fff; border-radius:4px; box-shadow:0 2px 12px rgba(0,0,0,.4); }
   .pdnew{ position:absolute; top:-4px; inset-inline-start:-4px; min-width:17px; height:17px; padding:0 4px; border-radius:9px; background:var(--crit); color:#fff; font-style:normal; font-size:.62rem; font-weight:700; line-height:17px; text-align:center; }
   .pdban{ width:100%; border:0; border-bottom:1px solid var(--warn); cursor:pointer; font-weight:700; }
+  /* חשבוניות ספקים */
+  .invimp{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)}
+  .invimp .pdt{flex:1;min-width:0}.invimp select{width:auto;flex:none;font-family:inherit;padding:4px 6px}
+  .invrow .pdopen{ gap:8px; }
+  .invamt{ font-family:"Heebo",sans-serif; font-weight:700; font-size:.86rem; white-space:nowrap; direction:ltr; }
+  .invck{ width:18px; height:18px; flex:none; }
+  .invbulk{ display:flex; align-items:center; gap:10px; margin-bottom:8px; padding:8px 10px; background:var(--surface-2); border:1px solid var(--line-2); border-radius:12px; font-family:"Heebo",sans-serif; }
+  .invsheet .afield select{ font-size:.92rem; }
+  .kv{ display:flex; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px solid var(--line-2); font-size:.86rem; }
+  .kv:last-child{ border-bottom:0; }
+  .kv span{ color:var(--ink-3); font-family:"Heebo",sans-serif; font-size:.78rem; }
+  @media (max-width:520px){ .invrow .pill{ display:none; } }
   .apunch{ display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-2); font-size:.86rem; }
   .apunch small{ color:var(--ink-3); font-size:.7rem; }
   .apunch .thumb{ width:72px; height:72px; }
@@ -4889,6 +4901,890 @@ ${l}`
     </div>`;
   }
 
+  /* ───── חשבוניות ספקים ─────
+     החשבוניות נקלטות לבד מתיבת המייל (תהליך ברקע שכותב ל-inv), או בהעלאה ידנית.
+       inv/{id}            — פרטי החשבונית: ספק, מספר, תאריך, סכום, מע״מ, פרויקט, סטטוס, אישורים
+       inv/{id}/parts/{i}  — תוכן הקובץ בחלקים (ב-REST, לא נשמר במטמון הדפדפן — כמו המסמכים האישיים)
+       invsup/{id}         — כרטיס ספק: שם, ח.פ., כתובות מייל, סוג אישור
+       invmeta/cfg         — מי מאשר תשלומים, ח.פ. של החברה עצמה
+       invmeta/mail        — מצב החיבור לתיבת המייל (נכתב ע״י תהליך הרקע)
+     רואים: המשרד בלבד. מנהל פרויקט רואה רק חשבוניות שנשלחו אליו לאישור (pm == השם שלו).
+     מסלול: חדשה ← (מנהל פרויקט, בספק "לא סטנדרטי") ← אישור תשלום (בספק רגיל) ← מאושרת ← שולמה */
+  const INV_ST = {
+    new:  { n:"להשלמת פרטים",        c:"warn",     e:"🆕" },
+    pm:   { n:"ממתינה למנהל פרויקט", c:"warn",     e:"👷" },
+    tal:  { n:"ממתינה לאישור תשלום", c:"warn",     e:"✍️" },
+    ok:   { n:"מאושרת לתשלום",       c:"ok",       e:"✓" },
+    paid: { n:"שולמה",               c:"inactive", e:"💳" },
+    rej:  { n:"נדחתה",               c:"crit",     e:"✕" }
+  };
+  const INV_MODE = {
+    tal:  { n:"רגיל",       d:"אישור תשלום בלבד" },
+    pm:   { n:"לא סטנדרטי", d:"קודם מנהל הפרויקט, אחר כך אישור תשלום (טרקטור, חול, צילומים…)" },
+    auto: { n:"אוטומטי",    d:"הוראת קבע / חיוב קבוע — בלי אישור" }
+  };
+  const invCol = () => firebase.firestore().collection("inv");
+  const invSupCol = () => firebase.firestore().collection("invsup");
+  const invMeta = k => firebase.firestore().collection("invmeta").doc(k);
+  const invMoney = n => (n || n === 0) && isFinite(n) ? "₪" + Number(n).toLocaleString("he-IL", { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits:2 }) : "—";
+  const invDmy = d => /^\d{4}-\d{2}-\d{2}$/.test(d || "") ? d.slice(8) + "/" + d.slice(5, 7) + "/" + d.slice(2, 4) : "";
+  const invMonthOf = f => (f.date || "").slice(0, 7) || (tsMs(f.at) ? new Date(tsMs(f.at)).toISOString().slice(0, 7) : "");
+  const invSupName = (f, sups) => { const s = sups && sups.find(x => x.id === f.sup); return s ? s.name : f.supName || ""; };
+  const invPayers = cfg => (cfg && cfg.payers && cfg.payers.length ? cfg.payers : ["טל"]);
+  // הסטטוס הבא אחרי שהמשרד השלים את הפרטים — לפי סוג הספק
+  const invNext = mode => mode === "auto" ? "ok" : mode === "pm" ? "pm" : "tal";
+
+  async function invLoad(f){
+    const parts = await Promise.all(Array.from({ length: f.parts || 1 }, (_, i) =>
+      pdRest("inv/" + f.id + "/parts/" + i).then(j => pdUnB64(j.fields.d.bytesValue))));
+    const out = new Uint8Array(parts.reduce((a, x) => a + x.length, 0));
+    let o = 0; parts.forEach(x => { out.set(x, o); o += x.length; });
+    return out;
+  }
+  // קודם החלקים, ורק בסוף פרטי החשבונית — כך חשבונית חלקית לא מופיעה ברשימה
+  async function invSave(meta, bytes){
+    const ref = invCol().doc(), id = ref.id;
+    const n = Math.max(1, Math.ceil(bytes.length / PD_PART));
+    for(let i = 0; i < n; i++)
+      await pdRest("inv/" + id + "/parts/" + i, "PATCH", { fields: { d: { bytesValue: pdB64(bytes.subarray(i * PD_PART, (i + 1) * PD_PART)) } } });
+    await ref.set({ ...meta, id, parts:n, size:bytes.length, at:FV() });
+    return id;
+  }
+  async function invDelete(f){
+    for(let i = 0; i < (f.parts || 1); i++) await pdRest("inv/" + f.id + "/parts/" + i, "DELETE");
+    await invCol().doc(f.id).delete();
+  }
+  const invHist = (who, s, note) => firebase.firestore.FieldValue.arrayUnion({ s, by:who, t:Date.now(), ...(note ? { note } : {}) });
+
+  /* קריאת הפרטים מתוך ה-PDF: ח.פ. של הספק, מספר חשבונית, תאריך, סכום ומע״מ.
+     ניחוש בלבד — המשרד מאשר או מתקן. PDF סרוק (תמונה) — אין טקסט, ממלאים ביד */
+  const invNum = s => { const x = parseFloat(String(s).replace(/,/g, "")); return isFinite(x) ? x : null; };
+  // הרבה PDF-ים בעברית שומרים את המילים בסדר חזותי (הפוך). מוסיפים עותק שבו כל מילה בעברית מתהפכת חזרה
+  const invWordRev = t => t.replace(/[\u05d0-\u05ea]+/g, w => [...w].reverse().join(""));
+  // וגם הספרות יוצאות לפעמים הפוך ("00.045,3" במקום "3,540.00"). בודקים לפי סכומים ותאריכים לאיזה כיוון המסמך נוטה
+  const INV_NUMTOK = /\d[\d.,\/\-]*\d|\d/g;
+  const invOkMoney = x => /^\d{1,3}(,\d{3})+(\.\d{1,2})?$|^\d+\.\d{2}$/.test(x);
+  const invOkDate = x => { const m = x.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/); return !!m && +m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31; };
+  function invFixDigits(t){
+    let f = 0, r = 0;
+    (t.match(INV_NUMTOK) || []).forEach(x => { const y = pdRev(x), a = invOkMoney(x) || invOkDate(x), b = invOkMoney(y) || invOkDate(y); if(a && !b) f++; if(b && !a) r++; });
+    return r > f ? t.replace(INV_NUMTOK, x => pdRev(x)) : t;
+  }
+  /* שמות ספקים: השוואה בלי נקודות/גרשיים/רווחים כפולים ("ש. אפרתי" = "ש.אפרתי") */
+  const invKey = s => String(s || "").replace(/["'״׳`.\-–,()\/\\]/g, " ").replace(/\s+/g, " ").trim();
+  const invKey0 = s => invKey(s).replace(/ /g, "");
+  const invNames = s => [s.name, ...(s.aka || [])].filter(Boolean);
+  // שם ספק שמופיע בטקסט החשבונית כמילה שלמה — הארוך ביותר מנצח (כדי ש"אאא טסה" יגבר על "טסה")
+  const INV_GENERIC = /^(תשתיות|אירוע|הדפסות|מנוף|באגר|הובלה|הובלות|אתר|עובדים|טרקטורים|מחפרון|חוזה|ספק|קבלן|שומר|זרם מים|בידוד|משאבות|מכולות|מכולה)$/;
+  function invNameHit(t, sups){
+    const k = " " + invKey(t) + " ";
+    let best = null, bl = 0;
+    (sups || []).forEach(s => invNames(s).forEach(n => {
+      const nk = invKey(n);
+      if(nk.replace(/ /g, "").length < 3 || nk.length <= bl || INV_GENERIC.test(nk)) return;
+      const re = new RegExp("(^|[^\\u05d0-\\u05eaA-Za-z])" + nk.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "($|[^\\u05d0-\\u05eaA-Za-z])", "i");
+      if(re.test(k)){ best = s; bl = nk.length; }
+    }));
+    return best;
+  }
+  // כתובות של מערכות הפקת חשבוניות — משרתות הרבה ספקים, לכן לא מזהים לפיהן ספק
+  const INV_SHARED_MAIL = /no-?reply|noreply|donotreply|greeninvoice|morning|icount|ezcount|easy-?count|invoice4u|rivhit|sumit|tranzila|cardcom|hashavshevet|priority-?software|yeshinvoice|paperless/i;
+  const invMailOk = m => /@/.test(m || "") && !INV_SHARED_MAIL.test(m);
+  function invParse(text, sups, ourHp, from, subj){
+    const t0 = invFixDigits(pdNorm(text)), t = t0 + " | " + invWordRev(t0), out = {};
+    // ח.פ. / ע.מ. — 9 ספרות עם ספרת ביקורת (גם בסדר הפוך — PDF בעברית שומר לפעמים ספרות הפוך)
+    const hps = [];
+    (t.match(/\d{8,9}/g) || []).forEach(r => [r, pdRev(r)].forEach(x => { x = x.padStart(9, "0"); if(isIlId(x) && !hps.includes(x)) hps.push(x); }));
+    const ours = String(ourHp || "").replace(/\D/g, "");
+    const cand = hps.filter(h => h !== ours);
+    const bySup = (sups || []).find(s => s.hp && cand.includes(s.hp));
+    if(bySup){ out.sup = bySup.id; out.hp = bySup.hp; } else if(cand.length) out.hp = cand[0];
+    // אחרי ח.פ.: לפי כתובת השולח, ואז לפי שם הספק שכתוב בחשבונית
+    const fm = String(from || "").toLowerCase();
+    if(!out.sup && invMailOk(fm)){ const s = (sups || []).find(x => (x.emails || []).includes(fm)); if(s) out.sup = s.id; }
+    if(!out.sup){ const s = invNameHit(t + " | " + (subj || ""), sups); if(s){ out.sup = s.id; out.byName = true; } }
+    // תאריך: הראשון שנראה תקין (עד שנתיים אחורה, לא בעתיד הרחוק)
+    const now = new Date(), re = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g; let m;
+    while((m = re.exec(t))){
+      let d = +m[1], mo = +m[2], y = +m[3]; if(y < 100) y += 2000;
+      if(mo < 1 || mo > 12 || d < 1 || d > 31) continue;
+      const dt = new Date(y, mo - 1, d);
+      if(dt > new Date(now.getTime() + 40 * 864e5) || dt < new Date(now.getTime() - 730 * 864e5)) continue;
+      out.date = y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0"); break;
+    }
+    // מספר חשבונית: ליד "חשבונית" (משני הצדדים, כי סדר המילים בעברית מתהפך לפעמים)
+    const nm = t.match(/(?:חשבונית(?: מס)?(?: ?\/? ?קבלה)?|חשבון עסקה|invoice)\s*(?:מספר|מס|no\.?|#)?\s*:?\s*(\d{3,10})\b/i)
+            || t.match(/\b(\d{3,10})\s*:?\s*(?:מספר|מס)?\s*(?:קבלה ?\/? ?)?(?:מס )?חשבונית/);
+    if(nm) out.no = nm[1];
+    // סכומים: עם אגורות (1,234.50). סה״כ לתשלום — הסכום שליד מילות הסיכום, אחרת הגדול ביותר
+    const amts = [], ar = /\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+\.\d{2}/g;
+    while((m = ar.exec(t))){ const v = invNum(m[0]); if(v != null && v > 0 && v < 1e8) amts.push({ v, i:m.index }); }
+    if(amts.length){
+      const keys = [/סהכ לתשלום|לתשלום|סהכ כולל מעמ|סהכ חשבונית|total/gi];
+      let best = null;
+      keys.forEach(k => { let km; while((km = k.exec(t))){ amts.filter(a => Math.abs(a.i - km.index) < 60).forEach(a => { if(!best || a.v > best) best = a.v; }); } });
+      out.total = best || Math.max(...amts.map(a => a.v));
+      // מע״מ: סכום בטקסט שמתאים ל-18% מתוך הסכום הכולל (או 17% לחשבוניות ישנות)
+      const vat = amts.map(a => a.v).find(v => [18, 17].some(p => Math.abs(v - out.total * p / (100 + p)) < 1));
+      if(vat) out.vat = vat;
+    }
+    return out;
+  }
+  async function invReadFile(bytes, mime){
+    if(mime !== "application/pdf") return { pages:1, text:"" };
+    const pdf = await pdOpenPdf(bytes);
+    let text = "";
+    for(let i = 1; i <= Math.min(3, pdf.numPages); i++){
+      const tc = await (await pdf.getPage(i)).getTextContent();
+      text += " " + tc.items.map(it => it.str).join(" ");
+    }
+    return { pages:pdf.numPages, text };
+  }
+
+  /* תצוגת הקובץ (מסך מלא) */
+  function InvViewer({ f, title, onClose, notify }){
+    const [st, setSt] = useState({ s:"load" });
+    const box = useRef(null);
+    useEffect(()=>{
+      let dead = false, url = null;
+      (async ()=>{
+        try{
+          if(!f.parts){ setSt({ s:"err", err:"לחשבונית הזו אין קובץ — " + (f.link ? "היא הגיעה כקישור" : "רק פרטים") }); return; }
+          const bytes = await invLoad(f);
+          if(dead) return;
+          const blob = new Blob([bytes], { type: f.mime || "application/pdf" });
+          url = URL.createObjectURL(blob);
+          setSt({ s:"ok", url, blob });
+          if((f.mime || "application/pdf") === "application/pdf"){
+            const pdf = await pdOpenPdf(bytes);
+            const w = Math.min(900, (box.current ? box.current.clientWidth : 360) || 360) * Math.min(2, window.devicePixelRatio || 1);
+            for(let i = 1; i <= pdf.numPages && !dead; i++){
+              const r = await pdRender(pdf, i, w);
+              r.c.className = "pdpage"; if(box.current) box.current.appendChild(r.c);
+            }
+          }
+        }catch(e){ if(!dead) setSt({ s:"err", err: e.message || String(e) }); }
+      })();
+      return ()=>{ dead = true; if(url) URL.revokeObjectURL(url); };
+    }, []);
+    const fname = f.fname || "חשבונית.pdf";
+    function save(){ const a = document.createElement("a"); a.href = st.url; a.download = fname; document.body.appendChild(a); a.click(); a.remove(); notify && notify("הקובץ נשמר בהורדות"); }
+    return html`
+      <div class="pdview" role="dialog" aria-label=${title}>
+        <div class="pdbar">
+          <button class="ic0" title="סגור" onClick=${onClose}>✕</button>
+          <b>🧾 ${title}</b>
+          ${st.s === "ok" && html`<button class="btn" style=${{flex:"none", padding:"7px 12px"}} onClick=${save}>⬇ שמור</button>`}
+        </div>
+        <div class="pdbody" ref=${box}>
+          ${st.s === "load" && html`<div class="empty" style=${{color:"#ddd"}}>טוען חשבונית…</div>`}
+          ${st.s === "err" && html`<div class="empty" style=${{color:"#f88"}}>לא הצלחתי לפתוח: ${st.err}</div>`}
+          ${st.s === "ok" && (f.mime || "").startsWith("image/") && html`<img class="pdpage" src=${st.url} alt=${title} />`}
+        </div>
+      </div>`;
+  }
+
+  /* שורה ברשימה */
+  function InvRow({ f, sups, dup, sel, onSel, onOpen }){
+    const s = INV_ST[f.status] || INV_ST.new;
+    const nm = invSupName(f, sups);
+    return html`<div class=${"pdrow invrow" + (f.status === "new" ? " new" : "")}>
+      ${onSel && html`<input type="checkbox" class="invck" checked=${!!sel} onChange=${()=>onSel(f.id)} aria-label="סמן" />`}
+      <button class="pdopen" onClick=${()=>onOpen(f)}>
+        <span class="pde">${s.e}</span>
+        <span class="pdt"><b>${nm || html`<span style=${{color:"var(--warn)"}}>ספק לא מזוהה</span>`}${f.no ? " · " + f.no : ""}</b>
+          <small>${[invDmy(f.date), f.siteName, f.status === "pm" && f.pm ? "אצל " + f.pm : "", !nm && f.from ? f.from : ""].filter(Boolean).join(" · ") || (f.fname || "")}${f.link && !f.parts ? " · 🔗 הגיעה כקישור" : ""}</small></span>
+        <span class="invamt">${invMoney(f.total)}</span>
+        ${dup ? html`<span class="pill crit" title="אותו ספק ואותו מספר חשבונית כבר קיימים">כפולה?</span>` : html`<span class=${"pill " + s.c}>${s.n}</span>`}
+      </button>
+    </div>`;
+  }
+
+  /* כרטיס חשבונית — המשרד משלים פרטים, מאשר, מסמן תשלום. מנהל פרויקט מאשר/דוחה */
+  /* פעם ראשונה ששרון משייכת חשבונית לספק — הבקרה לומדת את הח.פ. ואת כתובת המייל שלו,
+     ומשייכת אליו גם חשבוניות פתוחות אחרות שהגיעו מאותו מקום. מהפעם הבאה זה אוטומטי. */
+  async function invLearn(sup, f, sups, invs, cfg){
+    const ours = String((cfg && cfg.ourHp) || ""), learn = {};
+    const ph = String(f.hp || "");
+    if(!sup.hp && ph && ph !== ours && isIlId(ph) && !sups.some(s => s.hp === ph)) learn.hp = ph;
+    const fm = String(f.from || "").toLowerCase();
+    if(invMailOk(fm) && !(sup.emails || []).includes(fm) && !sups.some(s => (s.emails || []).includes(fm))) learn.emails = firebase.firestore.FieldValue.arrayUnion(fm);
+    if(!Object.keys(learn).length) return 0;
+    try{ await invSupCol().doc(sup.id).update(learn); }catch(e){ return 0; }
+    const hp = learn.hp || "", em = learn.emails ? fm : "";
+    const orphan = (invs || []).filter(x => x.id !== f.id && !x.sup && (x.status === "new" || x.status === "rej") && ((hp && x.hp === hp) || (em && String(x.from || "").toLowerCase() === em)));
+    if(!orphan.length) return 0;
+    const b = firebase.firestore().batch();
+    orphan.forEach(x => b.update(invCol().doc(x.id), { sup:sup.id, supName:sup.name, hp: x.hp || sup.hp || hp }));
+    try{ await b.commit(); return orphan.length; }catch(e){ return 0; }
+  }
+  function InvSheet({ f, sups, sites, cfg, who, office, notify, onClose, onNewSup, invs }){
+    const [d, setD] = useState({ sup:f.sup || "", no:f.no || "", date:f.date || "", total:f.total ?? "", vat:f.vat ?? "", site:f.site || "", note:f.note || "" });
+    const [busy, setBusy] = useState(false), [view, setView] = useState(false), [rn, setRn] = useState("");
+    const sup = sups.find(s => s.id === d.sup);
+    const site = sites.find(s => s.id === d.site);
+    const payer = invPayers(cfg).includes(who);
+    const edit = office && (f.status === "new" || f.status === "rej" || f.status === "pm" || f.status === "tal");
+    const title = (invSupName(f, sups) || "חשבונית") + (f.no ? " · " + f.no : "");
+    const set = (k, v) => setD(x => ({ ...x, [k]:v }));
+    function fields(){
+      const total = invNum(d.total), vat = invNum(d.vat);
+      return { sup:d.sup, supName: sup ? sup.name : "", hp: sup && sup.hp ? sup.hp : (f.hp || ""), no:String(d.no).trim(), date:d.date,
+        total: total == null ? null : total, vat: vat == null ? null : vat, site:d.site, siteName: site ? site.name : "", note:d.note.trim() };
+    }
+    async function save(next){
+      const x = fields();
+      if(next){
+        if(!x.sup){ notify("בחר ספק"); return; }
+        if(x.total == null){ notify("חסר סכום"); return; }
+        if(sup.mode === "pm" && !site){ notify("ספק לא סטנדרטי — בחר פרויקט, כדי שהחשבונית תגיע למנהל שלו"); return; }
+      }
+      setBusy(true);
+      try{
+        const upd = { ...x, supGuess:false };
+        if(next){
+          const st = invNext(sup.mode);
+          upd.status = st; upd.pm = st === "pm" ? ownerName(site) : (f.pm || "");
+          upd.hist = invHist(who, st);
+        }
+        await invCol().doc(f.id).update(upd);
+        const learned = sup ? await invLearn(sup, f, sups, invs, cfg) : 0;
+        if(learned) notify("למדתי את פרטי " + sup.name + " — שויכו אליו עוד " + learned + " חשבוניות");
+        else notify(next ?(upd.status === "pm" ? "נשלחה לאישור " + upd.pm : upd.status === "tal" ? "נשלחה לאישור תשלום" : "נשמרה — ספק אוטומטי, מאושרת") : "נשמר");
+        onClose();
+      }catch(e){ notify("השמירה נכשלה: " + (e.message || e)); }
+      setBusy(false);
+    }
+    async function act(st, extra){
+      setBusy(true);
+      try{
+        await invCol().doc(f.id).update({ status:st, hist:invHist(who, st, (extra && extra.note) || ""), ...(extra || {}) });
+        notify(INV_ST[st].n); onClose();
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      setBusy(false);
+    }
+    // מנהל פרויקט: רק שדות האישור שלו (החוקים במסד מאפשרים לו רק אותם)
+    async function pmAct(ok){
+      if(!ok && !rn.trim()){ notify("כתוב למה החשבונית נדחתה"); return; }
+      setBusy(true);
+      try{
+        await invCol().doc(f.id).update({ status: ok ? "tal" : "rej", pmBy:who, pmAt:FV(), pmNote: rn.trim() });
+        notify(ok ? "אישרת — עברה לאישור תשלום" : "החשבונית נדחתה"); onClose();
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      setBusy(false);
+    }
+    async function del(){
+      if(!confirm("למחוק את החשבונית לגמרי (גם את הקובץ)? אי אפשר לשחזר.")) return;
+      setBusy(true);
+      try{ await invDelete(f); notify("נמחקה"); onClose(); }catch(e){ notify("המחיקה נכשלה: " + (e.message || e)); setBusy(false); }
+    }
+    const hist = (f.hist || []).slice().sort((a, b) => a.t - b.t);
+    return html`<div class="scrim" onClick=${onClose}><div class="sheet asheet invsheet" onClick=${e=>e.stopPropagation()}>
+      <div class="shead" style=${{marginBottom:2}}><div><h2 style=${{fontSize:"1.15rem"}}>🧾 ${title}</h2>
+        <span class="sub">${(INV_ST[f.status] || INV_ST.new).n}${f.status === "pm" && f.pm ? " — " + f.pm : ""}${f.src === "mail" ? " · הגיעה במייל" + (f.from ? " מ-" + f.from : "") : f.by ? " · הועלתה ע״י " + f.by : ""}</span></div></div>
+      ${f.subj && html`<div class="sub2">✉️ ${f.subj}</div>`}
+      <button class="btn wide" style=${{marginTop:6}} disabled=${!f.parts && !f.link} onClick=${()=> f.parts ? setView(true) : window.open(f.link, "_blank", "noopener")}>${f.parts ? "📄 פתח את החשבונית" + (f.pages > 1 ? " (" + f.pages + " עמ׳)" : "") : f.link ? "🔗 פתח את הקישור מהמייל" : "אין קובץ"}</button>
+
+      ${office ? html`
+        <label class="afield">ספק
+          <select class="tin" style=${{fontFamily:"inherit"}} disabled=${!edit} value=${d.sup} onChange=${e=> e.target.value === "+" ? onNewSup({ hp:f.hp || "", email:f.from || "" }, id => set("sup", id)) : set("sup", e.target.value)}>
+            <option value="">— ${f.hp ? "ח.פ. " + f.hp + " לא מוכר — " : ""}בחר ספק —</option>
+            ${sups.slice().sort((a, b) => a.name.localeCompare(b.name, "he")).map(s => html`<option key=${s.id} value=${s.id}>${s.name}</option>`)}
+            <option value="+">➕ ספק חדש…</option>
+          </select></label>
+        ${sup && f.supGuess && d.sup === f.sup && html`<div class="sub2" style=${{color:"var(--warn)"}}>⚠ הספק זוהה לפי השם שכתוב בחשבונית — ודא שזה הספק הנכון. אחרי השמירה הבקרה תלמד את הח.פ. שלו ותזהה אותו בוודאות.</div>`}
+        ${sup && html`<div class="sub2">סוג: <b>${INV_MODE[sup.mode || "tal"].n}</b> — ${INV_MODE[sup.mode || "tal"].d}</div>`}
+        <div class="afix2">
+          <label class="afield">מס׳ חשבונית<input dir="ltr" disabled=${!edit} value=${d.no} onInput=${e=>set("no", e.target.value)} /></label>
+          <label class="afield">תאריך<input type="date" disabled=${!edit} value=${d.date} onInput=${e=>set("date", e.target.value)} /></label>
+        </div>
+        <div class="afix2">
+          <label class="afield">סה״כ לתשלום (₪)<input dir="ltr" inputmode="decimal" disabled=${!edit} value=${d.total} onInput=${e=>set("total", e.target.value)} /></label>
+          <label class="afield">מתוכו מע״מ<input dir="ltr" inputmode="decimal" disabled=${!edit} value=${d.vat} onInput=${e=>set("vat", e.target.value)} /></label>
+        </div>
+        <label class="afield">פרויקט${sup && sup.mode === "pm" ? " (חובה — המנהל שלו מאשר)" : ""}
+          <select class="tin" style=${{fontFamily:"inherit"}} disabled=${!edit} value=${d.site} onChange=${e=>set("site", e.target.value)}>
+            <option value="">— כללי / בלי פרויקט —</option>
+            ${sites.map(s => html`<option key=${s.id} value=${s.id}>${s.name} (${ownerName(s)})</option>`)}
+          </select></label>
+        <label class="afield">הערה<input disabled=${!edit} value=${d.note} onInput=${e=>set("note", e.target.value)} /></label>
+        ${f.pmNote && html`<div class=${"alert " + (f.status === "rej" ? "crit" : "warn")} style=${{marginTop:10}}><span class="b"></span>${f.pmBy || "המנהל"}: ${f.pmNote}</div>`}
+
+        ${(f.status === "new" || f.status === "rej") && html`
+          <button class="btn pri wide" style=${{marginTop:14}} disabled=${busy} onClick=${()=>save(true)}>${sup && sup.mode === "auto" ? "✓ שמור (ספק אוטומטי)" : sup && sup.mode === "pm" ? "👷 שלח לאישור " + (site ? ownerName(site) : "מנהל הפרויקט") : "✍️ שלח לאישור תשלום"}</button>`}
+        ${(f.status === "pm" || f.status === "tal") && html`<button class="btn wide" style=${{marginTop:12}} disabled=${busy} onClick=${()=>save(false)}>שמור תיקון בפרטים</button>`}
+        ${f.status === "tal" && (payer ? html`
+          <div class="afix2" style=${{marginTop:10}}>
+            <button class="btn pri" disabled=${busy} onClick=${()=>act("ok", { payBy:who, payAt:FV() })}>✓ מאשר תשלום</button>
+            <button class="btn" disabled=${busy} onClick=${()=>{ const n = prompt("למה לדחות?"); if(n) act("rej", { note:n, pmNote:n, pmBy:who }); }}>✕ דחה</button>
+          </div>` : html`<div class="sub2" style=${{marginTop:8}}>⏳ ממתינה לאישור של ${invPayers(cfg).join(" / ")}</div>`)}
+        ${f.status === "ok" && html`<button class="btn pri wide" style=${{marginTop:14}} disabled=${busy} onClick=${()=>act("paid", { paidAt:FV() })}>💳 סמן ששולמה</button>`}
+        ${f.status === "paid" && html`<button class="btn wide" style=${{marginTop:12}} disabled=${busy} onClick=${()=>act("ok")}>↺ בטל סימון "שולמה"</button>`}
+        ${f.status === "pm" && html`<button class="btn wide" style=${{marginTop:8}} disabled=${busy} onClick=${()=>act("new")}>↩ החזר לטיפול המשרד</button>`}
+      ` : html`
+        <div class="card" style=${{marginTop:10}}>
+          <div class="kv"><span>ספק</span><b>${invSupName(f, sups)}</b></div>
+          <div class="kv"><span>מס׳ חשבונית</span><b>${f.no || "—"}</b></div>
+          <div class="kv"><span>תאריך</span><b>${invDmy(f.date) || "—"}</b></div>
+          <div class="kv"><span>סכום</span><b>${invMoney(f.total)}</b></div>
+          <div class="kv"><span>פרויקט</span><b>${f.siteName || "—"}</b></div>
+          ${f.note && html`<div class="kv"><span>הערה</span><b>${f.note}</b></div>`}
+        </div>
+        ${f.status === "pm" ? html`
+          <label class="afield">הערה (חובה בדחייה)<input value=${rn} onInput=${e=>setRn(e.target.value)} placeholder="למשל: הכמות לא נכונה" /></label>
+          <div class="afix2" style=${{marginTop:12}}>
+            <button class="btn pri" disabled=${busy} onClick=${()=>pmAct(true)}>✓ מאשר</button>
+            <button class="btn" disabled=${busy} onClick=${()=>pmAct(false)}>✕ דוחה</button>
+          </div>`
+        : html`<div class="sub2" style=${{marginTop:10}}>${f.pmBy ? (f.status === "rej" ? "דחית" : "אישרת") + (f.pmNote ? " — " + f.pmNote : "") : INV_ST[f.status] ? INV_ST[f.status].n : ""}</div>`}
+      `}
+      ${office && hist.length > 0 && html`<details style=${{marginTop:12}}><summary class="sub2" style=${{cursor:"pointer"}}>היסטוריה (${hist.length})</summary>
+        ${hist.map((h, i) => html`<div key=${i} class="logrow"><span class="tm">${dmy(h.t)} ${hhmm(h.t)}</span> · ${(INV_ST[h.s] || {}).n || h.s} · ${h.by}${h.note ? " — " + h.note : ""}</div>`)}
+      </details>`}
+      <div class="afix2" style=${{marginTop:14}}>
+        <button class="btn" onClick=${onClose}>סגור</button>
+        ${office && html`<button class="btn" style=${{flex:"none"}} title="מחק" disabled=${busy} onClick=${del}>🗑</button>`}
+      </div>
+      ${view && html`<${InvViewer} f=${f} title=${title} notify=${notify} onClose=${()=>setView(false)} />`}
+    </div></div>`;
+  }
+
+  /* כרטיס ספק */
+  function InvSupSheet({ s, all, invs, notify, onClose, onSaved }){
+    const [d, setD] = useState({ name:s.name || "", aka:(s.aka || []).join(", "), kind:s.kind || "sup", hp:s.hp || "", emails:(s.emails || []).join(", "), mode:s.mode || "tal", note:s.note || "" });
+    const [busy, setBusy] = useState(false);
+    const set = (k, v) => setD(x => ({ ...x, [k]:v }));
+    async function save(){
+      const name = d.name.trim(), hp = d.hp.replace(/\D/g, "");
+      if(!name){ notify("חסר שם ספק"); return; }
+      if(hp && all.some(x => x.id !== s.id && x.hp === hp)){ notify("כבר יש ספק עם ח.פ. הזה"); return; }
+      setBusy(true);
+      try{
+        const ref = s.id ? invSupCol().doc(s.id) : invSupCol().doc();
+        const emails = d.emails.split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(x => /@/.test(x));
+        const aka = [...new Set(d.aka.split(/[,،]+/).map(x => x.trim()).filter(x => x && x !== name))];
+        await ref.set({ id:ref.id, name, aka, kind:d.kind, hp, emails, mode:d.mode, note:d.note.trim(), active:true }, { merge:true });
+        const orphan = (invs || []).filter(f => !f.sup && (f.status === "new" || f.status === "rej") && ((hp && f.hp === hp) || (f.from && emails.includes(String(f.from).toLowerCase()))));
+        if(orphan.length){ const b = firebase.firestore().batch(); orphan.forEach(f => b.update(invCol().doc(f.id), { sup:ref.id, supName:name, hp: f.hp || hp })); await b.commit().catch(()=>{}); }
+        notify("הספק נשמר" + (orphan.length ? " — שויכו אליו " + orphan.length + " חשבוניות" : "")); onSaved && onSaved(ref.id); onClose();
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      setBusy(false);
+    }
+    return html`<div class="scrim" onClick=${onClose}><div class="sheet asheet" onClick=${e=>e.stopPropagation()}>
+      <div class="lbl">${s.id ? "כרטיס ספק" : "ספק חדש"}</div>
+      <label class="afield">שם הספק<input value=${d.name} onInput=${e=>set("name", e.target.value)} /></label>
+      <label class="afield">שמות נוספים (כפי שמופיעים בחשבונית / בטבלאות, מופרד בפסיקים)<input value=${d.aka} onInput=${e=>set("aka", e.target.value)} /></label>
+      <div class="chips" style=${{margin:"4px 0 8px"}}>${[["sup", "ספק"], ["con", "קבלן"]].map(([k, n]) => html`<button key=${k} class=${"chip " + (d.kind === k ? "on" : "")} onClick=${()=>set("kind", k)}>${n}</button>`)}</div>
+      <label class="afield">ח.פ. / ע.מ. (נלמד לבד מהחשבונית הראשונה)<input dir="ltr" inputmode="numeric" value=${d.hp} onInput=${e=>set("hp", e.target.value)} /></label>
+      <label class="afield">כתובות מייל שהחשבוניות מגיעות מהן (נלמד לבד)<input dir="ltr" value=${d.emails} placeholder="invoices@supplier.co.il" onInput=${e=>set("emails", e.target.value)} /></label>
+      <div class="lbl" style=${{marginTop:12}}>סוג אישור</div>
+      ${Object.entries(INV_MODE).map(([k, m]) => html`<label key=${k} class="acheck"><input type="radio" name="invmode" checked=${d.mode === k} onChange=${()=>set("mode", k)} /><span><b>${m.n}</b> — ${m.d}</span></label>`)}
+      <label class="afield">הערה<input value=${d.note} onInput=${e=>set("note", e.target.value)} /></label>
+      <div class="afix2" style=${{marginTop:14}}>
+        <button class="btn pri" disabled=${busy} onClick=${save}>שמור</button>
+        <button class="btn" onClick=${onClose}>ביטול</button>
+      </div>
+    </div></div>`;
+  }
+
+  /* ───── ייבוא ספקים מהטבלאות שכבר קיימות במשרד (אקסל) ─────
+     עובר על כל הגיליונות, מוצא עמודת "ספק" / "שם הספק" / "קבלן" ואוסף את השמות שמתחתיה.
+     שמות שהם אותו ספק ("טסה" / "אאא טסה", "ש. אפרתי" / "ש.אפרתי") מתאחדים — השם השכיח נשאר, השאר נשמרים כשמות נוספים.
+     מגיליון "הוצאות לפי פרויקט" נלקח גם סדר עמודות הפרויקטים — לדוח החודשי. */
+  const INV_MONTHS = /^(ינואר|פברואר|מרץ|אפריל|מאי|יוני|יולי|אוגוסט|ספטמבר|אוקטובר|נובמבר|דצמבר)/;
+  const INV_PM_HINT = /מנוף|מנופי|טרקטור|מחפר|עפר|שופל|באגר|צילום|העתק|הדפס|סיירוקס|משאית|חול\b/;
+  function invScanXlsx(sheets){
+    const raw = new Map();   // key0 -> { name, kind, n, names:Map }
+    let cols = [];
+    sheets.forEach(sh => {
+      // גיליון סיכום (שורות של חודשים: "ינואר", "פברואר"…) — לא רשימת ספקים
+      if((sh.rows || []).filter(r => r && r.slice(0, 4).some(v => INV_MONTHS.test(String(v || "").trim()) && String(v).trim().length <= 8)).length >= 3) return;
+      let ci = -1, kind = "sup";
+      (sh.rows || []).forEach(r => {
+        if(!r) return;
+        const hi = r.findIndex(v => /^(ספק|שם ספק|שם הספק|קבלן|שם קבלן|שם הקבלן)$/.test(String(v || "").trim()));
+        if(hi >= 0){
+          ci = hi; kind = /קבלן/.test(r[hi]) ? "con" : "sup";
+          const heads = [];
+          for(let j = hi + 1; j < r.length; j++){ const h = String(r[j] || "").trim(); if(!h) continue; if(/^סה|^אסמכתא|^הערה|^נתח/.test(h)) break; heads.push(h); }
+          if(kind === "sup" && heads.length >= 3 && !heads.some(h => INV_MONTHS.test(h) || /^\d/.test(h)) && heads.length >= cols.length) cols = heads;
+          return;
+        }
+        if(ci < 0) return;
+        const v = String(r[ci] == null ? "" : r[ci]).replace(/\s+/g, " ").trim();
+        if(!v || v.length < 2 || /^[\d.,\-\s₪%]+$/.test(v) || /^סה|^סך|^total/i.test(v) || INV_MONTHS.test(v)) return;
+        const k = invKey0(v); if(k.length < 2) return;
+        const g = raw.get(k) || { kind, n:0, names:new Map() };
+        g.n++; g.names.set(v, (g.names.get(v) || 0) + 1); if(kind === "con") g.kind = "con";
+        raw.set(k, g);
+      });
+    });
+    // איחוד: שם שכל המילים שלו מופיעות ברצף בשם ארוך יותר ("טסה" ⊂ "אאא טסה")
+    const groups = [...raw.entries()].map(([k, g]) => ({ k, kind:g.kind, n:g.n, names:[...g.names.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0]) }));
+    groups.sort((a, b) => b.k.length - a.k.length);
+    const out = [];
+    groups.forEach(g => {
+      const w = " " + invKey(g.names[0]) + " ";
+      const ws = n => invKey(n).split(" ").sort().join(" "), wg = ws(g.names[0]);   // גם "קאסם דיראווי" = "דיראווי קאסם"
+      const into = g.k.length >= 3 && out.find(o => o.all.some(n => (" " + invKey(n) + " ").includes(w) || ws(n) === wg));
+      if(into){ into.all.push(...g.names); into.n += g.n; if(g.n > into.top){ into.top = g.n; into.name = g.names[0]; } if(g.kind === "con") into.kind = "con"; }
+      else out.push({ name:g.names[0], top:g.n, n:g.n, kind:g.kind, all:[...g.names] });
+    });
+    out.forEach(o => { o.aka = [...new Set(o.all.filter(n => n !== o.name))]; o.mode = INV_PM_HINT.test(o.all.join(" ")) ? "pm" : "tal"; });
+    out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "sup" ? -1 : 1) || b.n - a.n);
+    return { sups:out, cols };
+  }
+  function InvImpSheet({ sups, cfg, notify, onClose }){
+    const [res, setRes] = useState(null), [busy, setBusy] = useState(""), [pick, setPick] = useState({}), [mode, setMode] = useState({}), [useCols, setUseCols] = useState(true);
+    const known = new Set(); sups.forEach(s => invNames(s).forEach(n => known.add(invKey0(n))));
+    async function onFiles(e){
+      const files = [...(e.target.files || [])]; e.target.value = "";
+      if(!files.length) return;
+      setBusy("קורא…");
+      try{
+        let sheets = [];
+        for(const f of files) sheets = sheets.concat(await xlsxRows(await f.arrayBuffer(), true));
+        const r = invScanXlsx(sheets);
+        r.sups.forEach(o => { o.dup = o.all.some(n => known.has(invKey0(n))); });
+        const p = {}, m = {}; r.sups.forEach((o, i) => { p[i] = !o.dup; m[i] = o.mode; });
+        setPick(p); setMode(m); setRes(r);
+        if(!r.sups.length) notify("לא מצאתי בקובץ עמודה בשם \"ספק\" או \"קבלן\"");
+      }catch(x){ notify("לא הצלחתי לקרוא את הקובץ. צריך קובץ אקסל (xlsx)"); }
+      setBusy("");
+    }
+    async function save(){
+      const chosen = res.sups.filter((o, i) => pick[i]);
+      setBusy("שומר…");
+      try{
+        for(let i = 0; i < chosen.length; i += 400){
+          const b = firebase.firestore().batch();
+          chosen.slice(i, i + 400).forEach(o => { const ref = invSupCol().doc(); b.set(ref, { id:ref.id, name:o.name, aka:o.aka, kind:o.kind, hp:"", emails:[], mode:mode[res.sups.indexOf(o)] || "tal", note:"", active:true, imp:true }); });
+          await b.commit();
+        }
+        if(useCols && res.cols.length) await invMeta("cfg").set({ cols:res.cols }, { merge:true });
+        notify(chosen.length + " ספקים נוספו" + (useCols && res.cols.length ? " · סדר " + res.cols.length + " הפרויקטים נשמר לדוח" : ""));
+        onClose();
+      }catch(x){ notify("לא נשמר: " + (x.message || x)); }
+      setBusy("");
+    }
+    const n = res ? res.sups.filter((o, i) => pick[i]).length : 0;
+    return html`<div class="scrim" onClick=${onClose}><div class="sheet asheet invsheet" onClick=${e=>e.stopPropagation()}>
+      <div class="lbl">📥 ייבוא ספקים מאקסל</div>
+      ${!res ? html`
+        <div class="sub2">בחר את טבלאות הספקים שכבר קיימות (אפשר כמה קבצים יחד) — למשל "ספקים - קבלנים לפי פרויקט" ו"טבלת ספקים". הבקרה מוצאת את שמות הספקים והקבלנים ומאחדת כפילויות. ח.פ. ומייל של כל ספק נלמדים לבד מהחשבונית הראשונה שלו.</div>
+        <label class="btn pri" style=${{marginTop:12, cursor:"pointer", display:"block", textAlign:"center"}}>${busy || "בחר קבצי אקסל"}<input type="file" multiple accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style=${{display:"none"}} onChange=${onFiles} /></label>`
+      : html`
+        <div class="sub2">נמצאו ${res.sups.length} שמות (${res.sups.filter(o => o.kind === "sup").length} ספקים · ${res.sups.filter(o => o.kind === "con").length} קבלנים)${res.sups.some(o => o.dup) ? " · ספקים שכבר קיימים לא מסומנים" : ""}. סוג האישור הוא ניחוש — אפשר לשנות כאן או אחר כך בכרטיס הספק.</div>
+        ${res.cols.length > 0 && html`<label class="acheck"><input type="checkbox" checked=${useCols} onChange=${e=>setUseCols(e.target.checked)} /><span>לשמור את סדר עמודות הפרויקטים לדוח החודשי (${res.cols.length}: ${res.cols.slice(0, 5).join(", ")}…)</span></label>`}
+        <div class="pdlist" style=${{maxHeight:"52vh", overflow:"auto", marginTop:8}}>
+          ${res.sups.map((o, i) => html`<div key=${i} class="invimp">
+            <input type="checkbox" checked=${!!pick[i]} onChange=${e=>setPick(p => ({ ...p, [i]:e.target.checked }))} />
+            <span class="pdt"><b>${o.name}</b><small>${[o.kind === "con" ? "קבלן" : "ספק", o.n + " שורות", o.dup ? "כבר קיים" : "", o.aka.length ? "גם: " + o.aka.join(", ") : ""].filter(Boolean).join(" · ")}</small></span>
+            <select class="tin" value=${mode[i]} onChange=${e=>setMode(m => ({ ...m, [i]:e.target.value }))}>${Object.entries(INV_MODE).map(([k, m]) => html`<option key=${k} value=${k}>${m.n}</option>`)}</select>
+          </div>`)}
+        </div>
+        <div class="afix2" style=${{marginTop:12}}>
+          <button class="btn pri" disabled=${!n || !!busy} onClick=${save}>${busy || "הוסף " + n + " ספקים"}</button>
+          <button class="btn" onClick=${onClose}>ביטול</button>
+        </div>`}
+    </div></div>`;
+  }
+
+  /* ───── דוח חודשי במבנה של גיליון "הוצאות לפי פרויקט" ─────
+     כל חשבונית = שורה: ספק, הסכום לפני מע״מ בעמודת הפרויקט שלה, סה״כ, אסמכתא. ספקים ואחריהם קבלנים.
+     + גיליון "מעקב תשלומים" (ספק × חודש, כולל מע״מ) + גיליון פירוט. */
+  const invNet = f => f.total == null ? 0 : Math.round((f.vat != null ? f.total - f.vat : f.total / 1.18) * 100) / 100;
+  function invColMap(list, cfg){
+    const cols = (cfg && cfg.cols && cfg.cols.length ? cfg.cols : []).slice();
+    if(!cols.includes("כללי")) cols.push("כללי");
+    const W = s => invKey(s).split(" ").filter(w => w.length >= 2);
+    const map = {};
+    [...new Set(list.map(f => f.siteName).filter(Boolean))].forEach(n => {
+      let i = cols.findIndex(c => invKey0(c) === invKey0(n));
+      if(i < 0){
+        const wn = W(n); let best = 0;
+        cols.forEach((c, j) => { const wc = W(c), sc = wn.filter(w => wc.includes(w)).length * 10 - Math.abs(wc.length - wn.length); if(wn.some(w => wc.includes(w)) && sc > best){ best = sc; i = j; } });
+      }
+      if(i < 0){ const k0 = invKey0(n); i = cols.findIndex(c => { const c0 = invKey0(c); return c0.length >= 3 && k0.length >= 3 && (c0.includes(k0) || k0.includes(c0)); }); }
+      if(i < 0){ cols.splice(cols.indexOf("כללי"), 0, n); }
+      map[n] = i < 0 ? n : cols[i];
+    });
+    return { cols, colOf: f => (f.siteName && map[f.siteName]) || "כללי" };
+  }
+  function invProjXlsx(all, rows, sups, cfg, mon){
+    const { cols, colOf } = invColMap(rows, cfg);
+    const supOf = f => sups.find(s => s.id === f.sup);
+    const kindOf = f => (supOf(f) || {}).kind === "con" ? "con" : "sup";
+    const ordered = rows.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)) || invSupName(a, sups).localeCompare(invSupName(b, sups), "he"));
+    const sec = (kind, head, totName) => {
+      const out = [[head, ...cols, "סה״כ", "אסמכתא", "תאריך", "כולל מע״מ"]], sums = cols.map(() => 0);
+      ordered.filter(f => kindOf(f) === kind && f.total != null).forEach(f => {
+        const net = invNet(f), ci = cols.indexOf(colOf(f)), r = [invSupName(f, sups) || "ספק לא מזוהה", ...cols.map(() => null), net, f.no || "", invDmy(f.date), f.total ?? null];
+        r[1 + ci] = net; sums[ci] += net; out.push(r);
+      });
+      out.push([totName, ...sums.map(v => Math.round(v * 100) / 100), Math.round(sums.reduce((a, v) => a + v, 0) * 100) / 100]);
+      return out;
+    };
+    const s1 = [...sec("sup", "ספק", "סה״כ ספקים"), [], ...sec("con", "קבלן", "סה״כ קבלנים")];
+    // מעקב תשלומים — כל החודשים של אותה שנה, כולל מע״מ
+    const yr = mon.slice(0, 4), mons = [...new Set(all.map(invMonthOf).filter(m => m && m.slice(0, 4) === yr))].sort();
+    const per = {};
+    all.filter(f => f.status !== "rej" && f.total != null && invMonthOf(f).slice(0, 4) === yr).forEach(f => {
+      const n = invSupName(f, sups) || "ספק לא מזוהה", p = per[n] || (per[n] = { m:{}, open:0, paid:0 });
+      p.m[invMonthOf(f)] = (p.m[invMonthOf(f)] || 0) + (f.total || 0);
+      if(f.status === "paid") p.paid += f.total || 0; else p.open += f.total || 0;
+    });
+    const r2 = (v) => Math.round(v * 100) / 100;
+    const s2 = [["שם הספק", ...mons.map(m => pdPer(m)), "סה״כ", "שולם", "פתוח לתשלום"]];
+    Object.keys(per).sort((a, b) => a.localeCompare(b, "he")).forEach(n => { const p = per[n], t = Object.values(p.m).reduce((a, v) => a + v, 0); s2.push([n, ...mons.map(m => p.m[m] ? r2(p.m[m]) : null), r2(t), r2(p.paid) || null, r2(p.open) || null]); });
+    const s3 = [["ספק", "ח.פ.", "מס׳ חשבונית", "תאריך", "פרויקט", "לפני מע״מ", "מע״מ", "כולל מע״מ", "סטטוס", "הערה"]];
+    ordered.forEach(f => s3.push([invSupName(f, sups), f.hp || "", f.no || "", invDmy(f.date), f.siteName || "", invNet(f), f.vat ?? null, f.total ?? null, (INV_ST[f.status] || {}).n || "", f.note || ""]));
+    const tab = mon.slice(5, 7) + "." + mon.slice(2, 4);
+    return xlsxBlob([
+      { name:tab, rows:s1, widths:[20, ...cols.map(() => 11), 12, 14, 10, 12] },
+      { name:"מעקב תשלומים", rows:s2, widths:[22, ...mons.map(() => 12), 13, 13, 13] },
+      { name:"פירוט", rows:s3, widths:[20, 11, 14, 10, 16, 12, 10, 12, 14, 24] }
+    ]);
+  }
+
+  /* קובץ אחד לרו״ח: עמוד סיכום ואחריו כל החשבוניות של החודש */
+  function invCoverPages(rows, title){
+    const W = 1240, H = 1754, M = 90, RH = 46, per = 30, pages = [];
+    const sum = rows.reduce((a, r) => a + (r.total || 0), 0), vat = rows.reduce((a, r) => a + (r.vat || 0), 0);
+    for(let p = 0; p * per < rows.length || p === 0; p++){
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
+      x.direction = "rtl"; x.textAlign = "right"; x.fillStyle = "#111";
+      x.font = "bold 44px Heebo, Arial, sans-serif"; x.fillText(title, W - M, M + 20);
+      x.font = "26px Heebo, Arial, sans-serif"; x.fillStyle = "#555";
+      x.fillText(rows.length + " חשבוניות · סה״כ " + invMoney(sum) + " · מע״מ " + invMoney(vat) + (pages.length || rows.length > per ? " · עמוד " + (p + 1) + " מתוך " + Math.max(1, Math.ceil(rows.length / per)) : ""), W - M, M + 68);
+      const cols = [["#", 50], ["ספק", 300], ["מס׳ חשבונית", 170], ["תאריך", 140], ["פרויקט", 230], ["סכום", 170]];
+      let y = M + 130, cx = W - M;
+      x.font = "bold 24px Heebo, Arial, sans-serif"; x.fillStyle = "#111";
+      cols.forEach(([n, w]) => { x.fillText(n, cx, y); cx -= w; });
+      x.fillRect(M, y + 12, W - 2 * M, 2);
+      x.font = "24px Heebo, Arial, sans-serif";
+      rows.slice(p * per, (p + 1) * per).forEach((r, i) => {
+        y += RH; cx = W - M;
+        const cells = [String(p * per + i + 1), r.sup || "ספק לא מזוהה", r.no, invDmy(r.date), r.site, invMoney(r.total)];
+        cells.forEach((v, j) => { let s = String(v || ""); while(s.length > 2 && x.measureText(s).width > cols[j][1] - 14) s = s.slice(0, -1); x.fillText(s, cx, y); cx -= cols[j][1]; });
+        x.fillStyle = "#e5e5e5"; x.fillRect(M, y + 14, W - 2 * M, 1); x.fillStyle = "#111";
+      });
+      if((p + 1) * per >= rows.length){   // שורת סה״כ בעמוד האחרון
+        y += RH + 6; x.fillRect(M, y - RH + 18, W - 2 * M, 2);
+        x.font = "bold 26px Heebo, Arial, sans-serif"; x.fillText("סה״כ", W - M - 50, y);
+        x.fillText(invMoney(sum), W - M - cols.slice(0, 5).reduce((a2, c2) => a2 + c2[1], 0), y);
+      }
+      x.font = "20px Heebo, Arial, sans-serif"; x.fillStyle = "#888";
+      x.fillText("ט.ש. מי רון · הופק מהבקרה " + dmy(Date.now()), W - M, H - 50);
+      pages.push(c);
+      if(rows.length <= per) break;
+    }
+    return pages;
+  }
+  async function invBundle(list, sups, title, onStep){
+    const L = await loadPdfLib(), out = await L.PDFDocument.create();
+    const rows = list.map(f => ({ sup:invSupName(f, sups), no:f.no, date:f.date, site:f.siteName, total:f.total, vat:f.vat }));
+    for(const c of invCoverPages(rows, title)){
+      const png = await out.embedPng(await new Promise(res => c.toBlob(b => b.arrayBuffer().then(res), "image/png")));
+      const pg = out.addPage([595.28, 841.89]); pg.drawImage(png, { x:0, y:0, width:595.28, height:841.89 });
+    }
+    const missing = [];
+    for(let i = 0; i < list.length; i++){
+      const f = list[i]; onStep && onStep(i + 1, list.length);
+      if(!f.parts){ missing.push(f); continue; }
+      try{
+        const bytes = await invLoad(f);
+        if((f.mime || "application/pdf") === "application/pdf"){
+          let src = null;
+          try{ src = await L.PDFDocument.load(bytes); }catch(e){ src = null; }
+          if(src) (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
+          else {   // PDF מוצפן — העמודים עוברים כתמונה
+            const pdf = await pdOpenPdf(bytes);
+            const tmp = await L.PDFDocument.load(await pdExtract(null, pdf, Array.from({ length:pdf.numPages }, (_, k) => k)));
+            (await out.copyPages(tmp, tmp.getPageIndices())).forEach(p => out.addPage(p));
+          }
+        } else {
+          const img = /png/.test(f.mime) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+          const s = Math.min(595.28 / img.width, 841.89 / img.height);
+          const pg = out.addPage([595.28, 841.89]); pg.drawImage(img, { x:(595.28 - img.width * s) / 2, y:(841.89 - img.height * s) / 2, width:img.width * s, height:img.height * s });
+        }
+      }catch(e){ missing.push(f); }
+    }
+    return { bytes: new Uint8Array(await out.save()), missing };
+  }
+  function invCsv(list, sups){
+    const q = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    const lines = [["ספק", "ח.פ.", "מס׳ חשבונית", "תאריך", "סכום", "מע״מ", "פרויקט", "סטטוס", "הערה"].map(q).join(",")];
+    list.forEach(f => lines.push([invSupName(f, sups), f.hp, f.no, invDmy(f.date), f.total, f.vat, f.siteName, (INV_ST[f.status] || {}).n, f.note].map(q).join(",")));
+    return new Blob(["﻿" + lines.join("\r\n")], { type:"text/csv;charset=utf-8" });
+  }
+  function invDownload(blob, name){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
+
+  function InvAcc({ list, sups, cfg, who, notify }){
+    const months = [...new Set(list.map(invMonthOf).filter(Boolean))].sort().reverse();
+    const [mon, setMon] = useState(months[0] || pdPrevMonth());
+    const [busy, setBusy] = useState("");
+    const rows = list.filter(f => invMonthOf(f) === mon && f.status !== "rej")
+      .sort((a, b) => invSupName(a, sups).localeCompare(invSupName(b, sups), "he") || String(a.date).localeCompare(String(b.date)));
+    const open = rows.filter(f => f.status === "new" || f.status === "pm" || f.status === "tal");
+    const sum = rows.reduce((a, f) => a + (f.total || 0), 0);
+    const sent = rows.filter(f => f.acc === mon).length;
+    async function make(){
+      setBusy("מכין…");
+      try{
+        const { bytes, missing } = await invBundle(rows, sups, "חשבוניות ספקים · " + pdPer(mon), (i, n) => setBusy("מצרף חשבונית " + i + " מתוך " + n + "…"));
+        invDownload(new Blob([bytes], { type:"application/pdf" }), "חשבוניות " + pdPer(mon) + ".pdf");
+        const b = firebase.firestore().batch();
+        rows.filter(f => f.acc !== mon).forEach(f => b.update(invCol().doc(f.id), { acc:mon, accAt:FV(), accBy:who }));
+        await b.commit().catch(()=>{});
+        notify(missing.length ? "הקובץ נשמר בהורדות — " + missing.length + " חשבוניות בלי קובץ (מופיעות רק בטבלה)" : "הקובץ נשמר בהורדות — " + rows.length + " חשבוניות");
+      }catch(e){ notify("לא הצלחתי להכין את הקובץ: " + (e.message || e)); }
+      setBusy("");
+    }
+    return html`<div class="card" style=${{maxWidth:620}}>
+      <div class="lbl">📦 קובץ אחד לרו״ח</div>
+      <div class="sub2">עמוד סיכום (ספק, מספר, תאריך, פרויקט, סכום) ואחריו כל החשבוניות של החודש לפי ספק — קובץ PDF אחד להדפסה או לשליחה.</div>
+      <select class="tin" style=${{fontFamily:"inherit", marginTop:6}} value=${mon} onChange=${e=>setMon(e.target.value)}>
+        ${(months.includes(mon) ? months : [mon, ...months]).map(m => html`<option key=${m} value=${m}>${pdPer(m)}</option>`)}
+      </select>
+      <div class="kv" style=${{marginTop:10}}><span>חשבוניות בחודש</span><b>${rows.length}</b></div>
+      <div class="kv"><span>סה״כ</span><b>${invMoney(sum)}</b></div>
+      ${sent > 0 && html`<div class="kv"><span>כבר נכללו בקובץ קודם</span><b>${sent}</b></div>`}
+      ${open.length > 0 && html`<div class="alert warn" style=${{marginTop:10}}><span class="b"></span>${open.length} חשבוניות עדיין לא אושרו — הן ייכללו בקובץ, אבל כדאי לסגור אותן קודם.</div>`}
+      <div class="afix2" style=${{marginTop:12}}>
+        <button class="btn pri" disabled=${!rows.length || !!busy} onClick=${make}>${busy || "⬇ הכן קובץ PDF"}</button>
+      </div>
+    </div>
+    <div class="card" style=${{maxWidth:620, marginTop:12}}>
+      <div class="lbl">📊 הוצאות לפי פרויקט — ${pdPer(mon)}</div>
+      <div class="sub2">קובץ אקסל באותו מבנה של גיליון "ספקים - קבלנים לפי פרויקט": כל חשבונית בשורה, הסכום לפני מע״מ בעמודת הפרויקט, אסמכתא — ספקים ואחריהם קבלנים. בנוסף: גיליון "מעקב תשלומים" לכל ספק לפי חודשים, וגיליון פירוט מלא.</div>
+      ${rows.some(f => !f.siteName) && html`<div class="sub2" style=${{color:"var(--warn)"}}>${rows.filter(f => !f.siteName).length} חשבוניות בלי פרויקט — ייכנסו לעמודה "כללי".</div>`}
+      <div class="afix2" style=${{marginTop:12}}>
+        <button class="btn pri" disabled=${!rows.length} onClick=${()=>saveFile(invProjXlsx(list, rows, sups, cfg, mon), "הוצאות לפי פרויקט " + pdPer(mon) + ".xlsx")}>⬇ הורד אקסל</button>
+      </div>
+    </div>`;
+  }
+
+  /* העלאה ידנית (צילום / קובץ) — לחשבונית שהגיעה ביד או בווטסאפ */
+  async function invUpload(files, sups, cfg, who, notify, onProg){
+    let n = 0;
+    for(const file of files){
+      onProg && onProg(++n, files.length);
+      if(file.size > PD_MAX){ notify(file.name + ": גדול מדי (עד 20MB)"); continue; }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const mime = file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "image/jpeg");
+      let info = { pages:1, text:"" };
+      try{ info = await invReadFile(bytes, mime); }catch(e){}
+      const p = invParse(info.text, sups, cfg && cfg.ourHp);
+      const s = sups.find(x => x.id === p.sup);
+      await invSave({ status:"new", src:"upload", by:who, fname:file.name, mime, pages:info.pages, parsed:true,
+        sup:p.sup || "", supName: s ? s.name : "", supGuess: !!p.byName, hp:p.hp || "", no:p.no || "", date:p.date || "", total:p.total ?? null, vat:p.vat ?? null,
+        site:"", siteName:"", note:"", hist:[{ s:"new", by:who, t:Date.now() }] }, bytes);
+    }
+  }
+
+  /* שרת קליטת המייל (Cloud Functions) — רק משתמש משרד, לפי אסימון הכניסה */
+  const INV_FN = "https://europe-west1-bakara-b4231.cloudfunctions.net";
+  async function invMailApi(action){
+    const u = firebase.auth().currentUser; if(!u) throw new Error("לא מחובר");
+    const r = await fetch(INV_FN + "/msApi?action=" + action, { method:"POST", headers:{ Authorization:"Bearer " + await u.getIdToken() } });
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(j.error || ("שגיאה " + r.status));
+    return j;
+  }
+
+  /* המשרד: הלשונית המלאה */
+  function InvAdmin({ st, who, notify }){
+    const [list, setList] = useState(null), [sups, setSups] = useState(null), [cfg, setCfg] = useState(null), [mail, setMail] = useState(null);
+    const payer = invPayers(cfg).includes(who);
+    const [tab, setTab] = useState(null), defTab = useRef(null);   // הלשונית הראשונה נקבעת פעם אחת — לא קופצת תוך כדי עבודה
+    const [q, setQ] = useState(""), [open, setOpen] = useState(null), [supEd, setSupEd] = useState(null);
+    const [sel, setSel] = useState({}), [busy, setBusy] = useState(""), [cfgEd, setCfgEd] = useState(false), [imp, setImp] = useState(false);
+    const sites = (st.sites || []).filter(s => s.active).sort((a, b) => a.name.localeCompare(b.name, "he"));
+    useEffect(()=>{
+      const u1 = invCol().orderBy("at", "desc").limit(2000).onSnapshot(qs => setList(qs.docs.map(d => d.data())), e => { setList([]); notify("אין הרשאה לחשבוניות: " + (e.code || e.message)); });
+      const u2 = invSupCol().onSnapshot(qs => setSups(qs.docs.map(d => d.data()).filter(s => s.active !== false)), ()=>setSups([]));
+      const u3 = invMeta("cfg").onSnapshot(d => setCfg(d.exists ? d.data() : {}), ()=>setCfg({}));
+      const u4 = invMeta("mail").onSnapshot(d => setMail(d.exists ? d.data() : {}), ()=>setMail({}));
+      return ()=>{ u1(); u2(); u3(); u4(); };
+    }, []);
+    // חשבוניות שהגיעו במייל ועוד לא נקראו — קוראים את הפרטים מה-PDF פעם אחת (ברקע, אחת-אחת)
+    const parsing = useRef(false);
+    useEffect(()=>{
+      if(!list || !sups || !cfg || parsing.current) return;
+      const todo = list.filter(f => !f.parsed && f.parts && f.status === "new").slice(0, 10);
+      if(!todo.length) return;
+      parsing.current = true;
+      (async ()=>{
+        for(const f of todo){
+          try{
+            const info = await invReadFile(await invLoad(f), f.mime || "application/pdf");
+            const p = invParse(info.text, sups, cfg.ourHp, f.from, f.subj);
+            const s = sups.find(x => x.id === p.sup);
+            const upd = { parsed:true, pages:info.pages };
+            if(!f.sup && p.sup){ upd.sup = p.sup; upd.supName = s ? s.name : ""; if(p.byName) upd.supGuess = true; }
+            if(!f.hp && (p.hp || (s && s.hp))) upd.hp = p.hp || s.hp;
+            if(!f.no && p.no) upd.no = p.no;
+            if(!f.date && p.date) upd.date = p.date;
+            if(f.total == null && p.total != null) upd.total = p.total;
+            if(f.vat == null && p.vat != null) upd.vat = p.vat;
+            await invCol().doc(f.id).update(upd);
+          }catch(e){ await invCol().doc(f.id).update({ parsed:true }).catch(()=>{}); }
+        }
+        parsing.current = false;
+      })();
+    }, [list, sups, cfg]);
+    if(!list || !sups || !cfg) return html`<div class="screen"><div class="empty">טוען חשבוניות…</div></div>`;
+
+    const key = f => f.sup && f.no ? f.sup + "|" + f.no : "";
+    const cnt = {}; list.forEach(f => { const k = key(f); if(k && f.status !== "rej") cnt[k] = (cnt[k] || 0) + 1; });
+    const isDup = f => !!key(f) && cnt[key(f)] > 1;
+    const by = s => list.filter(f => f.status === s);
+    const tabs = [
+      ["todo", "לטיפול", list.filter(f => f.status === "new" || f.status === "rej").length],
+      ["wait", "באישור", list.filter(f => f.status === "pm" || f.status === "tal").length],
+      ["ok", "לתשלום", by("ok").length],
+      ["paid", "שולמו", by("paid").length],
+      ["all", "הכול", list.length],
+      ["sup", "ספקים", sups.length],
+      ["acc", "📦 לרו״ח"]
+    ];
+    if(payer) tabs.splice(1, 0, ["mine", "✍️ לאישורך", by("tal").length]);
+    if(!defTab.current) defTab.current = payer && by("tal").length ? "mine" : "todo";
+    const cur = tab || defTab.current;
+    const ql = q.trim().toLowerCase();
+    const match = f => !ql || [invSupName(f, sups), f.no, f.siteName, f.from, f.subj, f.note, String(f.total || "")].some(x => String(x || "").toLowerCase().includes(ql));
+    const shown = list.filter(f =>
+      cur === "todo" ? (f.status === "new" || f.status === "rej")
+      : cur === "mine" ? f.status === "tal"
+      : cur === "wait" ? (f.status === "pm" || f.status === "tal")
+      : cur === "ok" ? f.status === "ok"
+      : cur === "paid" ? f.status === "paid" : true).filter(match);
+    const selIds = Object.keys(sel).filter(k => sel[k] && shown.some(f => f.id === k));
+    async function bulk(st2){
+      if(!selIds.length) return;
+      if(!confirm((st2 === "ok" ? "לאשר תשלום ל-" : "לסמן כשולמו ") + selIds.length + " חשבוניות?")) return;
+      setBusy("…");
+      try{
+        const b = firebase.firestore().batch();
+        selIds.forEach(id => b.update(invCol().doc(id), { status:st2, hist:invHist(who, st2), ...(st2 === "ok" ? { payBy:who, payAt:FV() } : { paidAt:FV() }) }));
+        await b.commit(); setSel({}); notify(selIds.length + " חשבוניות עודכנו");
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      setBusy("");
+    }
+    async function upload(e){
+      const files = [...(e.target.files || [])]; e.target.value = "";
+      if(!files.length) return;
+      try{ await invUpload(files, sups, cfg, who, notify, (i, n) => setBusy("מעלה " + i + " מתוך " + n + "…")); notify(files.length === 1 ? "החשבונית נקלטה" : files.length + " חשבוניות נקלטו"); setTab("todo"); }
+      catch(e2){ notify("ההעלאה נכשלה: " + (e2.message || e2)); }
+      setBusy("");
+    }
+    const mailOn = mail && mail.ok;
+    async function mailConnect(){
+      if(!confirm("תועבר לדף ההתחברות של מיקרוסופט. היכנס עם תיבת המייל שהחשבוניות מגיעות אליה, ואשר קריאה בלבד. הבקרה תקרא רק את התיקייה \"" + ((cfg && cfg.mailFolder) || "חשבוניות") + "\". להמשיך?")) return;
+      setBusy("מתחבר למיקרוסופט…");
+      try{ const j = await invMailApi("start"); location.href = j.url; }
+      catch(e){ notify("לא הצלחתי להתחיל חיבור: " + (e.message || e)); setBusy(""); }
+    }
+    async function mailPoll(){
+      setBusy("בודק את תיבת המייל…");
+      try{ const j = await invMailApi("poll"); notify(j.n ? j.n + " חשבוניות חדשות נקלטו" : "אין חשבוניות חדשות במייל"); }
+      catch(e){ notify("הבדיקה נכשלה: " + (e.message || e)); }
+      setBusy("");
+    }
+    const sumOf = a => a.reduce((s, f) => s + (f.total || 0), 0);
+    const selSum = sumOf(shown.filter(f => selIds.includes(f.id)));
+    const bulkSt = cur === "mine" && payer ? "ok" : cur === "ok" ? "paid" : null;
+    return html`<div class="screen">
+      <div class="shead"><div><h2>🧾 חשבוניות ספקים</h2>
+        <span class="sub">${list.length} חשבוניות · ${sups.length} ספקים · ${mailOn ? "📬 נקלטות לבד " + (mail.box ? "מ-" + mail.box : "מהמייל") + (tsMs(mail.last) ? " (בדיקה אחרונה " + hhmm(tsMs(mail.last)) + ")" : "") : "📭 קליטה מהמייל עוד לא חוברה"}</span></div>
+        <span style=${{flex:1}}></span>
+        ${mail && (mailOn
+          ? html`<button class="btn" style=${{flex:"none"}} disabled=${!!busy} onClick=${mailPoll}>🔄 בדוק מייל</button>`
+          : html`<button class="btn pri" style=${{flex:"none"}} disabled=${!!busy} onClick=${mailConnect}>📬 חבר את תיבת המייל</button>`)}
+        <label class="btn" style=${{flex:"none", cursor:"pointer"}}>⬆ העלאה ידנית<input type="file" multiple accept="application/pdf,image/*" style=${{display:"none"}} onChange=${upload} /></label>
+        <button class="ic0" title="הגדרות" onClick=${()=>setCfgEd(true)}>⚙</button>
+      </div>
+      ${mail && mail.err && html`<div class="alert crit"><span class="b"></span>הקליטה מהמייל נכשלה: ${mail.err}</div>`}
+      ${busy && html`<div class="sub2">⏳ ${busy}</div>`}
+      <div class="chips">
+        ${tabs.map(([k, n, c]) => html`<button key=${k} class=${"chip " + (cur === k ? "on" : "")} onClick=${()=>{ setTab(k); setSel({}); }}>${n}${c ? " (" + c + ")" : ""}</button>`)}
+      </div>
+      ${cur === "sup" ? html`
+        <div style=${{display:"flex", gap:8, flexWrap:"wrap", marginBottom:10}}>
+          <button class="btn pri" style=${{flex:"none"}} onClick=${()=>setSupEd({})}>➕ ספק חדש</button>
+          <button class="btn" style=${{flex:"none"}} onClick=${()=>setImp(true)}>📥 ייבוא מאקסל</button>
+        </div>
+        <div class="pdlist">${sups.slice().sort((a, b) => a.name.localeCompare(b.name, "he")).map(s => {
+          const mine = list.filter(f => f.sup === s.id);
+          return html`<div key=${s.id} class="pdrow"><button class="pdopen" onClick=${()=>setSupEd(s)}>
+            <span class="pde">${s.mode === "auto" ? "🔁" : s.mode === "pm" ? "👷" : "🏢"}</span>
+            <span class="pdt"><b>${s.name}</b><small>${[s.kind === "con" ? "קבלן" : "", s.hp ? "ח.פ. " + s.hp : "", INV_MODE[s.mode || "tal"].n, (s.emails || []).join(", "), (s.aka || []).length ? "גם: " + s.aka.join(", ") : ""].filter(Boolean).join(" · ")}</small></span>
+            <span class="invamt">${mine.length} · ${invMoney(sumOf(mine))}</span></button></div>`; })}
+          ${!sups.length && html`<div class="empty">עוד אין ספקים. הכי מהיר: "📥 ייבוא מאקסל" מטבלאות הספקים הקיימות. ח.פ. ומייל של כל ספק נלמדים לבד מהחשבונית הראשונה שלו.</div>`}
+        </div>`
+      : cur === "acc" ? html`<${InvAcc} list=${list} sups=${sups} cfg=${cfg} who=${who} notify=${notify} />`
+      : html`
+        <input class="tin" style=${{fontFamily:"inherit", marginBottom:10}} placeholder="🔍 חיפוש — ספק, מספר, פרויקט, סכום" value=${q} onInput=${e=>setQ(e.target.value)} />
+        ${bulkSt && shown.length > 0 && html`<div class="invbulk">
+          <label class="acheck" style=${{margin:0}}><input type="checkbox" checked=${selIds.length === shown.length} onChange=${e=>{ const o = {}; if(e.target.checked) shown.forEach(f => { o[f.id] = true; }); setSel(o); }} />סמן הכול</label>
+          <span style=${{flex:1}}></span>
+          <button class="btn pri" style=${{flex:"none"}} disabled=${!selIds.length || !!busy} onClick=${()=>bulk(bulkSt)}>${bulkSt === "ok" ? "✓ אשר תשלום" : "💳 סמן ששולמו"} (${selIds.length}${selIds.length ? " · " + invMoney(selSum) : ""})</button>
+        </div>`}
+        <div class="pdlist">
+          ${shown.map(f => html`<${InvRow} key=${f.id} f=${f} sups=${sups} dup=${isDup(f)} sel=${sel[f.id]} onSel=${bulkSt ? (id => setSel(s => ({ ...s, [id]:!s[id] }))) : null} onOpen=${setOpen} />`)}
+        </div>
+        ${!shown.length && html`<div class="empty">${ql ? "לא נמצאו חשבוניות" : cur === "todo" ? "אין חשבוניות לטיפול 👍" : cur === "mine" ? "אין חשבוניות שממתינות לאישורך 👍" : "אין חשבוניות כאן"}</div>`}
+        ${shown.length > 0 && html`<div class="sub2" style=${{marginTop:8}}>${shown.length} חשבוניות · סה״כ ${invMoney(sumOf(shown))}</div>`}`}
+      ${open && html`<${InvSheet} key=${open.id} f=${list.find(f => f.id === open.id) || open} sups=${sups} sites=${sites} cfg=${cfg} who=${who} office=${true} notify=${notify} invs=${list}
+        onClose=${()=>setOpen(null)} onNewSup=${(pre, cb) => setSupEd({ hp:pre.hp, emails: pre.email ? [pre.email] : [], _cb:cb })} />`}
+      ${supEd && html`<${InvSupSheet} s=${supEd} all=${sups} invs=${list} notify=${notify} onClose=${()=>setSupEd(null)} onSaved=${id => supEd._cb && supEd._cb(id)} />`}
+      ${cfgEd && html`<${InvCfgSheet} cfg=${cfg} mail=${mail} notify=${notify} onClose=${()=>setCfgEd(false)} />`}
+      ${imp && html`<${InvImpSheet} sups=${sups} cfg=${cfg} notify=${notify} onClose=${()=>setImp(false)} />`}
+    </div>`;
+  }
+  function InvCfgSheet({ cfg, mail, notify, onClose }){
+    const [payers, setPayers] = useState(invPayers(cfg).join(", ")), [hp, setHp] = useState(cfg.ourHp || ""), [cols, setCols] = useState((cfg.cols || []).join(", "));
+    const [folder, setFolder] = useState(cfg.mailFolder || "חשבוניות");
+    async function disconnect(){
+      if(!confirm("לנתק את תיבת המייל? חשבוניות חדשות יפסיקו להיכנס לבד עד שיחברו מחדש.")) return;
+      try{ await invMailApi("stop"); notify("תיבת המייל נותקה"); onClose(); }catch(e){ notify("לא הצלחתי לנתק: " + (e.message || e)); }
+    }
+    async function save(){
+      const p = payers.split(/[,،]+/).map(x => x.trim()).filter(Boolean);
+      if(!p.length){ notify("צריך לפחות מאשר אחד"); return; }
+      const c = cols.split(/[,،]+/).map(x => x.trim()).filter(Boolean);
+      try{ await invMeta("cfg").set({ payers:p, ourHp:hp.replace(/\D/g, ""), cols:c, mailFolder: folder.trim() || "חשבוניות" }, { merge:true }); notify("נשמר"); onClose(); }
+      catch(e){ notify("לא נשמר: " + (e.message || e)); }
+    }
+    return html`<div class="scrim" onClick=${onClose}><div class="sheet" onClick=${e=>e.stopPropagation()}>
+      <div class="lbl">הגדרות חשבוניות</div>
+      <label class="afield">מי מאשר תשלומים (שם המשתמש בבקרה, מופרד בפסיקים)<input value=${payers} onInput=${e=>setPayers(e.target.value)} /></label>
+      <label class="afield">ח.פ. של ט.ש. מי-רון (כדי שלא יזוהה כספק)<input dir="ltr" inputmode="numeric" value=${hp} onInput=${e=>setHp(e.target.value)} /></label>
+      <label class="afield">שם התיקייה בתיבת המייל שממנה נקלטות החשבוניות<input value=${folder} onInput=${e=>setFolder(e.target.value)} /></label>
+      ${mail && mail.ok && html`<div class="sub2">📬 מחובר לתיבה ${mail.box || ""}${mail.by ? " (חיבר/ה: " + mail.by + ")" : ""} · <button class="linkbtn" style=${{color:"var(--crit)"}} onClick=${disconnect}>נתק</button></div>`}
+      <label class="afield">עמודות הפרויקטים בדוח החודשי, לפי הסדר (נלקח מהאקסל בייבוא; פרויקט שלא מופיע כאן מתווסף בסוף)<textarea class="tin" rows="3" style=${{fontFamily:"inherit"}} value=${cols} onInput=${e=>setCols(e.target.value)}></textarea></label>
+      <div class="afix2" style=${{marginTop:14}}><button class="btn pri" onClick=${save}>שמור</button><button class="btn" onClick=${onClose}>ביטול</button></div>
+    </div></div>`;
+  }
+
+  /* מנהל פרויקט: רק החשבוניות שנשלחו אליו */
+  function InvMine({ list, who, notify }){
+    const [open, setOpen] = useState(null);
+    if(!list) return html`<div class="screen narrow"><div class="empty">טוען…</div></div>`;
+    const wait = list.filter(f => f.status === "pm");
+    const done = list.filter(f => f.status !== "pm").sort((a, b) => (tsMs(b.pmAt) || 0) - (tsMs(a.pmAt) || 0)).slice(0, 30);
+    return html`<div class="screen narrow">
+      <div class="shead"><div><h2>🧾 חשבוניות לאישורך</h2><span class="sub">חשבוניות לא סטנדרטיות מהפרויקטים שלך — בדוק ואשר או דחה</span></div></div>
+      <div class="pdlist">${wait.map(f => html`<${InvRow} key=${f.id} f=${f} sups=${[]} onOpen=${setOpen} />`)}</div>
+      ${!wait.length && html`<div class="empty">אין חשבוניות שמחכות לך 👍</div>`}
+      ${done.length > 0 && html`<div class="lbl" style=${{marginTop:16}}>טיפלת לאחרונה</div>
+        <div class="pdlist">${done.map(f => html`<${InvRow} key=${f.id} f=${f} sups=${[]} onOpen=${setOpen} />`)}</div>`}
+      ${open && html`<${InvSheet} key=${open.id} f=${list.find(f => f.id === open.id) || open} sups=${[]} sites=${[]} cfg=${{}} who=${who} office=${false} notify=${notify} onClose=${()=>setOpen(null)} />`}
+    </div>`;
+  }
+
   function App(){
     const cloudCode = useState(readTeamCode)[0];
     // אין קוד צוות במכשיר (אייקון במסך הבית, דפדפן אחר, קישור בלי קוד) → כניסה בטלפון, והקוד נמשך מרשומת המשתמש
@@ -4980,6 +5876,23 @@ ${l}`
       return pdCol(auth.phone).onSnapshot(q => setMyFiles(q.docs.map(d => d.data())), ()=>setMyFiles([]));
     }, [signedIn]);
     const pdNew = (myFiles || []).filter(f => !f.seen).length;
+    // חשבוניות ספקים: המשרד — כמה מחכות לטיפול / לאישור שלי; מנהל — החשבוניות שנשלחו אליו
+    const [invMineL, setInvMineL] = useState(null);
+    const [invCnt, setInvCnt] = useState({ n:0, tal:0 });
+    useEffect(()=>{
+      if(!signedIn) return;
+      const r = auth.staff.role, nm = auth.staff.name;
+      if(r === "office"){
+        let payers = invPayers({}), docs = [];
+        const calc = () => setInvCnt({ n: docs.filter(f => f.status === "new").length, tal: payers.includes(nm) ? docs.filter(f => f.status === "tal").length : 0 });
+        const u1 = invMeta("cfg").onSnapshot(d => { payers = invPayers(d.exists ? d.data() : {}); calc(); }, ()=>{});
+        const u2 = invCol().where("status", "in", ["new", "tal"]).onSnapshot(q => { docs = q.docs.map(d => d.data()); calc(); }, ()=>{});
+        return ()=>{ u1(); u2(); };
+      }
+      if(r === "mgr") return invCol().where("pm", "==", nm).onSnapshot(q => setInvMineL(q.docs.map(d => d.data())), ()=>setInvMineL([]));
+    }, [signedIn]);
+    const invWait = (invMineL || []).filter(f => f.status === "pm").length;
+    const invOn = signedIn && (auth.staff.role === "office" || (auth.staff.role === "mgr" && (invMineL || []).length > 0));
 
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
@@ -5041,8 +5954,19 @@ ${l}`
         update(d => { d.requests = []; d.transfers = []; return d; });
     }, [cloud.ready, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
-    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : "stock.home";
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
+    // חזרה מדף ההתחברות של מיקרוסופט (?mail=ok / ?mail=err&m=…) — פותחים את לשונית החשבוניות
+    const mailBack = useRef(false);
+    useEffect(()=>{
+      if(mailBack.current || !signedIn || auth.staff.role !== "office") return;
+      const q = new URLSearchParams(location.search), r = q.get("mail");
+      if(!r) return;
+      mailBack.current = true;
+      try{ history.replaceState(null, "", location.pathname); }catch(e){}
+      switchRole("inv");
+      notify(r === "ok" ? "📬 תיבת המייל חוברה — חשבוניות מהתיקייה \"חשבוניות\" ייכנסו לכאן לבד" : "החיבור לתיבת המייל לא הצליח: " + (q.get("m") || "שגיאה"));
+    }, [signedIn]);
     function reset(){
       if(cloudCode){
         if(!isOffice || who !== "דוד"){ notify("איפוס המסד המשותף מותר רק לדוד"); return; }
@@ -5373,6 +6297,12 @@ ${l}`
         : nav.screen === "docs.admin" && auth.staff.role === "office"
         ? html`<${DocsAdmin} who=${who} myPhone=${auth.phone} notify=${notify} />`
         : html`<${MyDocs} phone=${auth.phone} name=${auth.staff.name} files=${myFiles} notify=${notify} />`;
+    else if(nav.screen === "inv.home")
+      body = !invOn
+        ? html`<div class="screen narrow"><div class="empty">אין חשבוניות להצגה</div></div>`
+        : auth.staff.role === "office"
+        ? html`<${InvAdmin} st=${vst} who=${who} notify=${notify} />`
+        : html`<${InvMine} list=${invMineL} who=${who} notify=${notify} />`;
     else if(nav.screen === "ctl.home")
       body = html`<${Control} st=${vst} now=${now} exceptions=${exceptions} cards=${cards} ctl=${ctlV} setCtl=${setCtlV} locked=${!!myMgr}
         onOpen=${id=>setNav({screen:"ctl.site", id})} onNudge=${nudge} onResolve=${resolveException} notify=${notify} who=${who} />`;
@@ -5439,6 +6369,7 @@ ${l}`
         ${SI(role === "stock", "📦 מלאי", ()=>goRole("stock"))}
         ${signedIn && SI(role === "docs", "📁 המסמכים שלי", ()=>goRole("docs"), "", pdNew)}
         ${signedIn && auth.staff.role === "office" && SI(role === "docsadm", "🗂 מסמכים אישיים", ()=>goRole("docsadm"))}
+        ${invOn && SI(role === "inv", auth.staff.role === "office" ? "🧾 חשבוניות ספקים" : "🧾 חשבוניות לאישורך", ()=>goRole("inv"), "", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait)}
         <div class="sfoot">
           <button class="meb" title="החשבון שלי · החלף" onClick=${()=>setIdSheet(true)}>
             <span class="av">${me.name.slice(0,1)}<i class=${"sdot " + cloud.status}></i></span>
@@ -5474,6 +6405,7 @@ ${l}`
           ? html`<div class="banner">מצב מקומי — הנתונים נשמרים רק במכשיר הזה <button class="chip" onClick=${()=>setTeamSheet(true)}>הזן קוד צוות</button></div>`
           : cloud.status === "offline" ? html`<div class="banner">אין חיבור — השינויים נשמרים במכשיר ויסונכרנו כשהרשת תחזור</div>`
           : cloud.status === "error" && cloud.ready ? html`<div class="banner err">בעיית סנכרון (${cloud.err}) — השינויים עלולים לא להישמר במסד</div>` : null}
+        ${role !== "inv" && (invWait > 0 || invCnt.tal > 0) && html`<button class="banner pdban" onClick=${()=>switchRole("inv")}>🧾 ${invWait > 0 ? (invWait === 1 ? "חשבונית מחכה לאישורך" : invWait + " חשבוניות מחכות לאישורך") : (invCnt.tal === 1 ? "חשבונית ממתינה לאישור תשלום שלך" : invCnt.tal + " חשבוניות ממתינות לאישור תשלום שלך")} — לחץ לצפייה</button>`}
         ${signedIn && pdNew > 0 && role !== "docs" && html`<button class="banner pdban" onClick=${()=>switchRole("docs")}>📁 ${pdNew === 1 ? "מסמך אישי חדש מחכה לך" : pdNew + " מסמכים אישיים חדשים מחכים לך"} — לחץ לצפייה</button>`}
         ${body}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
@@ -5500,6 +6432,7 @@ ${l}`
                 <div class="who">${auth.staff.name} · ${isViewer ? "צופה — רואה הכול, קריאה בלבד" : isOffice ? "משרד — רואה הכול" : "מנהל פרויקט — רואה רק את האתרים שלו (" + sites.length + ")"} · <span dir="ltr">${fmtPhone(auth.phone)}</span></div>
                 <button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("docs"); }}><span class="e">📁</span>המסמכים שלי — תלושים, הפרשות, טפסים${pdNew ? " (" + pdNew + " חדשים)" : ""}</button>
                 ${auth.staff.role === "office" && html`<button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("docsadm"); }}><span class="e">🗂</span>מסמכים אישיים של כולם — העלאה וניהול</button>`}
+                ${invOn && html`<button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("inv"); }}><span class="e">🧾</span>${auth.staff.role === "office" ? "חשבוניות ספקים" + (invCnt.n + invCnt.tal ? " (" + (invCnt.n + invCnt.tal) + ")" : "") : "חשבוניות לאישורך" + (invWait ? " (" + invWait + ")" : "")}</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setStaffSheet(true); }}><span class="e">👥</span>משתמשים והרשאות</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · שיתוף קישור</button>`}
                 <button class="opt" onClick=${logout}><span class="e">🚪</span>יציאה מהחשבון</button>
