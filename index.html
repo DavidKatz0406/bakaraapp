@@ -4168,16 +4168,22 @@ ${l}`
   function PhoneLogin(){
     const [ph, setPh] = useState(""), [code, setCode] = useState("");
     const [step, setStep] = useState("phone"), [busy, setBusy] = useState(false), [err, setErr] = useState("");
-    const [rk, setRk] = useState(0);
-    const conf = useRef(null), ver = useRef(null);
-    function resetCaptcha(){ try{ ver.current && ver.current.clear(); }catch(x){} ver.current = null; setRk(k => k + 1); }
+    const conf = useRef(null), ver = useRef(null), capBox = useRef(null);
+    // reCAPTCHA נשאר "רשום" על האלמנט גם אחרי clear() — לכן כל ניסיון מקבל אלמנט חדש לגמרי
+    // (אחרת בניסיון השני: "reCAPTCHA has already been rendered in this element")
+    function newVerifier(){
+      const host = capBox.current; host.innerHTML = "";
+      const el = document.createElement("div"); host.appendChild(el);
+      return new firebase.auth.RecaptchaVerifier(el, { size:"invisible" });
+    }
+    function resetCaptcha(){ try{ ver.current && ver.current.clear(); }catch(x){} ver.current = null; try{ capBox.current.innerHTML = ""; }catch(x){} }
     async function send(){
       const p = normPhone(ph);
       if(!p){ setErr("מספר לא תקין — למשל 050-1234567"); return; }
       setBusy(true); setErr("");
       try{
         fbInit();
-        if(!ver.current) ver.current = new firebase.auth.RecaptchaVerifier("rcap" + rk, { size:"invisible" });
+        if(!ver.current) ver.current = newVerifier();
         conf.current = await firebase.auth().signInWithPhoneNumber(p, ver.current);
         setStep("code");
       }catch(e){ setErr(authErr(e)); resetCaptcha(); }
@@ -4205,7 +4211,7 @@ ${l}`
           <button class="btn pri wide" style=${{marginTop:10}} disabled=${busy || digits.length !== 6} onClick=${confirm}>${busy ? "בודק…" : "כניסה"}</button>
           <button class="btn wide" style=${{marginTop:8}} onClick=${()=>{ setStep("phone"); setCode(""); setErr(""); resetCaptcha(); }}>מספר אחר / שלח קוד שוב</button>`}
         ${err && html`<div class="alert crit" style=${{marginTop:10}}><span class="b"></span>${err}</div>`}
-        <div id=${"rcap" + rk}></div>
+        <div ref=${capBox}></div>
       </div></div>`;
   }
   function OwnerSetup({ phone, onOk, onOut }){
