@@ -4988,15 +4988,25 @@ ${l}`
     return best;
   }
   // כתובות של מערכות הפקת חשבוניות — משרתות הרבה ספקים, לכן לא מזהים לפיהן ספק
-  const INV_SHARED_MAIL = /no-?reply|noreply|donotreply|greeninvoice|morning|icount|ezcount|easy-?count|invoice4u|rivhit|sumit|tranzila|cardcom|hashavshevet|priority-?software|yeshinvoice|paperless/i;
+  // (noreply בדומיין של הספק עצמו — למשל InvoiceNoreply@kastrosafety.org — כן מזהה אותו)
+  const INV_SHARED_MAIL = /@([a-z0-9-]+\.)*(greeninvoice|morning|icount|ezcount|easy-?count|invoice4u|rivhit|sumit|tranzila|cardcom|hashavshevet|priority-?software|yeshinvoice|paperless|modular365)\./i;
   const invMailOk = m => /@/.test(m || "") && !INV_SHARED_MAIL.test(m);
   function invParse(text, sups, ourHp, from, subj){
     const t0 = invFixDigits(pdNorm(text)), t = t0 + " | " + invWordRev(t0), out = {};
     // ח.פ. / ע.מ. — 9 ספרות עם ספרת ביקורת (גם בסדר הפוך — PDF בעברית שומר לפעמים ספרות הפוך)
-    const hps = [];
-    (t.match(/\d{8,9}/g) || []).forEach(r => [r, pdRev(r)].forEach(x => { x = x.padStart(9, "0"); if(isIlId(x) && !hps.includes(x)) hps.push(x); }));
+    // מספר שליד "הקצאה" (מספר הקצאה של רשות המסים) או "לקוח" לא נחשב; מספר שליד ח.פ./ע.מ./עוסק — עדיף
+    const hps = [], pref = [], hre = /\d{8,9}/g; let hm;
+    while((hm = hre.exec(t))){
+      const c0 = t.slice(Math.max(0, hm.index - 28), hm.index) + " " + t.slice(hm.index + hm[0].length, hm.index + hm[0].length + 28);
+      const ctx = c0 + " " + invWordRev(c0);   // הטקסט נקרא גם הפוך — בודקים את ההקשר בשני הכיוונים
+      if(/הקצא|אסמכתא|לקוח|טלפון|טל |פקס|חשבון בנק|מס׳? חשבון|סניף|בנק/.test(ctx) && !/ח\.?\s?פ|ע\.?\s?מ|ח"פ|עוסק מורשה(?! לצרכן)/.test(ctx)) continue;
+      const strong = /ח\.?\s?פ|ע\.?\s?מ|ח"פ|עוסק|מס׳? ?ספק/.test(ctx);
+      const ours0 = String(ourHp || "").replace(/\D/g, "").padStart(9, "0");
+      if([hm[0], pdRev(hm[0])].some(x => x.padStart(9, "0") === ours0)) continue;   // ח.פ. שלנו — בשני הכיוונים
+      [hm[0], pdRev(hm[0])].forEach(x => { x = x.padStart(9, "0"); if(isIlId(x) && !hps.includes(x)){ hps.push(x); if(strong) pref.push(x); } });
+    }
     const ours = String(ourHp || "").replace(/\D/g, "");
-    const cand = hps.filter(h => h !== ours);
+    const cand = [...pref, ...hps.filter(h => !pref.includes(h))].filter(h => h !== ours);
     const bySup = (sups || []).find(s => s.hp && cand.includes(s.hp));
     if(bySup){ out.sup = bySup.id; out.hp = bySup.hp; } else if(cand.length) out.hp = cand[0];
     // אחרי ח.פ.: לפי כתובת השולח, ואז לפי שם הספק שכתוב בחשבונית
