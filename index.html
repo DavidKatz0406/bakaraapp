@@ -5927,6 +5927,12 @@ ${l}`
             }
             setAuth({ s:"noteam", phone:u.phoneNumber }); return;
           }
+          // המכשיר מחובר לקוד צוות אחר מזה שרשום למשתמש (למשל מקישור ישן) — עוברים לצוות הנכון, כדי שכולם יעבדו על אותם נתונים
+          let fixed = ""; try{ fixed = sessionStorage.getItem("bakara_teamfix") || ""; }catch(e){}
+          if(sd.team && /^[A-Za-z0-9]{16,64}$/.test(sd.team) && sd.team !== cloudCode && fixed !== sd.team){
+            try{ localStorage.setItem(TEAM_KEY, sd.team); sessionStorage.removeItem("bakara_local"); sessionStorage.setItem("bakara_teamfix", sd.team); }catch(e){}
+            location.reload(); return;
+          }
           // משרד וצופה רואים את כל האתרים; צופה — בלי שום כתיבה
           Cloud.mgr = (sd.role === "office" || sd.role === "viewer") ? null : sd.name;
           setReadOnly(sd.role === "viewer");
@@ -6509,7 +6515,7 @@ ${l}`
           <div class="scrim" onClick=${()=>setTeamSheet(false)}>
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
               <h3>קוד צוות</h3>
-              <div class="who">${cloudCode ? "מחובר למסד המשותף. מצב: " + cloud.status : "מצב מקומי — הנתונים נשמרים רק במכשיר הזה."} את הקוד מקבלים מההנהלה, בדרך כלל כקישור שפותח את האפליקציה כבר מחוברת.</div>
+              <div class="who">${cloudCode ? "מחובר למסד המשותף (קוד " + cloudCode.slice(0, 4) + "…" + cloudCode.slice(-3) + "). מצב: " + cloud.status : "מצב מקומי — הנתונים נשמרים רק במכשיר הזה."} את הקוד מקבלים מההנהלה, בדרך כלל כקישור שפותח את האפליקציה כבר מחוברת.</div>
               ${cloudCode && html`<button class="opt" onClick=${shareTeam}><span class="e">📤</span>שתף קישור צוות למנהל (וואטסאפ) — רק לאנשים שמנהלים את הבקרה</button>`}
               ${!cloudCode && html`<input class="tin" type="text" dir="ltr" value=${teamInput} onInput=${e=>setTeamInput(e.target.value)} placeholder="הדבק כאן קוד צוות" autocapitalize="off" autocomplete="off" />`}
               <div class="btnrow" style=${{marginTop:10}}>
