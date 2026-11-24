@@ -1528,14 +1528,26 @@
     const batch = Cloud.db.batch();
     let ops = 0;
     const set = (n, id, data) => { batch.set(col(n).doc(docKey(id)), data); ops++; };
+    // מסמך קיים: כותבים רק את השדות שהשתנו במכשיר הזה (mergeFields), כך שמכשיר עם עותק ישן לא מוחק שדות
+    // שהוא בכלל לא מכיר או לא נגע בהם (דוחות שבועיים, מלאי, תמונות). שדה שנמחק במכוון — נמחק.
+    const patch = (n, id, before, after) => {
+      const keys = [], data = {};
+      Object.keys(after).forEach(k => { if(JSON.stringify(before[k]) !== JSON.stringify(after[k])){ keys.push(k); data[k] = after[k]; } });
+      Object.keys(before).forEach(k => { if(!(k in after)){ keys.push(k); data[k] = firebase.firestore.FieldValue.delete(); } });
+      if(keys.length){ batch.set(col(n).doc(docKey(id)), data, { mergeFields: keys }); ops++; }
+    };
     const del = (n, id) => { batch.delete(col(n).doc(docKey(id))); ops++; };
 
     // מנהל פרויקט כותב רק לאתרים שלו (החוקים במסד חוסמים כל דבר אחר — ואז כל הצרור נכשל)
     const mine = (n, x) => !Cloud.mgr || n !== "sites" || (x && managedBy(x, Cloud.mgr));
     [["sites", stripSite], ["requests", cleanDoc], ["transfers", cleanDoc]].forEach(([n, fix])=>{
       const before = new Map((prev[n] || []).map(x => [x.id, JSON.stringify(x)]));
+      const prevObj = new Map((prev[n] || []).map(x => [x.id, x]));
       const ids = new Set();
-      (next[n] || []).forEach(x => { ids.add(x.id); if(before.get(x.id) !== JSON.stringify(x) && mine(n, x)) set(n, x.id, fix(x)); });
+      (next[n] || []).forEach(x => { ids.add(x.id); if(before.get(x.id) !== JSON.stringify(x) && mine(n, x)){
+        const p0 = prevObj.get(x.id);
+        if(p0) patch(n, x.id, fix(p0), fix(x)); else set(n, x.id, fix(x));
+      } });
       before.forEach((_, id) => { if(!ids.has(id) && !(Cloud.mgr && n === "sites")) del(n, id); });
     });
     const pn = prev.nudges || {}, nn = next.nudges || {};
@@ -6015,7 +6027,7 @@ ${l}`
         const real = !fromCache || docs.length > 0;
         setCloud(c => {
           const loaded = real ? { ...c.loaded, [name]: true } : c.loaded;
-          if(name === "sites" && real) return { ...c, loaded, ready:true, empty: docs.length === 0, status: navigator.onLine ? "live" : "offline" };
+          if(name === "sites" && real) return { ...c, loaded, ready:true, server: c.server || !fromCache, empty: docs.length === 0, status: navigator.onLine ? "live" : "offline" };
           return { ...c, loaded };
         });
       }
@@ -6040,7 +6052,7 @@ ${l}`
     // לא יותר מפעם ב-20 שניות — כדי לא להיכנס ל"משיכת חבל" עם מכשיר ישן.
     const healAt = useRef(0), [healTick, setHealTick] = useState(0);
     useEffect(()=>{
-      if(!(cloudCode && isOffice && cloud.ready && !cloud.empty)) return;
+      if(!(cloudCode && isOffice && cloud.ready && cloud.server && !cloud.empty)) return;
       const off = s => { if(s.mgrManual) return false; const m = MGR[s.num], want = m ? m.name : "לא משויך";
         return ownerName(s) !== want || JSON.stringify(s.mgrs || []) !== JSON.stringify((m && m.with) || []); };
       if(!((st.roster2 || 0) < ROSTER_V || (st.sites || []).some(off))) return;
@@ -6048,18 +6060,18 @@ ${l}`
       if(wait > 0){ const t = setTimeout(()=>setHealTick(x => x + 1), wait); return ()=>clearTimeout(t); }
       healAt.current = Date.now();
       update(d => { rosterSync(d); d.roster2 = ROSTER_V; return d; });
-    }, [cloud.ready, cloud.empty, st.roster2, st.sites, isOffice, healTick]);
+    }, [cloud.ready, cloud.server, cloud.empty, st.roster2, st.sites, isOffice, healTick]);
 
     // ניקוי חד־פעמי של נתוני ההדגמה הישנים גם במסד המשותף
     useEffect(()=>{
-      if(cloudCode && isOffice && cloud.ready && !cloud.empty && cloud.loaded.meta && st.cleanV !== CLEAN_V)
+      if(cloudCode && isOffice && cloud.ready && cloud.server && !cloud.empty && cloud.loaded.meta && st.cleanV !== CLEAN_V)
         update(d => { d.sites.forEach(applyClean); d.cleanV = CLEAN_V; return d; });
-    }, [cloud.ready, cloud.empty, cloud.loaded.meta, st.cleanV]);
+    }, [cloud.ready, cloud.server, cloud.empty, cloud.loaded.meta, st.cleanV]);
     // המודל הישן של מחסן מרכזי (בקשות ניפוק / ניוד הדגמה) הוסר — מנקים אותו מהמסד המשותף
     useEffect(()=>{
-      if(cloudCode && isOffice && cloud.ready && !cloud.empty && ((st.requests || []).length || (st.transfers || []).length))
+      if(cloudCode && isOffice && cloud.ready && cloud.server && !cloud.empty && ((st.requests || []).length || (st.transfers || []).length))
         update(d => { d.requests = []; d.transfers = []; return d; });
-    }, [cloud.ready, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
+    }, [cloud.ready, cloud.server, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
     const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
