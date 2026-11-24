@@ -547,10 +547,27 @@
   .mgrsel{ display:flex; align-items:center; gap:6px; font-family:"Heebo",sans-serif; font-size:.8rem; color:var(--ink-3); }
   .mgrsel select, .mgrextra select{ width:auto; font-family:inherit; padding:5px 8px; }
   .mgrextra{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-family:"Heebo",sans-serif; font-size:.8rem; color:var(--ink-3); }
+  .invprojw{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -4px; }
+  @media (max-width:560px){ .invproj{ font-size:.78rem; } .invproj th, .invproj td{ padding:7px 4px; } }
   .invproj{ width:100%; border-collapse:collapse; font-family:"Heebo",sans-serif; font-size:.86rem; }
   .invproj th, .invproj td{ padding:8px 6px; border-bottom:1px solid var(--line); text-align:start; }
   .invproj td.n{ direction:ltr; text-align:end; white-space:nowrap; }
   .invproj tr.pr{ cursor:pointer; } .invproj tr.pr:hover{ background:var(--surface-2); }
+  .invhead{ flex-wrap:wrap; gap:8px; }
+  @media (max-width:560px){ .invhead .invttl{ flex:1 1 100%; } .invhead > span{ display:none; } .invhead .btn{ padding:8px 10px; font-size:.8rem; } }
+  /* סרגל ניווט תחתון — טלפון */
+  .bnav{ position:fixed; inset-inline:0; bottom:0; z-index:40; display:flex; background:var(--surface); border-top:1px solid var(--line); padding:4px 4px calc(4px + env(safe-area-inset-bottom)); box-shadow:0 -2px 10px rgba(0,0,0,.06); }
+  .bnav button{ flex:1 1 0; min-width:0; border:0; background:none; padding:5px 2px 3px; display:flex; flex-direction:column; align-items:center; gap:2px; color:var(--ink-3); font-family:"Heebo",sans-serif; border-radius:10px; cursor:pointer; }
+  .bnav button.on{ color:var(--accent-ink, var(--ink)); background:var(--accent-wash, var(--surface-2)); }
+  .bnav .bi{ position:relative; font-size:1.25rem; line-height:1.2; }
+  .bnav .bl{ font-size:.68rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .bnav .bn{ position:absolute; top:-4px; inset-inline-end:-12px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--crit); color:#fff; font-style:normal; font-size:.6rem; font-weight:700; line-height:16px; text-align:center; }
+  .app:not(.desk) .main{ padding-bottom:calc(72px + env(safe-area-inset-bottom)); }
+  .topbar.noseg{ flex-wrap:nowrap; }
+  .topbar.noseg .brand{ width:auto; flex:1 1 auto; min-width:0; margin-inline-end:0; }
+  .topbar.noseg .brand .txt span{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  body:has(.bnav) .toast{ bottom:calc(78px + env(safe-area-inset-bottom)); }
+  .seg .segn{ display:inline-block; min-width:16px; height:16px; margin-inline-start:3px; padding:0 4px; border-radius:8px; background:var(--crit); color:#fff; font-style:normal; font-size:.62rem; font-weight:700; line-height:16px; text-align:center; vertical-align:1px; }
   .invimp{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line)}
   .invimp .pdt{flex:1;min-width:0}.invimp select{width:auto;flex:none;font-family:inherit;padding:4px 6px}
   .invrow .pdopen{ gap:8px; }
@@ -568,6 +585,7 @@
   .afix2{ display:flex; gap:8px; }
   .afield{ display:flex; flex-direction:column; gap:4px; font-family:"Heebo",sans-serif; font-size:.74rem; font-weight:600; color:var(--ink-2); flex:1; margin-top:8px; }
   .afield input{ font-family:inherit; font-size:.92rem; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); }
+  .afix2 > .afield{ min-width:0; } .afield input, .afield select, .afield textarea{ min-width:0; width:100%; box-sizing:border-box; }
   .acheck{ display:flex; gap:8px; align-items:center; font-size:.84rem; margin-top:10px; }
   .awk{ display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--line-2); padding:9px 0; margin-top:6px; }
   .awk.off{ opacity:.55; }
@@ -1415,7 +1433,7 @@
           if(!parts.length){ tx.update(ref, { rcptIds: ids }); return false; }
           tx.update(ref, { materials: mats, rcptIds: ids });
           const lid = "l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-          tx.set(Cloud.base.collection("log").doc(lid), { id:lid, ts:Date.now(), who, siteId:sid,
+          tx.set(Cloud.base.collection("log").doc(lid), { id:lid, ts:Date.now(), who: r.by ? String(r.by).trim() : "רכש", siteId:sid,
             text:"קבלה מרכש" + (r.supplier ? " · " + r.supplier : "") + (r.noteNo ? " · ת.מ " + r.noteNo : "") + (r.by ? " · קיבל " + r.by : "") + ": " + parts.join(", ") });
           return true;
         });
@@ -4644,16 +4662,17 @@ ${l}`
       ${open && html`<${PdViewer} p=${p} f=${open} mine=${mine} notify=${notify} onClose=${()=>setOpen(null)} />`}`;
   }
 
-  function MyDocs({ phone, name, files, notify }){
+  function MyDocs({ phone, name, files, notify, onAll }){
     return html`<div class="screen narrow">
-      <div class="shead"><div><h2>📁 המסמכים שלי</h2><span class="sub">${name} · תלושים, הפרשות, טפסים וחוזה</span></div></div>
+      <div class="shead rowbet"><div><h2>📁 המסמכים שלי</h2><span class="sub">${name} · תלושים, הפרשות, טפסים וחוזה</span></div>
+        ${onAll && html`<button class="btn" style=${{flex:"none"}} onClick=${onAll}>🗂 של כל העובדים</button>`}</div>
       <div class="sub2">🔒 רק אתה ומשרד ט.ש. מי-רון רואים את המסמכים האלה. מנהלים אחרים לא רואים אותם.</div>
       <${PdList} p=${phone} files=${files} mine=${true} notify=${notify} />
     </div>`;
   }
 
   /* ───── המשרד: סקירה, כרטיסי עובדים, העלאה ───── */
-  function DocsAdmin({ who, myPhone, notify }){
+  function DocsAdmin({ who, myPhone, notify, onMine }){
     const [staff, setStaff] = useState(null), [profs, setProfs] = useState({});
     const [tab, setTab] = useState("all");               // all | split | one
     const [person, setPerson] = useState(null);           // טלפון — כרטיס עובד פתוח
@@ -4684,7 +4703,8 @@ ${l}`
       </div>`;
     }
     return html`<div class="screen">
-      <div class="shead rowbet"><div><h2>📁 מסמכים אישיים</h2><span class="sub">${people.length} משתמשים · רק המשרד ובעל המסמך רואים</span></div></div>
+      <div class="shead rowbet"><div><h2>📁 מסמכים אישיים</h2><span class="sub">${people.length} משתמשים · רק המשרד ובעל המסמך רואים</span></div>
+        ${onMine && html`<button class="btn" style=${{flex:"none"}} onClick=${onMine}>📁 המסמכים שלי</button>`}</div>
       <div class="chips">
         <button class=${"chip " + (tab === "all" ? "on" : "")} onClick=${()=>setTab("all")}>סקירה</button>
         <button class=${"chip " + (tab === "split" ? "on" : "")} onClick=${()=>setTab("split")}>⬆ PDF מרוכז מתוכנת השכר</button>
@@ -5611,7 +5631,7 @@ ${l}`
         </select>
       </div>
       ${!keys.length ? html`<div class="empty">אין חשבוניות ${mon === "all" ? "" : "ב" + pdPer(mon)}</div>` : html`
-      <table class="invproj">
+      <div class="invprojw"><table class="invproj">
         <thead><tr><th>פרויקט</th><th>חשבוניות</th><th>לפני מע״מ</th><th>כולל מע״מ</th><th>באישור</th></tr></thead>
         <tbody>
           ${keys.map(k => { const a = groups[k], w = waiting(a); return html`
@@ -5624,7 +5644,7 @@ ${l}`
             </div></td></tr>`}`; })}
           <tr><td><b>סה״כ</b></td><td class="n"><b>${rows.length}</b></td><td class="n"><b>${invMoney(sum(rows, invNet))}</b></td><td class="n"><b>${invMoney(sum(rows, f => f.total))}</b></td><td class="n"><b>${waiting(rows) || "—"}</b></td></tr>
         </tbody>
-      </table>`}
+      </table></div>`}
       <div class="sub2" style=${{marginTop:8}}>הפרויקט נקבע בכל חשבונית (שדה "פרויקט"). חשבוניות בלי פרויקט נספרות ב"כללי". דוח אקסל מלא באותו מבנה של הגיליון — בלשונית "📦 לרו״ח".</div>
     </div>`;
   }
@@ -5762,7 +5782,7 @@ ${l}`
     const selSum = sumOf(shown.filter(f => selIds.includes(f.id)));
     const bulkSt = cur === "mine" && payer ? "ok" : cur === "ok" ? "paid" : null;
     return html`<div class="screen">
-      <div class="shead"><div><h2>🧾 חשבוניות ספקים</h2>
+      <div class="shead invhead"><div class="invttl"><h2>🧾 חשבוניות ספקים</h2>
         <span class="sub">${list.length} חשבוניות · ${sups.length} ספקים · ${mailOn ? "📬 נקלטות לבד " + (mail.box ? "מ-" + mail.box : "מהמייל") + (tsMs(mail.last) ? " (בדיקה אחרונה " + hhmm(tsMs(mail.last)) + ")" : "") : "📭 קליטה מהמייל עוד לא חוברה"}</span></div>
         <span style=${{flex:1}}></span>
         ${mail && (mailOn
@@ -6361,8 +6381,8 @@ ${l}`
       body = !signedIn
         ? html`<div class="screen narrow"><div class="empty">מסמכים אישיים זמינים רק אחרי כניסה עם מספר הטלפון</div></div>`
         : nav.screen === "docs.admin" && auth.staff.role === "office"
-        ? html`<${DocsAdmin} who=${who} myPhone=${auth.phone} notify=${notify} />`
-        : html`<${MyDocs} phone=${auth.phone} name=${auth.staff.name} files=${myFiles} notify=${notify} />`;
+        ? html`<${DocsAdmin} who=${who} myPhone=${auth.phone} notify=${notify} onMine=${()=>switchRole("docs")} />`
+        : html`<${MyDocs} phone=${auth.phone} name=${auth.staff.name} files=${myFiles} notify=${notify} onAll=${auth.staff.role === "office" ? ()=>switchRole("docsadm") : null} />`;
     else if(nav.screen === "inv.home")
       body = !invOn
         ? html`<div class="screen narrow"><div class="empty">אין חשבוניות להצגה</div></div>`
@@ -6450,17 +6470,18 @@ ${l}`
 
     return html`
       <div class=${"app" + (deskOn ? " desk" : "")}>
-        ${deskOn ? sideNav : html`<div class="topbar">
+        ${deskOn ? sideNav : html`<div class=${"topbar" + (inApp ? " noseg" : "")}>
           <div class="brand">
             <span class="plate"><img src=${LOGO} alt="ט.ש. מי רון" /></span>
             <span class="txt"><b>ט.ש. מי רון</b><span>פלס · בקרת ביצוע לאינסטלציה</span></span>
           </div>
           ${isViewer && html`<span class="rotag" title="המשתמש הזה יכול רק לצפות — אין לו הרשאה לשנות שום דבר">👁 צפייה בלבד</span>`}
-          ${auth.s !== "agency" && html`<div class="seg" role="tablist">
+          ${auth.s !== "agency" && !inApp && html`<div class="seg" role="tablist">
             <button role="tab" class=${role==="ctl"?"on":""} onClick=${()=>switchRole("ctl")}>בקרה</button>
             <button role="tab" class=${role==="field"?"on":""} onClick=${()=>switchRole("field")}>שטח</button>
             <button role="tab" class=${role==="stock"?"on":""} onClick=${()=>switchRole("stock")}>מלאי</button>
           </div>`}
+          <span style=${{flex:1}}></span>
           ${auth.s !== "agency" && html`<button class="ic0 me" title=${"מחובר כ-"+me.name+" · החלף"} onClick=${()=>setIdSheet(true)}>${me.name.slice(0,1)}<i class=${"sdot "+cloud.status}></i>${pdNew > 0 && html`<i class="pdnew" title="מסמך חדש">${pdNew}</i>`}</button>`}
           <button class="ic0" title="מצב תצוגה" onClick=${toggleTheme}>◐</button>
           ${isOffice && ((!cloudCode && !needTeam) || signedIn) && html`<button class="ic0" title="אפס דמו" onClick=${reset}>↺</button>`}
@@ -6474,6 +6495,13 @@ ${l}`
         ${role !== "inv" && (invWait > 0 || invCnt.tal > 0) && html`<button class="banner pdban" onClick=${()=>switchRole("inv")}>🧾 ${invWait > 0 ? (invWait === 1 ? "חשבונית מחכה לאישורך" : invWait + " חשבוניות מחכות לאישורך") : (invCnt.tal === 1 ? "חשבונית ממתינה לאישור תשלום שלך" : invCnt.tal + " חשבוניות ממתינות לאישור תשלום שלך")} — לחץ לצפייה</button>`}
         ${signedIn && pdNew > 0 && role !== "docs" && html`<button class="banner pdban" onClick=${()=>switchRole("docs")}>📁 ${pdNew === 1 ? "מסמך אישי חדש מחכה לך" : pdNew + " מסמכים אישיים חדשים מחכים לך"} — לחץ לצפייה</button>`}
         ${body}
+        ${inApp && !deskOn && html`<nav class="bnav" aria-label="ניווט">
+          ${[["ctl", "📊", "בקרה", 0], ["field", "📍", "שטח", 0], ["stock", "📦", "מלאי", 0],
+             ...(invOn ? [["inv", "🧾", "חשבוניות", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait]] : []),
+             ...(signedIn ? [[auth.staff.role === "office" ? "docsadm" : "docs", "📁", "מסמכים", pdNew]] : [])
+            ].map(([r, ic, lb, n]) => html`<button key=${r} class=${(role === r || (r === "docsadm" && role === "docs")) ? "on" : ""} aria-current=${role === r ? "page" : null} onClick=${()=>{ switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} }}>
+              <span class="bi">${ic}${n ? html`<i class="bn">${n > 99 ? "99+" : n}</i>` : null}</span><span class="bl">${lb}</span></button>`)}
+        </nav>`}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
         </div>
         ${toast && html`<div class="toast"><div>${toast}</div></div>`}
