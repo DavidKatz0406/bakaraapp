@@ -1546,8 +1546,10 @@
     Object.keys(ps).forEach(k => { if(!(k in ns)) del("since", k); });
     const seen = new Set((prev.log || []).map(l => l.id));
     (next.log || []).forEach(l => { if(l.id && !seen.has(l.id)) set("log", l.id, cleanDoc(l)); });
-    if(!Cloud.mgr && (prev.trackStart !== next.trackStart || prev.rosterV !== next.rosterV || prev.cleanV !== next.cleanV)){
-      batch.set(col("meta").doc("app"), { trackStart:next.trackStart, rosterV:next.rosterV, cleanV:next.cleanV || 0 }, { merge:true }); ops++;
+    // השדה הישן rosterV נשאר כמו שהוא: גרסאות ישנות של האפליקציה מגיבות לכל שינוי בו ודורסות את רשימת המנהלים.
+    // הגרסה החדשה של הרשימה נשמרת בשדה נפרד (roster2) שגרסאות ישנות לא מכירות.
+    if(!Cloud.mgr && (prev.trackStart !== next.trackStart || (prev.roster2 || 0) !== (next.roster2 || 0) || prev.cleanV !== next.cleanV)){
+      batch.set(col("meta").doc("app"), { trackStart:next.trackStart, roster2:next.roster2 || 0, cleanV:next.cleanV || 0 }, { merge:true }); ops++;
     }
     if(ops) batch.commit().catch(e => console.warn("cloud write failed", e));
   }
@@ -5921,16 +5923,20 @@ ${l}`
           // חברת כ״א: מסך נפרד שמציג רק את דוחות השעות שלה (בלי קוד צוות ובלי גישה לשום נתון אחר)
           if(sd.role === "agency"){ setAuth({ s:"agency", phone:u.phoneNumber, staff:sd }); return; }
           if(!cloudCode){
-            if(sd.team && /^[A-Za-z0-9]{16,64}$/.test(sd.team)){
-              try{ localStorage.setItem(TEAM_KEY, sd.team); sessionStorage.removeItem("bakara_local"); }catch(e){}
+            const tm = sd.teamSet || sd.team;
+            if(tm && /^[A-Za-z0-9]{16,64}$/.test(tm)){
+              try{ localStorage.setItem(TEAM_KEY, tm); sessionStorage.removeItem("bakara_local"); }catch(e){}
               location.reload(); return;
             }
             setAuth({ s:"noteam", phone:u.phoneNumber }); return;
           }
           // המכשיר מחובר לקוד צוות אחר מזה שרשום למשתמש (למשל מקישור ישן) — עוברים לצוות הנכון, כדי שכולם יעבדו על אותם נתונים
+          // מעבר צוות רק אחרי הוראה מפורשת של ההנהלה ("זה הצוות הנכון" בחלון קוד צוות) — השדה teamSet.
+          // השדה team לבדו לא מזיז מכשירים: גרסאות ישנות דורסות אותו אוטומטית.
           let fixed = ""; try{ fixed = sessionStorage.getItem("bakara_teamfix") || ""; }catch(e){}
-          if(sd.team && /^[A-Za-z0-9]{16,64}$/.test(sd.team) && sd.team !== cloudCode && fixed !== sd.team){
-            try{ localStorage.setItem(TEAM_KEY, sd.team); sessionStorage.removeItem("bakara_local"); sessionStorage.setItem("bakara_teamfix", sd.team); }catch(e){}
+          const wantTeam = sd.teamSet && /^[A-Za-z0-9]{16,64}$/.test(sd.teamSet) ? sd.teamSet : "";
+          if(wantTeam && wantTeam !== cloudCode && fixed !== wantTeam){
+            try{ localStorage.setItem(TEAM_KEY, wantTeam); sessionStorage.removeItem("bakara_local"); sessionStorage.setItem("bakara_teamfix", wantTeam); }catch(e){}
             location.reload(); return;
           }
           // משרד וצופה רואים את כל האתרים; צופה — בלי שום כתיבה
@@ -5960,7 +5966,8 @@ ${l}`
     useEffect(()=>{
       if(!signedIn || auth.staff.role !== "office") return;
       const col = firebase.firestore().collection("staff");
-      col.get().then(q => q.docs.forEach(d => { if(d.data().role !== "agency" && d.data().team !== cloudCode) col.doc(d.id).set({ team:cloudCode }, { merge:true }).catch(()=>{}); })).catch(()=>{});
+      // ממלא קוד צוות רק למשתמש שאין לו בכלל — לא דורס קוד קיים (מכשיר עם קוד ישן דרס בעבר את כולם)
+      col.get().then(q => q.docs.forEach(d => { const x = d.data(); if(x.role !== "agency" && !x.team && !x.teamSet) col.doc(d.id).set({ team:cloudCode }, { merge:true }).catch(()=>{}); })).catch(()=>{});
     }, [signedIn]);
     useEffect(()=>{ const t = setInterval(()=>setNow(Date.now()), 60000); return ()=>clearInterval(t); }, []);
     useEffect(()=>{
@@ -6017,7 +6024,7 @@ ${l}`
       if(!cloudCode || !signedIn) return;
       const stop = cloudStart(cloudCode, {
         data: applyRemote,
-        meta: (m)=>{ setCloud(c => ({ ...c, loaded: { ...c.loaded, meta: true } })); if(!m) return; const cur = stRef.current; const nx = { ...cur, trackStart: m.trackStart || cur.trackStart, rosterV: m.rosterV || cur.rosterV, cleanV: m.cleanV || 0 }; stRef.current = nx; setSt(nx); },
+        meta: (m)=>{ setCloud(c => ({ ...c, loaded: { ...c.loaded, meta: true } })); if(!m) return; const cur = stRef.current; const nx = { ...cur, trackStart: m.trackStart || cur.trackStart, rosterV: m.rosterV || cur.rosterV, roster2: m.roster2 || 0, cleanV: m.cleanV || 0 }; stRef.current = nx; setSt(nx); },
         status: (s, e)=> setCloud(c => ({ ...c, status: s, err: e ? String(e.code || e.message || e) : "" }))
       });
       const net = ()=> setCloud(c => ({ ...c, status: navigator.onLine ? (c.ready ? "live" : "connecting") : "offline" }));
@@ -6029,11 +6036,19 @@ ${l}`
       if(!cloudCode || nav.screen !== "field.report") return;
       return cloudPhotos(nav.sid, docs => setPhotoMap(m => { const n = { ...m }; docs.forEach(d => { n[d.id] = d.url; }); return n; }));
     }, [nav.screen, nav.sid]);
-    // מעבר מרשימת מנהלים ישנה לחדשה גם במסד המשותף
+    // רשימת המנהלים במסד המשותף: שדרוג לגרסה החדשה, ותיקון עצמי אם מכשיר עם גרסה ישנה דרס אותה.
+    // לא יותר מפעם ב-20 שניות — כדי לא להיכנס ל"משיכת חבל" עם מכשיר ישן.
+    const healAt = useRef(0), [healTick, setHealTick] = useState(0);
     useEffect(()=>{
-      if(cloudCode && isOffice && cloud.ready && !cloud.empty && (st.rosterV || 0) < ROSTER_V)   // רק שדרוג — גרסה ישנה לא מחזירה רשימה ישנה
-        update(d => { rosterSync(d); d.rosterV = ROSTER_V; return d; });
-    }, [cloud.ready, cloud.empty, st.rosterV, isOffice]);
+      if(!(cloudCode && isOffice && cloud.ready && !cloud.empty)) return;
+      const off = s => { if(s.mgrManual) return false; const m = MGR[s.num], want = m ? m.name : "לא משויך";
+        return ownerName(s) !== want || JSON.stringify(s.mgrs || []) !== JSON.stringify((m && m.with) || []); };
+      if(!((st.roster2 || 0) < ROSTER_V || (st.sites || []).some(off))) return;
+      const wait = 20000 - (Date.now() - healAt.current);
+      if(wait > 0){ const t = setTimeout(()=>setHealTick(x => x + 1), wait); return ()=>clearTimeout(t); }
+      healAt.current = Date.now();
+      update(d => { rosterSync(d); d.roster2 = ROSTER_V; return d; });
+    }, [cloud.ready, cloud.empty, st.roster2, st.sites, isOffice, healTick]);
 
     // ניקוי חד־פעמי של נתוני ההדגמה הישנים גם במסד המשותף
     useEffect(()=>{
@@ -6085,6 +6100,15 @@ ${l}`
       location.reload();
     }
     // שיתוף קישור הצוות (רק ממכשיר מחובר) — לכל מי שיש את הקישור יש גישה מלאה לבקרה
+    // הנהלה: "זה הצוות הנכון" — כל המשתמשים (ומכשיריהם) עוברים לקוד הצוות של המכשיר הזה
+    async function setTeamForAll(){
+      if(!confirm("לקבוע את הצוות שהמכשיר הזה מחובר אליו כצוות של כל המשתמשים?\n\nכל מכשיר של משתמש שמחובר לצוות אחר יעבור אליו בפתיחה הבאה. לעשות את זה רק ממכשיר שבו רואים את העובדים ואת הנתונים הנכונים.")) return;
+      try{
+        const col = firebase.firestore().collection("staff"), q = await col.get(), b = firebase.firestore().batch(); let n = 0;
+        q.docs.forEach(d => { if(d.data().role !== "agency"){ b.set(col.doc(d.id), { team:cloudCode, teamSet:cloudCode }, { merge:true }); n++; } });
+        await b.commit(); notify(n + " משתמשים עודכנו — המכשירים שלהם יעברו לצוות הזה בפתיחה הבאה");
+      }catch(e){ notify("לא נשמר: " + (e.code || e.message)); }
+    }
     async function shareTeam(){
       const link = location.origin + location.pathname + "#k=" + cloudCode;
       const text = "קישור לבקרה של ט.ש. מי-רון (אישי — לא להעביר הלאה):\n" + link;
@@ -6516,6 +6540,7 @@ ${l}`
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
               <h3>קוד צוות</h3>
               <div class="who">${cloudCode ? "מחובר למסד המשותף (קוד " + cloudCode.slice(0, 4) + "…" + cloudCode.slice(-3) + "). מצב: " + cloud.status : "מצב מקומי — הנתונים נשמרים רק במכשיר הזה."} את הקוד מקבלים מההנהלה, בדרך כלל כקישור שפותח את האפליקציה כבר מחוברת.</div>
+              ${cloudCode && isOffice && signedIn && html`<button class="opt" onClick=${setTeamForAll}><span class="e">✅</span>זה הצוות הנכון — העבר את כל המכשירים של המשתמשים אליו</button>`}
               ${cloudCode && html`<button class="opt" onClick=${shareTeam}><span class="e">📤</span>שתף קישור צוות למנהל (וואטסאפ) — רק לאנשים שמנהלים את הבקרה</button>`}
               ${!cloudCode && html`<input class="tin" type="text" dir="ltr" value=${teamInput} onInput=${e=>setTeamInput(e.target.value)} placeholder="הדבק כאן קוד צוות" autocapitalize="off" autocomplete="off" />`}
               <div class="btnrow" style=${{marginTop:10}}>
