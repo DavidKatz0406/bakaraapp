@@ -228,6 +228,13 @@ async function takeMessage(at, m, key, sups){
       files.push({ name: a.name || "חשבונית", mime: pdf ? "application/pdf" : (/png/i.test(a.contentType || a.name) ? "image/png" : "image/jpeg"), bytes });
     }
   }
+  // מייל עם חשבונית + מסמכים נלווים (פרטי בנק, אישור ניהול ספרים, ניכוי במקור) — נכנסת רק החשבונית
+  const INV_NAME = /חשבונית|חש[ -_.]?\d|\d+ ?חש|קבלה|invoice|receipt|inv[-_ ]?\d/i;
+  const SIDE_DOC = /בנק|bank|ניהול ספרים|ניכוי|במקור|עוסק מורשה|תעודת|אישור/i;
+  if(files.length > 1 && files.some(f => INV_NAME.test(f.name))){
+    const keep = files.filter(f => !SIDE_DOC.test(f.name) || INV_NAME.test(f.name));
+    if(keep.length) files.splice(0, files.length, ...keep);
+  }
   let link = "";
   if(!files.length){
     // אין קובץ — מחפשים קישור לחשבונית בגוף המייל, ומנסים להוריד ממנו PDF

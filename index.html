@@ -5397,13 +5397,18 @@ ${l}`
   function invColMap(list, cfg){
     const cols = (cfg && cfg.cols && cfg.cols.length ? cfg.cols : []).slice();
     if(!cols.includes("כללי")) cols.push("כללי");
-    const W = s => invKey(s).split(" ").filter(w => w.length >= 2);
+    // מילים כלליות לא קובעות התאמה ("מלון אשדוד" ≠ "מלון תל אביב", "עצמאות בת ים" ≠ "גליל ים")
+    const STOP = new Set(["מלון", "הר", "בת", "ים", "תל", "אביב", "בית", "קרית", "רמת", "גן", "כפר", "מגרש", "פרויקט", "קוטגים", "קוטג׳ים"]);
+    const W = s => invKey(s).split(" ").filter(w => w.length >= 2 && !STOP.has(w) && !/^\d+$/.test(w));
     const map = {};
     [...new Set(list.map(f => f.siteName).filter(Boolean))].forEach(n => {
       let i = cols.findIndex(c => invKey0(c) === invKey0(n));
       if(i < 0){
         const wn = W(n); let best = 0;
-        cols.forEach((c, j) => { const wc = W(c), sc = wn.filter(w => wc.includes(w)).length * 10 - Math.abs(wc.length - wn.length); if(wn.some(w => wc.includes(w)) && sc > best){ best = sc; i = j; } });
+        // ציון: מילים משותפות, פחות מילים "זרות" בעמודה, בונוס כשהמילה הראשונה של הפרויקט משותפת
+        cols.forEach((c, j) => { const wc = W(c), com = wn.filter(w => wc.includes(w)).length;
+          const sc = com * 10 - (wc.length - com) * 3 + (wn[0] && wc.includes(wn[0]) ? 1 : 0);
+          if(com && sc > best){ best = sc; i = j; } });
       }
       if(i < 0){ const k0 = invKey0(n); i = cols.findIndex(c => { const c0 = invKey0(c); return c0.length >= 3 && k0.length >= 3 && (c0.includes(k0) || k0.includes(c0)); }); }
       if(i < 0){ cols.splice(cols.indexOf("כללי"), 0, n); }
@@ -5610,7 +5615,7 @@ ${l}`
       return ()=>{ u1(); u2(); u3(); u4(); };
     }, []);
     // חשבוניות שהגיעו במייל ועוד לא נקראו — קוראים את הפרטים מה-PDF פעם אחת (ברקע, אחת-אחת)
-    const parsing = useRef(false);
+    const parsing = useRef(false), [ptick, setPtick] = useState(0);
     useEffect(()=>{
       if(!list || !sups || !cfg || parsing.current) return;
       const todo = list.filter(f => !f.parsed && f.parts && f.status === "new").slice(0, 10);
@@ -5633,8 +5638,9 @@ ${l}`
           }catch(e){ await invCol().doc(f.id).update({ parsed:true }).catch(()=>{}); }
         }
         parsing.current = false;
+        setPtick(t => t + 1);   // חשבוניות שנכנסו בזמן הקריאה — סבב נוסף
       })();
-    }, [list, sups, cfg]);
+    }, [list, sups, cfg, ptick]);
     if(!list || !sups || !cfg) return html`<div class="screen"><div class="empty">טוען חשבוניות…</div></div>`;
 
     const key = f => f.sup && f.no ? f.sup + "|" + f.no : "";
