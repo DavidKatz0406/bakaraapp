@@ -634,6 +634,25 @@
   .ordcard ul{ margin:4px 0 0; padding:0 18px 0 0; font-size:.84rem; line-height:1.55; }
   .ordcard li{ overflow-wrap:anywhere; }
   .ordcard .onote{ font-family:"Heebo",sans-serif; font-size:.78rem; background:var(--surface-2); border-radius:8px; padding:6px 9px; margin-top:8px; overflow-wrap:anywhere; }
+  .pjcard{ background:var(--surface); border:1px solid var(--line-2); border-radius:14px; padding:12px 13px; }
+  .pjcard + .pjcard{ margin-top:10px; }
+  .pjcard.over{ border-color:var(--crit); }
+  .pjhead{ display:flex; gap:8px; align-items:flex-start; }
+  .pjhead b{ flex:1 1 auto; min-width:0; font-size:1rem; overflow-wrap:anywhere; }
+  .pjhead .pjamt{ flex:none; text-align:left; font-family:"Heebo",sans-serif; font-weight:700; white-space:nowrap; }
+  .pjhead .pjamt small{ display:block; font-weight:500; font-size:.7rem; color:var(--ink-3); }
+  .pjbar{ height:8px; border-radius:6px; background:var(--surface-2); overflow:hidden; margin:8px 0 4px; }
+  .pjbar i{ display:block; height:100%; background:var(--ok); border-radius:6px; }
+  .pjbar i.warn{ background:var(--warn); } .pjbar i.crit{ background:var(--crit); }
+  .pjmeta{ font-family:"Heebo",sans-serif; font-size:.74rem; color:var(--ink-3); display:flex; gap:6px 10px; flex-wrap:wrap; align-items:center; }
+  .pjspark{ display:flex; gap:3px; align-items:flex-end; height:34px; margin-top:8px; }
+  .pjspark span{ flex:1 1 0; min-width:0; background:var(--accent-wash, var(--surface-2)); border-radius:3px 3px 0 0; position:relative; }
+  .pjspark span.cur{ background:var(--accent, var(--ink-3)); }
+  .pjsparkl{ display:flex; gap:3px; font-family:"Heebo",sans-serif; font-size:.6rem; color:var(--ink-3); }
+  .pjsparkl span{ flex:1 1 0; text-align:center; }
+  .pjsum{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; margin:0 0 12px; }
+  .pjsum div{ background:var(--surface); border:1px solid var(--line-2); border-radius:11px; padding:8px; text-align:center; font-family:"Heebo",sans-serif; font-size:.7rem; color:var(--ink-3); }
+  .pjsum b{ display:block; font-size:1rem; color:var(--ink); }
   .imatch{ border:1px solid var(--line-2); border-radius:12px; padding:10px 11px; margin-top:12px; background:var(--surface); }
   .imatch h4{ font-size:.92rem; margin:0 0 6px; }
   .imrow{ display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-top:1px solid var(--line-2); font-family:"Heebo",sans-serif; font-size:.78rem; }
@@ -6372,6 +6391,89 @@ ${l}`
     </div>`, document.body);
   }
 
+  /* 📊 לפי פרויקט (משרד): כמה הוזמן בכל פרויקט בחודש מול התקציב, מצב ההזמנות, 6 חודשים אחרונים, ודוח חודשי להדפסה / CSV.
+     המקור: גיליון "הזמנות" (ולשונית "תקציבים") דרך סקריפט הרכש. תקציב נשמר בגיליון */
+  function ProjectsView({ notify, who, tabs }){
+    const [d, setD] = useState(null), [err, setErr] = useState(""), [mon, setMon] = useState(""), [busy, setBusy] = useState(false);
+    async function load(){
+      setErr("");
+      try{ const j = await rkGet("projects", { months:6 }); setD(j); setMon(m => m || j.months[j.months.length - 1]); }
+      catch(e){ setErr(String(e.message || e)); }
+    }
+    useEffect(()=>{ load(); }, []);
+    const vat = (d && d.vat) || 1.18;
+    const monLbl = m => m ? m.slice(5) + "/" + m.slice(2, 4) : "";
+    const rows = !d ? [] : [...new Set([...Object.keys(d.projects), ...Object.keys(d.budgets || {})])].map(name => {
+      const x = d.projects[name] || { months:{}, sups:{} }, mm = x.months[mon] || { sub:0, n:0 };
+      const budget = (d.budgets || {})[name] || 0, spend = Math.round(mm.sub * vat);
+      const sups = Object.entries((x.sups || {})[mon] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      return { name, spend, n:mm.n, budget, pct: budget ? spend / budget : null, x, sups, spark: d.months.map(m => Math.round(((x.months[m] || {}).sub || 0) * vat)) };
+    }).filter(r => r.spend || r.budget || r.x.open || r.x.tal || r.x.transit || r.x.credits).sort((a, b) => b.spend - a.spend || a.name.localeCompare(b.name, "he"));
+    const tot = rows.reduce((a, r) => a + r.spend, 0), totB = rows.reduce((a, r) => a + r.budget, 0), nOver = rows.filter(r => r.pct > 1).length;
+    async function setBudget(r){
+      const v = prompt("תקציב חודשי לפרויקט " + r.name + " (₪ כולל מע״מ). 0 = בלי תקציב", r.budget || "");
+      if(v == null) return;
+      const amount = Math.max(0, Math.round(Number(String(v).replace(/[^\d.]/g, "")) || 0));
+      setBusy(true);
+      try{ const t = await orderAction({ t:"budget", project:r.name, amount }); notify(t === "ok" ? (amount ? "התקציב נשמר בגיליון" : "התקציב הוסר") : (ORD_ERR[t] || "לא נשמר: " + t)); load(); }
+      catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      finally{ setBusy(false); }
+    }
+    const report = () => rows.map(r => ({ project:r.name, spend:r.spend, budget:r.budget, n:r.n, tal:r.x.tal, open:r.x.open, transit:r.x.transit, exc:r.x.exc, credits:r.x.credits }));
+    function printReport(){
+      const data = { mode:"report", who, month:mon, rows:report(), total:tot, totalBudget:totB };
+      const w = window.open(RAKESH_APP + "print.html#" + encodeURIComponent(JSON.stringify(data)), "_blank");
+      if(!w) notify("הדפדפן חסם את פתיחת הדוח — אפשר חלונות קופצים לבקרה");
+    }
+    function csv(){
+      const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+      const head = ["פרויקט", "הוזמן החודש (כולל מע״מ)", "תקציב חודשי", "ניצול %", "הזמנות", "ממתינות לטל", "לא הועברו לספק", "בדרך", "חריגות בקבלה", "זיכויים פתוחים"];
+      const lines = [head.map(q).join(",")].concat(report().map(r => [r.project, r.spend, r.budget || "", r.budget ? Math.round(r.spend / r.budget * 100) : "", r.n, r.tal, r.open, r.transit, r.exc, r.credits].map(q).join(",")));
+      lines.push([q("סה״כ"), tot, totB || "", "", "", "", "", "", "", ""].join(","));
+      const url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type:"text/csv;charset=utf-8" }));
+      const a = document.createElement("a"); a.href = url; a.download = "דוח-רכש-" + mon + ".csv"; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    }
+    return html`<div class="screen">
+      ${tabs}
+      <div class="shead ordhead"><div class="ordttl"><h2>📊 רכש לפי פרויקט</h2>
+        <span class="sub">${d ? "כמה הוזמן בכל פרויקט, כולל מע״מ, מול התקציב החודשי · עודכן " + hhmm(d.at) : "טוען…"}</span></div>
+        <button class="btn" style=${{flex:"none"}} disabled=${!d} onClick=${load} title="רענון">🔄</button>
+      </div>
+      ${err && html`<div class="alert crit" style=${{marginBottom:10}}><span class="b"></span>${err}</div>`}
+      ${d && html`
+        <div class="chips" style=${{margin:"4px 0 10px"}}>${d.months.slice().reverse().map(m => html`<button key=${m} class=${"chip " + (mon === m ? "on" : "")} onClick=${()=>setMon(m)}>${monLbl(m)}</button>`)}</div>
+        <div class="pjsum">
+          <div>הוזמן ב-${monLbl(mon)}<b>${ordMoney(tot)}</b>כולל מע״מ</div>
+          <div>תקציבים<b>${totB ? ordMoney(totB) : "—"}</b>${totB ? Math.round(tot / totB * 100) + "% ניצול" : "לא הוגדרו"}</div>
+          <div style=${nOver ? {borderColor:"var(--crit)", color:"var(--crit)"} : {}}>מעל התקציב<b style=${nOver ? {color:"var(--crit)"} : {}}>${nOver}</b>פרויקטים</div>
+        </div>
+        <div class="ordbar">
+          <span style=${{flex:1}}></span>
+          <button class="btn pri" disabled=${!rows.length} onClick=${printReport}>🧾 דוח חודשי</button>
+          <button class="btn" disabled=${!rows.length} onClick=${csv}>⬇ CSV</button>
+        </div>
+        ${rows.map(r => { const mx = Math.max(1, ...r.spark); return html`<div key=${r.name} class=${"pjcard" + (r.pct > 1 ? " over" : "")}>
+          <div class="pjhead"><b>${r.name}</b>
+            <span class="pjamt">${ordMoney(r.spend)}<small>${r.budget ? "מתוך " + ordMoney(r.budget) + " · " + Math.round(r.pct * 100) + "%" : "אין תקציב"}</small></span></div>
+          ${r.budget > 0 && html`<div class="pjbar"><i class=${r.pct > 1 ? "crit" : r.pct > 0.85 ? "warn" : ""} style=${{width: Math.min(100, Math.round(r.pct * 100)) + "%"}}></i></div>`}
+          <div class="pjmeta">
+            <span>${r.n} הזמנות ב-${monLbl(mon)}</span>
+            ${r.x.tal > 0 && html`<span class="pill warn">⏳ ${r.x.tal} ממתינות לטל</span>`}
+            ${r.x.open > 0 && html`<span class="pill inactive">${r.x.open} לא הועברו לספק</span>`}
+            ${r.x.transit > 0 && html`<span class="pill inactive">🚚 ${r.x.transit} בדרך</span>`}
+            ${r.x.exc > 0 && html`<span class="pill crit">⚠ ${r.x.exc} חריגות</span>`}
+            ${r.x.credits > 0 && html`<span class="pill warn">↩ ${r.x.credits} זיכויים</span>`}
+          </div>
+          ${r.sups.length > 0 && html`<div class="sub2" style=${{margin:"6px 0 0"}}>ספקים: ${r.sups.map(([n, v]) => n + " " + ordMoney(v * vat)).join(" · ")}</div>`}
+          <div class="pjspark" aria-hidden="true">${r.spark.map((v, i) => html`<span key=${i} class=${d.months[i] === mon ? "cur" : ""} style=${{height: Math.max(2, Math.round(v / mx * 32)) + "px"}} title=${ordMoney(v)}></span>`)}</div>
+          <div class="pjsparkl">${d.months.map(m => html`<span key=${m}>${monLbl(m).slice(0, 2)}</span>`)}</div>
+          <button class="linkbtn" style=${{marginTop:6, fontSize:".78rem"}} disabled=${busy} onClick=${()=>setBudget(r)}>✎ ${r.budget ? "שנה תקציב" : "קבע תקציב חודשי"}</button>
+        </div>`; })}
+        ${!rows.length && html`<div class="empty">אין הזמנות ב-${monLbl(mon)}</div>`}`}
+    </div>`;
+  }
+
   /* "הועבר לספק" לשורה אחת (ספק אחד בהזמנה): ספק בפועל + אישור. כמו לסמן בגיליון */
   function OrdFwd({ r, suppliers, onDone, notify }){
     const opts = [...new Set([...(suppliers || []), ...(r.real ? [r.real] : [])])];
@@ -6722,7 +6824,7 @@ ${l}`
         update(d => { d.requests = []; d.transfers = []; return d; });
     }, [cloud.ready, cloud.server, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
-    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : r === "orders" ? "orders.home" : r === "buy" ? "buy.home" : "stock.home";
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : r === "orders" ? "orders.home" : r === "buy" ? "buy.home" : r === "projects" ? "projects.home" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
     // פתיחת לשונית הרכש: עם הזמנה מהמלאי (פריטים + פרויקט) או סתם (שומרים את מה שכבר פתוח)
     const buyOk = !!RAKESH_APP && !isViewer;   // צופה לא מזמין
@@ -6737,6 +6839,7 @@ ${l}`
       <button class=${"chip " + (role === "stock" ? "on" : "")} onClick=${()=>switchRole("stock")}>📦 מלאי</button>
       ${buyOk && html`<button class=${"chip " + (role === "buy" ? "on" : "")} onClick=${()=>openBuy()}>🛒 הזמנת חומר</button>`}
       ${ordOn && html`<button class=${"chip " + (role === "orders" ? "on" : "")} onClick=${()=>switchRole("orders")}>📋 הזמנות פתוחות${ordN ? " (" + ordN + ")" : ""}</button>`}
+      ${ordOn && html`<button class=${"chip " + (role === "projects" ? "on" : "")} onClick=${()=>switchRole("projects")}>📊 לפי פרויקט</button>`}
     </div>`;
     // לחיצה על התראת הזמנה: ?go=orders בפתיחה, או הודעה מה-service worker כשהבקרה כבר פתוחה
     const goBack = useRef(false);
@@ -7106,6 +7209,10 @@ ${l}`
       body = !ordOn
         ? html`<div class="screen narrow"><div class="empty">הזמנות פתוחות זמינות רק למשתמשי משרד</div></div>`
         : html`<${OrdersQueue} q=${ordQ} reload=${loadOrders} who=${who} phone=${auth.phone} notify=${notify} tabs=${stockTabs} />`;
+    else if(nav.screen === "projects.home")
+      body = !ordOn
+        ? html`<div class="screen narrow"><div class="empty">זמין רק למשתמשי משרד</div></div>`
+        : html`<${ProjectsView} notify=${notify} who=${who} tabs=${stockTabs} />`;
     else if(nav.screen === "buy.home")
       body = html`<div class="screen buyscr">${stockTabs}</div>`;
     else if(nav.screen === "inv.home")
@@ -7178,7 +7285,7 @@ ${l}`
           ${SI(onCtl && nav.screen === "ctl.home" && ctlV.tab === k && !(k === "att"), label, ()=>goCtl(k), "sub" + (k === "att" && attOn ? " open" : ""), n)}
           ${k === "att" && attOn && attTabs.map(([a, al]) => SI((ctlV.av || "day") === a, al, ()=>goCtl("att", a), "deep"))}`)}
         ${SI(role === "field", "📍 שטח", ()=>goRole("field"))}
-        ${SI(role === "stock" || role === "buy" || role === "orders", RAKESH_APP ? "📦 מלאי ורכש" : "📦 מלאי", ()=>goRole("stock"), "", ordOn ? ordN : 0)}
+        ${SI(role === "stock" || role === "buy" || role === "orders" || role === "projects", RAKESH_APP ? "📦 מלאי ורכש" : "📦 מלאי", ()=>goRole("stock"), "", ordOn ? ordN : 0)}
         ${signedIn && SI(role === "docs", "📁 המסמכים שלי", ()=>goRole("docs"), "", pdNew)}
         ${signedIn && auth.staff.role === "office" && SI(role === "docsadm", "🗂 מסמכים אישיים", ()=>goRole("docsadm"))}
         ${invOn && SI(role === "inv", auth.staff.role === "office" ? "🧾 חשבוניות ספקים" : "🧾 חשבוניות לאישורך", ()=>goRole("inv"), "", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait)}
@@ -7226,7 +7333,7 @@ ${l}`
           ${[["ctl", "📊", "בקרה", 0], ["field", "📍", "שטח", 0], ["stock", "📦", RAKESH_APP ? "מלאי ורכש" : "מלאי", ordOn ? ordN : 0],
              ...(invOn ? [["inv", "🧾", "חשבוניות", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait]] : []),
              ...(signedIn ? [[auth.staff.role === "office" ? "docsadm" : "docs", "📁", "מסמכים", pdNew]] : [])
-            ].map(([r, ic, lb, n]) => html`<button key=${r} class=${(role === r || (r === "docsadm" && role === "docs") || (r === "stock" && (role === "buy" || role === "orders"))) ? "on" : ""} aria-current=${role === r ? "page" : null} onClick=${()=>{ switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} }}>
+            ].map(([r, ic, lb, n]) => html`<button key=${r} class=${(role === r || (r === "docsadm" && role === "docs") || (r === "stock" && (role === "buy" || role === "orders" || role === "projects"))) ? "on" : ""} aria-current=${role === r ? "page" : null} onClick=${()=>{ switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} }}>
               <span class="bi">${ic}${n ? html`<i class="bn">${n > 99 ? "99+" : n}</i>` : null}</span><span class="bl">${lb}</span></button>`)}
         </nav>`}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
