@@ -634,6 +634,12 @@
   .ordcard ul{ margin:4px 0 0; padding:0 18px 0 0; font-size:.84rem; line-height:1.55; }
   .ordcard li{ overflow-wrap:anywhere; }
   .ordcard .onote{ font-family:"Heebo",sans-serif; font-size:.78rem; background:var(--surface-2); border-radius:8px; padding:6px 9px; margin-top:8px; overflow-wrap:anywhere; }
+  .ordact{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .ordact .btn{ flex:1 1 120px; }
+  .ordfwd{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:7px; }
+  .ordfwd select{ flex:1 1 140px; min-width:0; font:inherit; font-size:.84rem; padding:7px 8px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); }
+  .ordfwd .btn{ flex:none; padding:7px 10px; font-size:.82rem; }
+  .ordwait{ font-family:"Heebo",sans-serif; font-size:.76rem; color:var(--warn); margin-top:8px; }
   .pushbox{ display:flex; gap:9px; align-items:center; flex-wrap:wrap; background:var(--surface-2); border:1px solid var(--line-2); border-radius:12px; padding:9px 11px; margin:0 0 12px; font-family:"Heebo",sans-serif; font-size:.8rem; }
   .pushbox > span{ flex:1 1 180px; min-width:0; }
   .pushbox .btn{ flex:none; }
@@ -1491,8 +1497,16 @@
     const token = await firebase.auth().currentUser.getIdToken();
     const j = await (await fetch(RAKESH_URL + "?action=queue&token=" + encodeURIComponent(token))).json();
     if(!j || !Array.isArray(j.rows)) throw new Error(j && j.error === "unauthorized" ? "אין הרשאה — רק משתמש משרד" : "תשובה לא תקינה מהרכש");
-    return groupOrders(j.rows);
+    return { list:groupOrders(j.rows), me:j.me || {}, suppliers:j.suppliers || [] };
   }
+  // פעולה של המשרד על הזמנה (טל: approve · שרון: fwd). נכתבת לגיליון דרך סקריפט הרכש; התשובה: ok / already: … / error: …
+  async function orderAction(ev){
+    const token = await firebase.auth().currentUser.getIdToken();
+    const r = await fetch(RAKESH_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:JSON.stringify({ ...ev, token, at:Date.now() }) });
+    return String(await r.text()).trim();
+  }
+  const ORD_ERR = { "error: only approver":"רק טל יכול לאשר", "error: office only":"רק משתמש משרד", "error: unauthorized":"הכניסה פגה — רענן את הבקרה",
+    "error: waiting approval":"ההזמנה עוד ממתינה לאישור של טל", "error: cancelled":"ההזמנה בוטלה", "error: real supplier":"צריך לבחור ספק בפועל", "error: not found":"ההזמנה לא נמצאה בגיליון" };
   const ordMoney = n => "₪" + Math.round(Number(n) || 0).toLocaleString("he-IL");
   const ordWhen = ts => { if(!ts) return ""; const d = new Date(ts); return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + " " + hhmm(ts); };
   const ordNeedBy = v => { if(!v) return ""; if(typeof v === "number"){ const d = new Date(v); return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1); }
@@ -6192,6 +6206,32 @@ ${l}`
     </div>`, document.body);
   }
 
+  /* "הועבר לספק" לשורה אחת (ספק אחד בהזמנה): ספק בפועל + אישור. כמו לסמן בגיליון */
+  function OrdFwd({ r, suppliers, onDone, notify }){
+    const opts = [...new Set([...(suppliers || []), ...(r.real ? [r.real] : [])])];
+    const [sup, setSup] = useState(r.real || (opts.includes(r.supplier) ? r.supplier : ""));
+    const [busy, setBusy] = useState(false);
+    async function go(){
+      if(!sup){ notify("בחר ספק בפועל"); return; }
+      setBusy(true);
+      try{
+        const t = await orderAction({ t:"fwd", rowId:r.id, real:sup });
+        if(t === "ok") notify("📦 סומן: הועבר ל" + sup);
+        else if(t.startsWith("already")) notify("כבר סומן שהועבר לספק" + (t.slice(8).trim() ? " (" + t.slice(8).trim() + ")" : "") + " — לא נשלח שוב");
+        else notify(ORD_ERR[t] || "לא נשמר: " + t);
+        onDone();
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      finally{ setBusy(false); }
+    }
+    return html`<div class="ordfwd">
+      <select aria-label="ספק בפועל" value=${sup} onChange=${e=>setSup(e.target.value)}>
+        <option value="">ספק בפועל…</option>
+        ${opts.map(x => html`<option key=${x} value=${x}>${x}</option>`)}
+      </select>
+      <button class="btn ok" disabled=${busy} onClick=${go}>${busy ? "⏳" : "📦"} הועבר לספק</button>
+    </div>`;
+  }
+
   /* מסך "הזמנות פתוחות" (משרד): כל ההזמנות שעוד לא הועברו לספק, עם הדפסה. שרון מרכזת ומדפיסה, טל רואה מה ממתין לו */
   function OrdersQueue({ q, reload, who, phone, notify, tabs }){
     const [f, setF] = useState("all"), [sel, setSel] = useState({}), [qs, setQs] = useState(""), [job, setJob] = useState(null);
@@ -6203,6 +6243,22 @@ ${l}`
     const selList = shown.filter(o => sel[o.oid]);
     const nTal = all.filter(o => o.stage === "tal").length;
     const print = mode => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, list:l, k:Date.now() }); };
+    const me = q.me || {};
+    const [acting, setActing] = useState("");
+    async function decide(o, ok){
+      let note = "";
+      if(ok){ if(!confirm("לאשר את ההזמנה של " + o.user + " ל" + o.project + " על סך " + ordMoney(o.total) + " כולל מע״מ?")) return; }
+      else { note = prompt("למה ההזמנה נדחית? (נרשם בגיליון והמנהל יראה שבוטלה)", "") || ""; if(!note.trim()) return; }
+      setActing(o.oid);
+      try{
+        const t = await orderAction({ t:"approve", oid:o.oid, ok, note:note.trim() });
+        if(t === "ok") notify(ok ? "✓ אושר — ההזמנה עברה לשרון" : "ההזמנה נדחתה");
+        else if(t.startsWith("already")) notify("ההזמנה כבר טופלה (" + t.slice(8).trim() + ")");
+        else notify(ORD_ERR[t] || "לא נשמר: " + t);
+        reload();
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      finally{ setActing(""); }
+    }
     return html`<div class="screen">
       ${tabs}
       <div class="shead ordhead"><div class="ordttl"><h2>🛒 הזמנות פתוחות</h2>
@@ -6236,11 +6292,18 @@ ${l}`
             ${o.rows.some(r => r.req) && html`<span class="pill warn">✎ בקשת שינוי</span>`}
           </div>
           ${o.note && html`<div class="onote">💬 ${o.note}</div>`}
+          ${o.stage === "tal" && (me.approver
+            ? html`<div class="ordact">
+                <button class="btn ok" disabled=${acting === o.oid} onClick=${()=>decide(o, true)}>${acting === o.oid ? "⏳" : "✓"} אשר הזמנה</button>
+                <button class="btn danger" disabled=${acting === o.oid} onClick=${()=>decide(o, false)}>✕ דחה</button>
+              </div>`
+            : html`<div class="ordwait">⏳ ממתינה לאישור של טל — אחרי האישור אפשר להעביר לספק</div>`)}
           ${o.rows.map(r => { const ls = ordLines(r.items); return html`<div key=${r.id} class="osup">
             <h4>${r.supplier}${r.real && r.real !== r.supplier ? " ← " + r.real : ""}${r.sub > 0 && html`<span>${ordMoney(r.sub)} לפני מע״מ</span>`}</h4>
             <ul>${ls.length ? ls.map((l, i) => html`<li key=${i}>${l.n} — <b>${l.q}</b> ${l.u}</li>`) : html`<li>${r.items || "—"}</li>`}</ul>
             ${ordLinks(r).length > 0 && html`<div class="sub2" style=${{margin:"4px 0 0"}}>${ordLinks(r).map((u, i) => html`<a key=${i} href=${u} target="_blank" rel="noopener" style=${{marginInlineEnd:10}}>📷 תמונה ${i + 1}</a>`)}</div>`}
             ${r.req && html`<div class="onote">✎ ${r.req}</div>`}
+            ${o.stage !== "tal" && me.office && html`<${OrdFwd} key=${r.id + ":" + q.at} r=${r} suppliers=${q.suppliers} onDone=${reload} notify=${notify} />`}
           </div>`; })}
         </div>`; })}
       </div>
@@ -6399,7 +6462,7 @@ ${l}`
     const loadOrders = useCallback(async ()=>{
       if(ordBusy.current) return;
       ordBusy.current = true; setOrdQ(q => ({ ...q, busy:true }));
-      try{ const list = await fetchOrderQueue(); setOrdQ({ list, err:"", at:Date.now(), busy:false }); }
+      try{ const r = await fetchOrderQueue(); setOrdQ({ list:r.list, me:r.me, suppliers:r.suppliers, err:"", at:Date.now(), busy:false }); }
       catch(e){
         setOrdQ(q => ({ ...q, err:String(e.message || e), busy:false }));
         if(!loadOrders._retry){ loadOrders._retry = true; setTimeout(()=>{ ordBusy.current = false; loadOrders(); }, 5000); }   // בכניסה הראשונה האימות עוד לא מוכן — ניסיון אחד נוסף

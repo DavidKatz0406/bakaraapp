@@ -305,6 +305,12 @@ const sameSecret = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from
 
 /** הטקסט של ההתראה (מיוצא לבדיקות) */
 function orderMessage(o){
+  if(o.kind === "approved") return {   // טל אישר בבקרה — שרון יכולה להעביר לספק
+    title: "✅ טל אישר — " + String(o.project || "").slice(0, 60),
+    body: [String(o.user || "").slice(0, 40), o.total ? money(o.total) + " כולל מע״מ" : "", "לטיפול שרון"].filter(Boolean).join(" · "),
+    tag: "appr-" + String(o.oid || "").slice(0, 40),
+    url: APP + "?go=orders"
+  };
   const tags = [o.needsApproval ? "ממתינה לאישור טל" : "", o.urgent ? "⚡ דחוף" : ""].filter(Boolean);
   return {
     title: "🛒 הזמנה חדשה — " + String(o.project || "ללא פרויקט").slice(0, 60),
