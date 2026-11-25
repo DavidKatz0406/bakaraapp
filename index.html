@@ -654,26 +654,38 @@
   .pushbox > span{ flex:1 1 180px; min-width:0; }
   .pushbox .btn{ flex:none; }
   @media (max-width:560px){ .ordhead .btn, .ordbar .btn, .pushbox .btn{ padding:8px 10px; font-size:.8rem; } }
+  /* תצוגת הדפסה: נפתחת על המסך (תצוגה מקדימה) עם כפתור "הדפס", ובהדפסה מוצגת רק היא */
   .ordprint{ display:none; }
+  body.printing .ordprint{ display:block; position:fixed; inset:0; z-index:200; overflow:auto; -webkit-overflow-scrolling:touch; background:#fff; color:#000; direction:rtl; font-family:"Heebo",Arial,sans-serif; padding:0 14px 30px; }
+  .ordprint .pbar{ position:sticky; top:0; z-index:2; display:flex; gap:8px; align-items:center; background:#fff; border-bottom:1px solid #ccc; padding:10px 0; margin-bottom:10px; }
+  .ordprint .pbar b{ flex:1 1 auto; font-size:.95rem; }
+  .ordprint .pbar button{ flex:none; font:inherit; font-weight:700; font-size:.9rem; padding:9px 14px; border-radius:10px; border:1px solid #1B2634; background:#fff; color:#1B2634; }
+  .ordprint .pbar button.go{ background:#1B2634; color:#fff; }
+  .ordprint h1{ font-size:1.25rem; margin:0 0 4px; }
+  .ordprint .meta{ font-size:.85rem; line-height:1.6; margin-bottom:6px; }
+  .ordprint .st{ display:inline-block; border:1.5px solid #000; border-radius:4px; padding:1px 7px; font-weight:700; font-size:.82rem; }
+  .ordprint table{ width:100%; border-collapse:collapse; font-size:.84rem; margin:4px 0 8px; }
+  .ordprint th, .ordprint td{ border:1px solid #777; padding:3px 6px; text-align:right; vertical-align:top; }
+  .ordprint th{ background:#eee; }
+  .ordprint td.q{ width:4.2em; text-align:center; white-space:nowrap; }
+  .ordprint .sup{ font-weight:700; font-size:.95rem; margin-top:8px; }
+  .ordprint .sig{ display:flex; gap:24px; margin-top:22px; font-size:.85rem; }
+  .ordprint .sig div{ flex:1; border-top:1px solid #000; padding-top:3px; }
+  .ordprint .foot{ font-size:.75rem; color:#444; margin-top:10px; }
+  .ordprint .blk{ margin-bottom:18px; }
+  .ordprint .pg{ border-bottom:2px dashed #bbb; padding-bottom:14px; margin-bottom:14px; }
+  .ordprint .lst h2{ font-size:1rem; margin:0 0 2px; }
   @media print{
     body.printing #root{ display:none !important; }
-    body.printing .ordprint{ display:block; color:#000; background:#fff; font-family:"Heebo",Arial,sans-serif; direction:rtl; }
+    body.printing .ordprint{ position:static; overflow:visible; padding:0; }
+    .ordprint .pbar{ display:none !important; }
     @page{ size:A4; margin:12mm; }
-    .ordprint .pg{ page-break-after:always; break-after:page; }
+    .ordprint h1{ font-size:17pt; }
+    .ordprint .meta{ font-size:10pt; }
+    .ordprint table{ font-size:10pt; }
+    .ordprint .pg{ border:0; padding:0; margin:0; page-break-after:always; break-after:page; }
     .ordprint .pg:last-child{ page-break-after:auto; break-after:auto; }
-    .ordprint .blk{ break-inside:avoid; page-break-inside:avoid; margin-bottom:14px; }
-    .ordprint h1{ font-size:17pt; margin:0 0 2mm; }
-    .ordprint .meta{ font-size:10pt; line-height:1.6; margin-bottom:3mm; }
-    .ordprint .st{ display:inline-block; border:1.5px solid #000; border-radius:4px; padding:1px 7px; font-weight:700; font-size:10pt; }
-    .ordprint table{ width:100%; border-collapse:collapse; font-size:10pt; margin:2mm 0 3mm; }
-    .ordprint th, .ordprint td{ border:1px solid #777; padding:3px 6px; text-align:right; vertical-align:top; }
-    .ordprint th{ background:#eee; }
-    .ordprint td.q{ width:18mm; text-align:center; white-space:nowrap; }
-    .ordprint .sup{ font-weight:700; font-size:11.5pt; margin-top:3mm; }
-    .ordprint .sig{ display:flex; gap:10mm; margin-top:7mm; font-size:10pt; }
-    .ordprint .sig div{ flex:1; border-top:1px solid #000; padding-top:1mm; }
-    .ordprint .foot{ font-size:8.5pt; color:#444; margin-top:4mm; }
-    .ordprint .lst h2{ font-size:12pt; margin:0 0 1mm; }
+    .ordprint .blk{ break-inside:avoid; page-break-inside:avoid; }
   }
 </style>
 
@@ -687,7 +699,7 @@
 <script src="vendor/firebase-firestore-compat.js"></script>
 <script>
 (function(){
-  const {useState, useEffect, useMemo, useCallback, useRef} = React;
+  const {useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef} = React;
   const html = htm.bind(React.createElement);
   document.documentElement.dir = "rtl";
   document.documentElement.lang = "he";
@@ -6315,8 +6327,9 @@ ${l}`
 
   /* תצוגת הדפסה: נבנית מחוץ לאפליקציה (portal) ומוצגת רק בהדפסה. mode: "page" — עמוד לכל הזמנה, "list" — רשימה מרוכזת.
      ההדפסה עצמה נפתחת ישירות מהלחיצה (באייפון ספארי חוסם הדפסה שלא נפתחת מתוך הלחיצה עצמה) — ראו print ב-OrdersQueue */
-  function OrdersPrint({ list, mode, who }){
-    useEffect(()=>()=>document.body.classList.remove("printing"), []);
+  function OrdersPrint({ list, mode, who, onClose }){
+    useLayoutEffect(()=>{ document.body.classList.add("printing"); return ()=>document.body.classList.remove("printing"); }, []);
+    const doPrint = () => { try{ window.print(); }catch(e){ alert("ההדפסה לא נפתחה במכשיר הזה"); } };   // ישירות מהלחיצה, על תוכן שכבר מוצג
     const stTxt = o => o.stage === "tal" ? "ממתינה לאישור טל" : o.stage === "ok" ? "אושרה ע״י טל" : "לא נדרש אישור טל";
     const printed = "הודפס " + ordWhen(Date.now()) + (who ? " ע״י " + who : "");
     const one = o => html`
@@ -6344,6 +6357,8 @@ ${l}`
         ${mode === "page" && html`<div class="foot">ט.ש. מי-רון · ${printed}</div>`}
       </div>`;
     return ReactDOM.createPortal(html`<div class="ordprint">
+      <div class="pbar"><b>${mode === "page" ? "🖨 " + list.length + (list.length === 1 ? " הזמנה" : " הזמנות") + " — עמוד לכל הזמנה" : "📋 רשימה מרוכזת — " + list.length + " הזמנות"}</b>
+        <button class="go" onClick=${doPrint}>🖨 הדפס</button><button onClick=${onClose}>סגור</button></div>
       ${mode === "page"
         ? list.map(o => html`<div class="pg" key=${o.oid}>${one(o)}</div>`)
         : html`<div class="lst"><h1>הזמנות פתוחות — ${list.length} הזמנות</h1><div class="meta">ט.ש. מי-רון · ${printed}</div>${list.map(o => html`<div key=${o.oid}>${one(o)}</div>`)}</div>`}
@@ -6386,13 +6401,8 @@ ${l}`
       && (!ql || [o.project, o.user, o.oid, ...o.rows.map(r => r.supplier + " " + r.items)].join(" ").toLowerCase().includes(ql)));
     const selList = shown.filter(o => sel[o.oid]);
     const nTal = all.filter(o => o.stage === "tal").length;
-    const print = mode => {
-      const l = selList.length ? selList : shown;
-      if(!l.length){ notify("אין הזמנות להדפסה"); return; }
-      ReactDOM.flushSync(()=>setJob({ mode, list:l, k:Date.now() }));   // התצוגה להדפסה נבנית מיד, עוד בתוך הלחיצה
-      document.body.classList.add("printing");
-      try{ window.print(); }catch(e){ notify("ההדפסה לא נפתחה במכשיר הזה"); }
-    };
+    // פותח תצוגה מקדימה על המסך; ההדפסה עצמה — מכפתור "הדפס" שבה (באייפון ההדפסה חייבת לצאת ישר מלחיצה, על תוכן שכבר מוצג)
+    const print = mode => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, list:l, k:Date.now() }); };
     const me = q.me || {};
     const [acting, setActing] = useState("");
     async function decide(o, ok){
@@ -6458,7 +6468,7 @@ ${l}`
         </div>`; })}
       </div>
       ${q.list && !shown.length && html`<div class="empty">${ql ? "לא נמצאו הזמנות" : f === "tal" ? "אין הזמנות שממתינות לאישור טל 👍" : "אין הזמנות פתוחות 👍"}</div>`}
-      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} />`}
+      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} onClose=${()=>setJob(null)} />`}
     </div>`;
   }
 
