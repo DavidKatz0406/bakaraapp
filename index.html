@@ -634,6 +634,16 @@
   .ordcard ul{ margin:4px 0 0; padding:0 18px 0 0; font-size:.84rem; line-height:1.55; }
   .ordcard li{ overflow-wrap:anywhere; }
   .ordcard .onote{ font-family:"Heebo",sans-serif; font-size:.78rem; background:var(--surface-2); border-radius:8px; padding:6px 9px; margin-top:8px; overflow-wrap:anywhere; }
+  .imatch{ border:1px solid var(--line-2); border-radius:12px; padding:10px 11px; margin-top:12px; background:var(--surface); }
+  .imatch h4{ font-size:.92rem; margin:0 0 6px; }
+  .imrow{ display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-top:1px solid var(--line-2); font-family:"Heebo",sans-serif; font-size:.78rem; }
+  .imrow input{ width:18px; height:18px; flex:none; margin-top:2px; }
+  .imrow .imt{ flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+  .imrow .imt b{ font-size:.82rem; }
+  .imrow .ima{ flex:none; font-weight:700; white-space:nowrap; }
+  .imsum{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; margin:10px 0 6px; }
+  .imsum div{ background:var(--surface-2); border-radius:9px; padding:6px 7px; text-align:center; font-family:"Heebo",sans-serif; font-size:.7rem; color:var(--ink-3); }
+  .imsum b{ display:block; font-size:.9rem; color:var(--ink); }
   .ordact{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
   .ordact .btn{ flex:1 1 120px; }
   .ordfwd{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:7px; }
@@ -1505,6 +1515,27 @@
     const r = await fetch(RAKESH_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:JSON.stringify({ ...ev, token, at:Date.now() }) });
     return String(await r.text()).trim();
   }
+  // קריאה (GET) לסקריפט הרכש עם אסימון הכניסה — התאמה וזיכויים (משרד בלבד)
+  async function rkGet(action, params){
+    const token = await firebase.auth().currentUser.getIdToken();
+    const qs = new URLSearchParams({ action, token, ...(params || {}) });
+    const j = await (await fetch(RAKESH_URL + "?" + qs.toString())).json();
+    if(!j || j.error) throw new Error(j && j.error === "unauthorized" ? "אין הרשאה — רק משתמש משרד" : "תשובה לא תקינה מהרכש");
+    return j;
+  }
+  // התאמה משולשת: פער = מעל ₪100 או מעל 2% (החלטת דוד). חשבונית לפני מע״מ = סה״כ פחות מע״מ (או סה״כ ÷ 1.18 אם המע״מ חסר)
+  function invMatchCalc(inv, rows){
+    const ordered = rows.reduce((a, r) => a + (Number(r.sub) || 0), 0);
+    const tot = Number(inv.total), vat = Number(inv.vat);
+    const net = !isFinite(tot) || inv.total == null || inv.total === "" ? null : (isFinite(vat) && inv.vat != null && inv.vat !== "" ? tot - vat : tot / 1.18);
+    const gap = net == null ? null : net - ordered;
+    const pct = gap == null || !ordered ? null : gap / ordered;
+    const flag = gap != null && ordered > 0 && (Math.abs(gap) > 100 || Math.abs(pct) > 0.02);
+    const recv = !rows.length ? "" : rows.some(r => r.rcv === "חריגה") ? "exc" : rows.every(r => r.rcv) ? "ok" : "none";
+    return { ordered:Math.round(ordered * 100) / 100, net: net == null ? null : Math.round(net * 100) / 100, gap: gap == null ? null : Math.round(gap * 100) / 100, pct, flag, recv };
+  }
+  const supKey = s => String(s || "").replace(/בע["״']?מ|בעמ|\(.*?\)/g, "").replace(/["״'׳`.\-–—,]/g, "").replace(/\s+/g, "").toLowerCase();
+  const supLike = (a, b) => { const x = supKey(a), y = supKey(b); return !!x && !!y && (x.includes(y) || y.includes(x)); };
   const ORD_ERR = { "error: only approver":"רק טל יכול לאשר", "error: office only":"רק משתמש משרד", "error: unauthorized":"הכניסה פגה — רענן את הבקרה",
     "error: waiting approval":"ההזמנה עוד ממתינה לאישור של טל", "error: cancelled":"ההזמנה בוטלה", "error: real supplier":"צריך לבחור ספק בפועל", "error: not found":"ההזמנה לא נמצאה בגיליון" };
   const ordMoney = n => "₪" + Math.round(Number(n) || 0).toLocaleString("he-IL");
@@ -5369,6 +5400,120 @@ ${l}`
   }
 
   /* שורה ברשימה */
+  /* 🔗 התאמה להזמנה: הזמנות מהרכש לאותו ספק ופרויקט, עם מצב הקבלה ותעודת המשלוח. נשמר בחשבונית + שורה בהערות בגיליון */
+  function InvMatch({ f, d, sup, site, who, notify }){
+    const [rows, setRows] = useState(null), [err, setErr] = useState(""), [sel, setSel] = useState(() => new Set(f.orders || []));
+    const [others, setOthers] = useState(false), [busy, setBusy] = useState(false);
+    const proj = site ? ((RAKESH_PROJECTS.find(p => p[2] === site.num) || [])[1] || "") : "";
+    async function load(){
+      setErr(""); setRows(null);
+      const day = d.date ? new Date(d.date + "T12:00:00").getTime() : Date.now();
+      try{ const j = await rkGet("match", { from: day - 75 * 864e5, to: day + 5 * 864e5, ...(proj ? { project:proj } : {}) }); setRows(j.rows || []); }
+      catch(e){ setErr(String(e.message || e)); setRows([]); }
+    }
+    useEffect(()=>{ load(); }, [d.sup, d.site, d.date]);
+    const supName = sup ? sup.name : "";
+    const mine = (rows || []).filter(r => supLike(r.real || r.supplier, supName) || supLike(r.supplier, supName) || sel.has(r.id));
+    const shown = others ? (rows || []) : mine;
+    const picked = (rows || []).filter(r => sel.has(r.id));
+    const m = invMatchCalc({ total: invNum(d.total), vat: invNum(d.vat) }, picked);
+    const label = "חשבונית " + (d.no || "בלי מספר") + " · " + (supName || "") + " · " + (m.net == null ? "" : "₪" + Math.round(m.net).toLocaleString("he-IL") + " לפני מע״מ") + (m.flag ? " · פער ₪" + Math.round(m.gap).toLocaleString("he-IL") : "");
+    async function save(){
+      if(!picked.length){ notify("סמן לפחות הזמנה אחת"); return; }
+      setBusy(true);
+      try{
+        await invCol().doc(f.id).update({ orders: picked.map(r => r.id), match: { ordered:m.ordered, net:m.net, gap:m.gap, flag:m.flag, recv:m.recv, by:who, at:FV() } });
+        const t = await orderAction({ t:"inv_link", rowIds: picked.map(r => r.id), label });
+        notify(t === "ok" ? (m.flag ? "⚠ נשמר — יש פער, אפשר לפתוח דרישת זיכוי" : "🔗 ההתאמה נשמרה") : "נשמר בחשבונית, אבל לא בגיליון: " + (ORD_ERR[t] || t));
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      finally{ setBusy(false); }
+    }
+    async function credit(){
+      if(!picked.length) return;
+      if(!confirm("לסמן \"נדרש זיכוי\" ב-" + picked.length + " הזמנות בגיליון?")) return;
+      setBusy(true);
+      try{
+        let ok = 0;
+        for(const r of picked){ const t = await orderAction({ t:"credit", rowId:r.id, status:"נדרש זיכוי", note: label }); if(t === "ok") ok++; }
+        notify(ok === picked.length ? "📝 נפתחה דרישת זיכוי — מופיעה בלשונית \"זיכויים\"" : "נשמר ב-" + ok + " מתוך " + picked.length);
+        load();
+      }catch(e){ notify("לא נשמר: " + (e.message || e)); }
+      finally{ setBusy(false); }
+    }
+    const rcvTxt = r => r.rcv === "תקין" ? "✓ התקבל תקין" : r.rcv === "חריגה" ? "⚠ התקבל עם חריגה" : r.fwd ? "🚚 הועבר לספק, עוד לא התקבל" : "⏳ עוד לא הועבר לספק";
+    const links = r => String(r.noteLink || "").split(/\s+/).filter(u => /^https:\/\//.test(u));
+    return html`<div class="imatch">
+      <h4>🔗 התאמה להזמנה (הזמנה ↔ תעודת משלוח ↔ חשבונית)</h4>
+      <div class="sub2" style=${{margin:0}}>${proj ? "פרויקט " + proj : "בלי פרויקט — מוצגות הזמנות מכל הפרויקטים"} · ${d.date ? "75 יום לפני " + invDmy(d.date) : "90 הימים האחרונים"}${supName ? " · ספק " + supName : ""}</div>
+      ${err && html`<div class="alert crit" style=${{marginTop:8}}><span class="b"></span>${err}</div>`}
+      ${rows === null ? html`<div class="sub2" style=${{marginTop:8}}>⏳ טוען הזמנות…</div>` : html`
+        ${shown.map(r => html`<label key=${r.id} class="imrow">
+          <input type="checkbox" checked=${sel.has(r.id)} onChange=${()=>setSel(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} />
+          <span class="imt"><b>${ordWhen(r.created)} · ${r.project}</b><br/>${r.real || r.supplier}${r.real && !supLike(r.real, r.supplier) ? " (הוזמן מ" + r.supplier + ")" : ""} · ${r.user} · ${r.id}<br/>
+            ${rcvTxt(r)}${r.noteNo ? " · תעודה " + r.noteNo : ""}${links(r).map((u, i) => html` <a href=${u} target="_blank" rel="noopener">📄${links(r).length > 1 ? i + 1 : ""}</a>`)}
+            ${r.exc && html`<div style=${{color:"var(--crit)", whiteSpace:"pre-line", marginTop:2}}>${r.exc}</div>`}
+            ${r.credit && html`<div style=${{color:"var(--warn)"}}>זיכוי: ${r.credit}${r.creditNo ? " · " + r.creditNo : ""}</div>`}</span>
+          <span class="ima">${r.sub ? ordMoney(r.sub) : "—"}</span>
+        </label>`)}
+        ${!shown.length && html`<div class="sub2" style=${{marginTop:8}}>${(rows || []).length ? "אין הזמנות מהספק הזה בטווח — סמן \"הצג את כל ההזמנות\"" : "אין הזמנות בטווח הזה"}</div>`}
+        ${(rows || []).length > mine.length && html`<label class="acheck" style=${{marginTop:6}}><input type="checkbox" checked=${others} onChange=${e=>setOthers(e.target.checked)} />הצג את כל ההזמנות בטווח (${rows.length})</label>`}
+        ${picked.length > 0 && html`<div class="imsum">
+          <div>הוזמן<b>${ordMoney(m.ordered)}</b>לפני מע״מ</div>
+          <div>חשבונית<b>${m.net == null ? "—" : ordMoney(m.net)}</b>לפני מע״מ</div>
+          <div style=${m.flag ? {background:"var(--crit-wash)", color:"var(--crit)"} : {}}>פער<b style=${m.flag ? {color:"var(--crit)"} : {}}>${m.gap == null ? "—" : (m.gap > 0 ? "+" : "") + ordMoney(m.gap)}</b>${m.pct == null ? "" : (m.pct * 100).toFixed(1) + "%"}</div>
+        </div>
+        <div class="sub2" style=${{margin:"0 0 6px", color: m.flag || m.recv === "exc" ? "var(--crit)" : "var(--ok)"}}>
+          ${m.flag ? "⚠ פער מעל ₪100 או מעל 2% — לבדוק מול הספק" : m.net == null ? "חסר סכום בחשבונית" : "✓ הסכום תואם"}${m.recv === "exc" ? " · ⚠ בתעודת המשלוח יש חריגה" : m.recv === "none" ? " · חלק מההזמנות עוד לא התקבלו" : m.recv === "ok" ? " · ✓ הכול התקבל" : ""}
+        </div>
+        <div class="ordact" style=${{marginTop:4}}>
+          <button class="btn pri" disabled=${busy} onClick=${save}>💾 שמור התאמה</button>
+          ${(m.flag || m.recv === "exc") && html`<button class="btn danger" disabled=${busy} onClick=${credit}>📝 פתח דרישת זיכוי</button>`}
+        </div>`}`}
+    </div>`;
+  }
+
+  /* ↩ זיכויים פתוחים (מהגיליון): נדרש זיכוי / נשלחה דרישה לספק — עדכון סטטוס ומספר זיכוי, נכתב לגיליון */
+  function InvCredits({ notify }){
+    const [rows, setRows] = useState(null), [opts, setOpts] = useState([]), [err, setErr] = useState(""), [ed, setEd] = useState({}), [busy, setBusy] = useState("");
+    async function load(){
+      setErr("");
+      try{ const j = await rkGet("credits"); setRows(j.rows || []); setOpts(j.options || []); }
+      catch(e){ setErr(String(e.message || e)); setRows([]); }
+    }
+    useEffect(()=>{ load(); }, []);
+    async function save(r){
+      const e = ed[r.id] || {};
+      const status = e.status || r.credit;
+      if(status === "התקבל זיכוי" && !(e.no || r.creditNo)){ notify("כתוב מספר זיכוי או סכום"); return; }
+      setBusy(r.id);
+      try{
+        const t = await orderAction({ t:"credit", rowId:r.id, status, no: e.no != null ? e.no : "" });
+        notify(t === "ok" ? "נשמר בגיליון" : (ORD_ERR[t] || "לא נשמר: " + t));
+        setEd(x => { const n = { ...x }; delete n[r.id]; return n; });
+        load();
+      }catch(e2){ notify("לא נשמר: " + (e2.message || e2)); }
+      finally{ setBusy(""); }
+    }
+    const age = r => Math.floor((Date.now() - (r.rcvAt || r.created)) / 864e5);
+    return html`<div>
+      <div class="sub2" style=${{marginTop:0}}>זיכויים שנפתחו בקבלת סחורה (חסר/פגום) או בהתאמת חשבונית. מעבר ל"התקבל זיכוי" או "בוטל" מוציא מהרשימה. הכול נכתב לגיליון.</div>
+      ${err && html`<div class="alert crit"><span class="b"></span>${err}</div>`}
+      ${rows === null ? html`<div class="empty">טוען…</div>` : !rows.length ? html`<div class="empty">אין זיכויים פתוחים 👍</div>` : rows.map(r => { const e = ed[r.id] || {}; return html`<div key=${r.id} class="ordcard">
+        <div class="oh"><div class="ot"><b>${r.real || r.supplier} · ${r.project}</b><small>${ordWhen(r.created)} · ${r.user} · ${r.id}${r.noteNo ? " · תעודה " + r.noteNo : ""}</small></div>
+          <span class=${"pill " + (age(r) > 14 ? "crit" : "warn")}>${age(r)} ימים</span></div>
+        ${r.exc && html`<div class="onote" style=${{whiteSpace:"pre-line"}}>${r.exc}</div>`}
+        ${(r.notes || "").split("\n").filter(l => /^🧾|^זיכוי/.test(l)).slice(-3).map((l, i) => html`<div key=${i} class="sub2" style=${{margin:"4px 0 0"}}>${l}</div>`)}
+        <div class="ordfwd">
+          <select aria-label="סטטוס זיכוי" value=${e.status || r.credit} onChange=${ev=>{ const v = ev.target.value; setEd(x => ({ ...x, [r.id]: { ...(x[r.id] || {}), status:v } })); }}>
+            ${opts.map(o => html`<option key=${o} value=${o}>${o}</option>`)}
+          </select>
+          <input class="tin" style=${{flex:"1 1 110px", minWidth:0, fontFamily:"inherit", padding:"7px 8px", fontSize:".84rem"}} placeholder="מס׳ זיכוי / סכום" value=${e.no != null ? e.no : r.creditNo} onInput=${ev=>{ const v = ev.target.value; setEd(x => ({ ...x, [r.id]: { ...(x[r.id] || {}), no:v } })); }} />
+          <button class="btn ok" disabled=${busy === r.id || !ed[r.id]} onClick=${()=>save(r)}>${busy === r.id ? "⏳" : "שמור"}</button>
+        </div>
+      </div>`; })}
+    </div>`;
+  }
+
   function InvRow({ f, sups, dup, sel, onSel, onOpen }){
     const s = INV_ST[f.status] || INV_ST.new;
     const nm = invSupName(f, sups);
@@ -5379,6 +5524,7 @@ ${l}`
         <span class="pdt"><b>${nm || html`<span style=${{color:"var(--warn)"}}>ספק לא מזוהה</span>`}${f.no ? " · " + f.no : ""}</b>
           <small>${[invDmy(f.date), f.siteName, f.status === "pm" && f.pm ? "אצל " + f.pm : "", !nm && f.from ? f.from : ""].filter(Boolean).join(" · ") || (f.fname || "")}${f.link && !f.parts ? " · 🔗 הגיעה כקישור" : ""}</small></span>
         <span class="invamt">${invMoney(f.total)}</span>
+        ${f.match && html`<span class=${"pill " + (f.match.flag || f.match.recv === "exc" ? "crit" : "ok")} title=${"הוזמן " + invMoney(f.match.ordered) + " · פער " + invMoney(f.match.gap)}>${f.match.flag || f.match.recv === "exc" ? "⚠ פער" : "🔗"}</span>`}
         ${dup ? html`<span class="pill crit" title="אותו ספק ואותו מספר חשבונית כבר קיימים">כפולה?</span>` : html`<span class=${"pill " + s.c}>${s.n}</span>`}
       </button>
     </div>`;
@@ -5493,6 +5639,7 @@ ${l}`
             ${sites.map(s => html`<option key=${s.id} value=${s.id}>${s.name} (${ownerName(s)})</option>`)}
           </select></label>
         <label class="afield">הערה<input disabled=${!edit} value=${d.note} onInput=${e=>set("note", e.target.value)} /></label>
+        ${sup && Cloud.on && html`<${InvMatch} f=${f} d=${d} sup=${sup} site=${site} who=${who} notify=${notify} />`}
         ${f.pmNote && html`<div class=${"alert " + (f.status === "rej" ? "crit" : "warn")} style=${{marginTop:10}}><span class="b"></span>${f.pmBy || "המנהל"}: ${f.pmNote}</div>`}
 
         ${(f.status === "new" || f.status === "rej") && html`
@@ -5977,7 +6124,8 @@ ${l}`
       ["all", "הכול", list.length],
       ["proj", "🏗 לפי פרויקט"],
       ["sup", "ספקים", sups.length],
-      ["acc", "📦 לרו״ח"]
+      ["acc", "📦 לרו״ח"],
+      ["cred", "↩ זיכויים"]
     ];
     if(payer) tabs.splice(1, 0, ["mine", "✍️ לאישורך", by("tal").length]);
     if(!defTab.current) defTab.current = payer && by("tal").length ? "mine" : "todo";
@@ -6053,6 +6201,7 @@ ${l}`
             <span class="invamt">${mine.length} · ${invMoney(sumOf(mine))}</span></button></div>`; })}
           ${!sups.length && html`<div class="empty">עוד אין ספקים. הכי מהיר: "📥 ייבוא מאקסל" מטבלאות הספקים הקיימות. ח.פ. ומייל של כל ספק נלמדים לבד מהחשבונית הראשונה שלו.</div>`}
         </div>`
+      : cur === "cred" ? html`<${InvCredits} notify=${notify} />`
       : cur === "acc" ? html`<${InvAcc} list=${list} sups=${sups} cfg=${cfg} who=${who} notify=${notify} />`
       : cur === "proj" ? html`<${InvProj} list=${list} sups=${sups} onOpen=${setOpen} />`
       : html`
@@ -6164,15 +6313,10 @@ ${l}`
     </div>`;
   }
 
-  /* תצוגת הדפסה: נבנית מחוץ לאפליקציה (portal) ומוצגת רק בהדפסה. mode: "page" — עמוד לכל הזמנה, "list" — רשימה מרוכזת */
-  function OrdersPrint({ list, mode, who, onDone }){
-    useEffect(()=>{
-      document.body.classList.add("printing");
-      const done = () => onDone();
-      window.addEventListener("afterprint", done);
-      const t = setTimeout(()=>{ try{ window.print(); }catch(e){ done(); } }, 120);
-      return ()=>{ clearTimeout(t); window.removeEventListener("afterprint", done); document.body.classList.remove("printing"); };
-    }, []);
+  /* תצוגת הדפסה: נבנית מחוץ לאפליקציה (portal) ומוצגת רק בהדפסה. mode: "page" — עמוד לכל הזמנה, "list" — רשימה מרוכזת.
+     ההדפסה עצמה נפתחת ישירות מהלחיצה (באייפון ספארי חוסם הדפסה שלא נפתחת מתוך הלחיצה עצמה) — ראו print ב-OrdersQueue */
+  function OrdersPrint({ list, mode, who }){
+    useEffect(()=>()=>document.body.classList.remove("printing"), []);
     const stTxt = o => o.stage === "tal" ? "ממתינה לאישור טל" : o.stage === "ok" ? "אושרה ע״י טל" : "לא נדרש אישור טל";
     const printed = "הודפס " + ordWhen(Date.now()) + (who ? " ע״י " + who : "");
     const one = o => html`
@@ -6242,7 +6386,13 @@ ${l}`
       && (!ql || [o.project, o.user, o.oid, ...o.rows.map(r => r.supplier + " " + r.items)].join(" ").toLowerCase().includes(ql)));
     const selList = shown.filter(o => sel[o.oid]);
     const nTal = all.filter(o => o.stage === "tal").length;
-    const print = mode => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, list:l, k:Date.now() }); };
+    const print = mode => {
+      const l = selList.length ? selList : shown;
+      if(!l.length){ notify("אין הזמנות להדפסה"); return; }
+      ReactDOM.flushSync(()=>setJob({ mode, list:l, k:Date.now() }));   // התצוגה להדפסה נבנית מיד, עוד בתוך הלחיצה
+      document.body.classList.add("printing");
+      try{ window.print(); }catch(e){ notify("ההדפסה לא נפתחה במכשיר הזה"); }
+    };
     const me = q.me || {};
     const [acting, setActing] = useState("");
     async function decide(o, ok){
@@ -6308,7 +6458,7 @@ ${l}`
         </div>`; })}
       </div>
       ${q.list && !shown.length && html`<div class="empty">${ql ? "לא נמצאו הזמנות" : f === "tal" ? "אין הזמנות שממתינות לאישור טל 👍" : "אין הזמנות פתוחות 👍"}</div>`}
-      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} onDone=${()=>setJob(null)} />`}
+      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} />`}
     </div>`;
   }
 
