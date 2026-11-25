@@ -6503,8 +6503,8 @@ ${l}`
       switchRole("buy");
       try{ window.scrollTo(0, 0); }catch(e){}
     }
-    // לשוניות "מלאי ורכש" בטלפון: מלאי · הזמנה חדשה · הזמנות פתוחות (משרד)
-    const stockTabs = html`<div class="chips navchips stktabs">
+    // לשוניות "מלאי ורכש" (טלפון ומחשב): מלאי · הזמנה חדשה · הזמנות פתוחות (משרד)
+    const stockTabs = html`<div class="chips stktabs">
       <button class=${"chip " + (role === "stock" ? "on" : "")} onClick=${()=>switchRole("stock")}>📦 מלאי</button>
       ${buyOk && html`<button class=${"chip " + (role === "buy" ? "on" : "")} onClick=${()=>openBuy()}>🛒 הזמנת חומר</button>`}
       ${ordOn && html`<button class=${"chip " + (role === "orders" ? "on" : "")} onClick=${()=>switchRole("orders")}>📋 הזמנות פתוחות${ordN ? " (" + ordN + ")" : ""}</button>`}
@@ -6949,9 +6949,7 @@ ${l}`
           ${SI(onCtl && nav.screen === "ctl.home" && ctlV.tab === k && !(k === "att"), label, ()=>goCtl(k), "sub" + (k === "att" && attOn ? " open" : ""), n)}
           ${k === "att" && attOn && attTabs.map(([a, al]) => SI((ctlV.av || "day") === a, al, ()=>goCtl("att", a), "deep"))}`)}
         ${SI(role === "field", "📍 שטח", ()=>goRole("field"))}
-        ${SI(role === "stock", "📦 מלאי", ()=>goRole("stock"))}
-        ${buyOk && SI(role === "buy", "🛒 הזמנת חומר (רכש)", ()=>openBuy(), "sub")}
-        ${ordOn && SI(role === "orders", "📋 הזמנות פתוחות", ()=>goRole("orders"), "sub", ordN)}
+        ${SI(role === "stock" || role === "buy" || role === "orders", RAKESH_APP ? "📦 מלאי ורכש" : "📦 מלאי", ()=>goRole("stock"), "", ordOn ? ordN : 0)}
         ${signedIn && SI(role === "docs", "📁 המסמכים שלי", ()=>goRole("docs"), "", pdNew)}
         ${signedIn && auth.staff.role === "office" && SI(role === "docsadm", "🗂 מסמכים אישיים", ()=>goRole("docsadm"))}
         ${invOn && SI(role === "inv", auth.staff.role === "office" ? "🧾 חשבוניות ספקים" : "🧾 חשבוניות לאישורך", ()=>goRole("inv"), "", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait)}
