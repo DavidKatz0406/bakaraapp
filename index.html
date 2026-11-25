@@ -6415,11 +6415,10 @@ ${l}`
       return ()=>{ clearInterval(t); document.removeEventListener("visibilitychange", vis); };
     }, [ordOn]);
     const ordN = (ordQ.list || []).length;
-    // רכש בתוך הבקרה: כתובת המסגרת (נקבעת בפתיחה הראשונה) + המשתמש המחובר עובר לרכש בלי להקליד טלפון
+    // רכש בתוך הבקרה: כתובת המסגרת (נקבעת בפתיחה הראשונה). הרכש מזהה את המשתמש לפי הכניסה לבקרה (אותו חשבון, אותו דומיין)
     const [buySrc, setBuySrc] = useState("");
     const buyHash = (items, pid) => {
       const parts = [];
-      if(signedIn && auth.phone) parts.push("as=" + encodeURIComponent("0" + String(auth.phone).replace(/^\+972/, "")));
       if(pid) parts.push("order=" + encodeURIComponent(JSON.stringify({ p:pid, items: items || [] })));
       parts.push("n=" + Date.now());
       return RAKESH_APP + "#" + parts.join("&");
