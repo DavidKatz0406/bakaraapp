@@ -6329,7 +6329,14 @@ ${l}`
      ההדפסה עצמה נפתחת ישירות מהלחיצה (באייפון ספארי חוסם הדפסה שלא נפתחת מתוך הלחיצה עצמה) — ראו print ב-OrdersQueue */
   function OrdersPrint({ list, mode, who, onClose }){
     useLayoutEffect(()=>{ document.body.classList.add("printing"); return ()=>document.body.classList.remove("printing"); }, []);
-    const doPrint = () => { try{ window.print(); }catch(e){ alert("ההדפסה לא נפתחה במכשיר הזה"); } };   // ישירות מהלחיצה, על תוכן שכבר מוצג
+    // הדפסה בדף נפרד ונקי (בלי העיצוב של הבקרה): במחשב לשונית חדשה, באייפון ספארי — מאפליקציה במסך הבית אפל לא מאפשרת להדפיס.
+    // הדף נמצא באתר הרכש (מחוץ לתחום של אפליקציית הבקרה), והנתונים עוברים בכתובת אחרי # — לא נשלחים לשום שרת
+    const doPrint = () => {
+      const data = { mode, who, orders: list.map(o => ({ oid:o.oid, project:o.project, user:o.user, phone:o.phone, created:o.created, needBy:o.needBy, urgent:o.urgent, note:o.note,
+        total:o.total, stage:o.stage, needAp:o.needAp, rows:o.rows.map(r => ({ id:r.id, supplier:r.supplier, real:r.real, sub:r.sub, items:r.items, req:r.req, photos:ordLinks(r).length })) })) };
+      const w = window.open(RAKESH_APP + "print.html#" + encodeURIComponent(JSON.stringify(data)), "_blank");
+      if(!w) alert("הדפדפן חסם את פתיחת דף ההדפסה — אפשר חלונות קופצים לבקרה ונסה שוב");
+    };
     const stTxt = o => o.stage === "tal" ? "ממתינה לאישור טל" : o.stage === "ok" ? "אושרה ע״י טל" : "לא נדרש אישור טל";
     const printed = "הודפס " + ordWhen(Date.now()) + (who ? " ע״י " + who : "");
     const one = o => html`
