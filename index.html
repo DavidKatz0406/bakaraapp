@@ -604,6 +604,15 @@
     .arow .af:empty{ display:none; }
     .arow.head .af{ display:none; }
   }
+  /* ───── רכש בתוך הבקרה (מסגרת של אפליקציית הרכש, אותו דומיין) ───── */
+  .buywrap{ margin:0; }
+  .app.buyon{ padding-bottom:0; }
+  .app.buyon .brandfoot{ display:none; }
+  .app.buyon:not(.desk) .main, .app.buyon.desk .main{ padding-bottom:0; }
+  .buyframe{ display:block; width:100%; border:0; background:var(--paper); }
+  .stktabs{ margin:0 0 12px; }
+  .screen.buyscr{ padding-bottom:0; }
+  .screen.buyscr .stktabs{ margin-bottom:8px; }
   /* ───── הזמנות פתוחות (רכש) ───── */
   .ordhead{ flex-wrap:wrap; gap:8px; }
   .ordhead .ordttl{ flex:1 1 auto; min-width:0; }
@@ -6184,7 +6193,7 @@ ${l}`
   }
 
   /* מסך "הזמנות פתוחות" (משרד): כל ההזמנות שעוד לא הועברו לספק, עם הדפסה. שרון מרכזת ומדפיסה, טל רואה מה ממתין לו */
-  function OrdersQueue({ q, reload, who, phone, notify }){
+  function OrdersQueue({ q, reload, who, phone, notify, tabs }){
     const [f, setF] = useState("all"), [sel, setSel] = useState({}), [qs, setQs] = useState(""), [job, setJob] = useState(null);
     useEffect(()=>{ reload(); }, []);
     const all = q.list || [];
@@ -6195,6 +6204,7 @@ ${l}`
     const nTal = all.filter(o => o.stage === "tal").length;
     const print = mode => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, list:l, k:Date.now() }); };
     return html`<div class="screen">
+      ${tabs}
       <div class="shead ordhead"><div class="ordttl"><h2>🛒 הזמנות פתוחות</h2>
         <span class="sub">${q.list ? all.length + " הזמנות שעוד לא הועברו לספק" + (q.at ? " · עודכן " + hhmm(q.at) : "") : "טוען…"}</span></div>
         <button class="btn" disabled=${q.busy} onClick=${reload}>${q.busy ? "⏳" : "🔄"} רענון</button>
@@ -6236,6 +6246,30 @@ ${l}`
       </div>
       ${q.list && !shown.length && html`<div class="empty">${ql ? "לא נמצאו הזמנות" : f === "tal" ? "אין הזמנות שממתינות לאישור טל 👍" : "אין הזמנות פתוחות 👍"}</div>`}
       ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} onDone=${()=>setJob(null)} />`}
+    </div>`;
+  }
+
+  /* אפליקציית הרכש כלשונית בתוך הבקרה. נטענת פעם אחת ונשארת פתוחה ברקע (העגלה לא נעלמת במעבר בין לשוניות).
+     הזמנה חדשה מהמלאי = שינוי ב-hash בלבד (#as=…&order=…), והרכש קולט אותה בלי לטעון מחדש */
+  function BuyFrame({ src, show }){
+    const ref = useRef(null), [h, setH] = useState(600);
+    useEffect(()=>{
+      if(!show) return;
+      const fit = () => {
+        const el = ref.current; if(!el) return;
+        const top = el.getBoundingClientRect().top + window.scrollY;
+        const nav = document.querySelector(".bnav");
+        const bottom = nav ? nav.getBoundingClientRect().height : 0;
+        setH(Math.max(420, Math.round(window.innerHeight - (top - window.scrollY) - bottom)));
+      };
+      try{ window.scrollTo(0, 0); }catch(e){}
+      fit();
+      const t = setTimeout(fit, 300);
+      window.addEventListener("resize", fit);
+      return ()=>{ clearTimeout(t); window.removeEventListener("resize", fit); };
+    }, [show]);
+    return html`<div class="buywrap" style=${{ display: show ? "block" : "none" }}>
+      <iframe ref=${ref} class="buyframe" title="רכש — הזמנת חומר" src=${src} style=${{ height:h }} allow="camera; clipboard-write; web-share"></iframe>
     </div>`;
   }
 
@@ -6381,6 +6415,15 @@ ${l}`
       return ()=>{ clearInterval(t); document.removeEventListener("visibilitychange", vis); };
     }, [ordOn]);
     const ordN = (ordQ.list || []).length;
+    // רכש בתוך הבקרה: כתובת המסגרת (נקבעת בפתיחה הראשונה) + המשתמש המחובר עובר לרכש בלי להקליד טלפון
+    const [buySrc, setBuySrc] = useState("");
+    const buyHash = (items, pid) => {
+      const parts = [];
+      if(signedIn && auth.phone) parts.push("as=" + encodeURIComponent("0" + String(auth.phone).replace(/^\+972/, "")));
+      if(pid) parts.push("order=" + encodeURIComponent(JSON.stringify({ p:pid, items: items || [] })));
+      parts.push("n=" + Date.now());
+      return RAKESH_APP + "#" + parts.join("&");
+    };
 
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
@@ -6450,8 +6493,22 @@ ${l}`
         update(d => { d.requests = []; d.transfers = []; return d; });
     }, [cloud.ready, cloud.server, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
-    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : r === "orders" ? "orders.home" : "stock.home";
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : r === "orders" ? "orders.home" : r === "buy" ? "buy.home" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
+    // פתיחת לשונית הרכש: עם הזמנה מהמלאי (פריטים + פרויקט) או סתם (שומרים את מה שכבר פתוח)
+    const buyOk = !!RAKESH_APP && !isViewer;   // צופה לא מזמין
+    function openBuy(items, pid){
+      if(!buyOk) return;
+      if(pid || !buySrc) setBuySrc(buyHash(items, pid));
+      switchRole("buy");
+      try{ window.scrollTo(0, 0); }catch(e){}
+    }
+    // לשוניות "מלאי ורכש" בטלפון: מלאי · הזמנה חדשה · הזמנות פתוחות (משרד)
+    const stockTabs = html`<div class="chips navchips stktabs">
+      <button class=${"chip " + (role === "stock" ? "on" : "")} onClick=${()=>switchRole("stock")}>📦 מלאי</button>
+      ${buyOk && html`<button class=${"chip " + (role === "buy" ? "on" : "")} onClick=${()=>openBuy()}>🛒 הזמנת חומר</button>`}
+      ${ordOn && html`<button class=${"chip " + (role === "orders" ? "on" : "")} onClick=${()=>switchRole("orders")}>📋 הזמנות פתוחות${ordN ? " (" + ordN + ")" : ""}</button>`}
+    </div>`;
     // לחיצה על התראת הזמנה: ?go=orders בפתיחה, או הודעה מה-service worker כשהבקרה כבר פתוחה
     const goBack = useRef(false);
     useEffect(()=>{
@@ -6819,7 +6876,9 @@ ${l}`
     else if(nav.screen === "orders.home")
       body = !ordOn
         ? html`<div class="screen narrow"><div class="empty">הזמנות פתוחות זמינות רק למשתמשי משרד</div></div>`
-        : html`<${OrdersQueue} q=${ordQ} reload=${loadOrders} who=${who} phone=${auth.phone} notify=${notify} />`;
+        : html`<${OrdersQueue} q=${ordQ} reload=${loadOrders} who=${who} phone=${auth.phone} notify=${notify} tabs=${stockTabs} />`;
+    else if(nav.screen === "buy.home")
+      body = html`<div class="screen buyscr">${stockTabs}</div>`;
     else if(nav.screen === "inv.home")
       body = !invOn
         ? html`<div class="screen narrow"><div class="empty">אין חשבוניות להצגה</div></div>`
@@ -6864,7 +6923,8 @@ ${l}`
         : html`<div class="screen narrow"><div class="empty">היחידה לא נמצאה</div></div>`;
     }
     else if(nav.screen === "stock.home")
-      body = html`<${StockHome} st=${vst} now=${now} who=${who} rk=${rkOpen} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} onStockUse=${stockUse} />`;
+      body = html`<${StockHome} st=${vst} now=${now} who=${who} rk=${rkOpen} onStockSave=${stockSave} onStockDelete=${stockDelete} onStockConfirm=${stockConfirm} onStockUse=${stockUse}
+        onOrder=${buyOk ? openBuy : null} tabs=${stockTabs} />`;
 
     const inApp = auth.s !== "agency" && !((cloudCode || needTeam) && auth.s !== "in") && !blocked;
     const deskOn = desk && inApp;
@@ -6890,7 +6950,8 @@ ${l}`
           ${k === "att" && attOn && attTabs.map(([a, al]) => SI((ctlV.av || "day") === a, al, ()=>goCtl("att", a), "deep"))}`)}
         ${SI(role === "field", "📍 שטח", ()=>goRole("field"))}
         ${SI(role === "stock", "📦 מלאי", ()=>goRole("stock"))}
-        ${ordOn && SI(role === "orders", "🛒 הזמנות פתוחות", ()=>goRole("orders"), "", ordN)}
+        ${buyOk && SI(role === "buy", "🛒 הזמנת חומר (רכש)", ()=>openBuy(), "sub")}
+        ${ordOn && SI(role === "orders", "📋 הזמנות פתוחות", ()=>goRole("orders"), "sub", ordN)}
         ${signedIn && SI(role === "docs", "📁 המסמכים שלי", ()=>goRole("docs"), "", pdNew)}
         ${signedIn && auth.staff.role === "office" && SI(role === "docsadm", "🗂 מסמכים אישיים", ()=>goRole("docsadm"))}
         ${invOn && SI(role === "inv", auth.staff.role === "office" ? "🧾 חשבוניות ספקים" : "🧾 חשבוניות לאישורך", ()=>goRole("inv"), "", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait)}
@@ -6907,7 +6968,7 @@ ${l}`
     }
 
     return html`
-      <div class=${"app" + (deskOn ? " desk" : "")}>
+      <div class=${"app" + (deskOn ? " desk" : "") + (nav.screen === "buy.home" ? " buyon" : "")}>
         ${deskOn ? sideNav : html`<div class=${"topbar" + (inApp ? " noseg" : "")}>
           <div class="brand">
             <span class="plate"><img src=${LOGO} alt="ט.ש. מי רון" /></span>
@@ -6933,12 +6994,12 @@ ${l}`
         ${role !== "inv" && (invWait > 0 || invCnt.tal > 0) && html`<button class="banner pdban" onClick=${()=>switchRole("inv")}>🧾 ${invWait > 0 ? (invWait === 1 ? "חשבונית מחכה לאישורך" : invWait + " חשבוניות מחכות לאישורך") : (invCnt.tal === 1 ? "חשבונית ממתינה לאישור תשלום שלך" : invCnt.tal + " חשבוניות ממתינות לאישור תשלום שלך")} — לחץ לצפייה</button>`}
         ${signedIn && pdNew > 0 && role !== "docs" && html`<button class="banner pdban" onClick=${()=>switchRole("docs")}>📁 ${pdNew === 1 ? "מסמך אישי חדש מחכה לך" : pdNew + " מסמכים אישיים חדשים מחכים לך"} — לחץ לצפייה</button>`}
         ${body}
+        ${buySrc && html`<${BuyFrame} src=${buySrc} show=${nav.screen === "buy.home"} />`}
         ${inApp && !deskOn && html`<nav class="bnav" aria-label="ניווט">
-          ${[["ctl", "📊", "בקרה", 0], ["field", "📍", "שטח", 0], ["stock", "📦", "מלאי", 0],
-             ...(ordOn ? [["orders", "🛒", "הזמנות", ordN]] : []),
+          ${[["ctl", "📊", "בקרה", 0], ["field", "📍", "שטח", 0], ["stock", "📦", RAKESH_APP ? "מלאי ורכש" : "מלאי", ordOn ? ordN : 0],
              ...(invOn ? [["inv", "🧾", "חשבוניות", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait]] : []),
              ...(signedIn ? [[auth.staff.role === "office" ? "docsadm" : "docs", "📁", "מסמכים", pdNew]] : [])
-            ].map(([r, ic, lb, n]) => html`<button key=${r} class=${(role === r || (r === "docsadm" && role === "docs")) ? "on" : ""} aria-current=${role === r ? "page" : null} onClick=${()=>{ switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} }}>
+            ].map(([r, ic, lb, n]) => html`<button key=${r} class=${(role === r || (r === "docsadm" && role === "docs") || (r === "stock" && (role === "buy" || role === "orders"))) ? "on" : ""} aria-current=${role === r ? "page" : null} onClick=${()=>{ switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} }}>
               <span class="bi">${ic}${n ? html`<i class="bn">${n > 99 ? "99+" : n}</i>` : null}</span><span class="bl">${lb}</span></button>`)}
         </nav>`}
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
@@ -8279,7 +8340,7 @@ ${l}`
       </div>`;
   }
 
-  function StockEditor({ st, now, who, rk, onSave, onDelete, onConfirm, onUse }){
+  function StockEditor({ st, now, who, rk, onSave, onDelete, onConfirm, onUse, onOrder }){
     const actives = st.sites.filter(s => s.active);
     const mine = actives.filter(s => s.owner && s.owner.name === who);
     const [all, setAll] = useState(false);
@@ -8324,7 +8385,10 @@ ${l}`
           ${open.map(o => html`<div key=${o.id} class="rkord"><b>${o.supplier || "ספק"}</b> · ${RK_STAGE[o.stage] || ""} · ${dmy(o.created)}<div>${o.items.map(it => it.n + " × " + it.q).join(" · ")}</div></div>`)}
           <div class="hint" style=${{textAlign:"start", marginTop:6}}>כשהסחורה מגיעה — מסמנים "קבלה" באפליקציית הרכש, והמלאי כאן מתעדכן לבד.</div>
         </div>`}
-        ${canOrder && short.length > 1 && html`<a class="btn pri wide rkbtn" style=${{marginBottom:12}} href=${orderLink(short.map(m => ({ n:m.item, q:toOrder(m), u:m.unit })))} target="_blank" rel="noopener">🛒 להזמין את כל החוסרים (${short.length}) ברכש</a>`}
+        ${canOrder && short.length > 1 && (onOrder
+          ? html`<button type="button" class="btn pri wide rkbtn" style=${{marginBottom:12}} onClick=${()=>onOrder(short.map(m => ({ n:m.item, q:toOrder(m), u:m.unit })), pid)}>🛒 להזמין את כל החוסרים (${short.length})</button>`
+          : html`<a class="btn pri wide rkbtn" style=${{marginBottom:12}} href=${orderLink(short.map(m => ({ n:m.item, q:toOrder(m), u:m.unit })))} target="_blank" rel="noopener">🛒 להזמין את כל החוסרים (${short.length}) ברכש</a>`)}
+        ${canOrder && onOrder && html`<button type="button" class="btn wide rkbtn" style=${{marginBottom:12}} onClick=${()=>onOrder([], pid)}>🛒 הזמנה חדשה לאתר ${site.name}</button>`}
 
         <div style=${{display:"flex", flexDirection:"column", gap:9}}>
           ${mats.map(m => editing === m.item
@@ -8352,7 +8416,9 @@ ${l}`
                 ${m.onSite > 0 && html`<button type="button" class="btn usebtn" onClick=${()=>{ setUsing(m.item); setEditing(null); setAdding(false); }}>🔧 שימוש בחומר</button>`}
                 ${(()=>{ const oo = rkOnOrder(rk, site.id, m.item), q = toOrder(m); return html`
                   ${oo.q > 0 && html`<div class="rkline">🚚 בדרך: ${oo.q} ${m.unit}${oo.sup.length ? " · " + oo.sup.join(", ") : ""}</div>`}
-                  ${canOrder && q > 0 && html`<a class="btn rkbtn" href=${orderLink([{ n:m.item, q, u:m.unit }])} target="_blank" rel="noopener">🛒 להזמין ${q} ${m.unit} ברכש</a>`}`; })()}
+                  ${canOrder && q > 0 && (onOrder
+                    ? html`<button type="button" class="btn rkbtn" onClick=${()=>onOrder([{ n:m.item, q, u:m.unit }], pid)}>🛒 להזמין ${q} ${m.unit}</button>`
+                    : html`<a class="btn rkbtn" href=${orderLink([{ n:m.item, q, u:m.unit }])} target="_blank" rel="noopener">🛒 להזמין ${q} ${m.unit} ברכש</a>`)}`; })()}
               </div>`)}
           ${mats.length === 0 && !adding && html`<div class="empty" style=${{padding:"22px 0"}}>עדיין לא הוזן מלאי באתר הזה</div>`}
           ${adding
@@ -8364,12 +8430,13 @@ ${l}`
       </div>`;
   }
 
-  function StockHome({ st, now, who, rk, onStockSave, onStockDelete, onStockConfirm, onStockUse }){
+  function StockHome({ st, now, who, rk, onStockSave, onStockDelete, onStockConfirm, onStockUse, onOrder, tabs }){
     return html`
       <div class="screen narrow">
+        ${tabs}
         <div class="shead"><h2>מלאי באתר</h2><span class="sub">כל מנהל מנהל את המלאי של האתרים שלו · ההנהלה רואה בזמן אמת</span></div>
         <div style=${{marginTop:12}}>
-          <${StockEditor} st=${st} now=${now} who=${who} rk=${rk} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} onUse=${onStockUse} />
+          <${StockEditor} st=${st} now=${now} who=${who} rk=${rk} onSave=${onStockSave} onDelete=${onStockDelete} onConfirm=${onStockConfirm} onUse=${onStockUse} onOrder=${onOrder} />
         </div>
       </div>`;
   }
