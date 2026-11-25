@@ -249,5 +249,12 @@ service cloud.firestore {
     match /invmeta/{k} {
       allow read, write: if isOffice();
     }
+
+    // ───── התראות לטלפון (הזמנות רכש חדשות) ─────
+    //   push/{טלפון} — מנויי ההתראות של המכשירים של המשתמש (subs.{מפתח} = endpoint + מפתחות). פונקציית הענן notifyOrder קוראת עם הרשאת שרת
+    // רק משתמש משרד, ורק את המסמך של עצמו (מנוי של אדם אחר לא נקרא ולא נכתב)
+    match /push/{p} {
+      allow read, write: if isOffice() && p == phone();
+    }
   }
 }

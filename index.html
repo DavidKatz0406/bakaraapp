@@ -604,6 +604,52 @@
     .arow .af:empty{ display:none; }
     .arow.head .af{ display:none; }
   }
+  /* ───── הזמנות פתוחות (רכש) ───── */
+  .ordhead{ flex-wrap:wrap; gap:8px; }
+  .ordhead .ordttl{ flex:1 1 auto; min-width:0; }
+  .ordbar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:0 0 10px; }
+  .ordbar .btn{ flex:none; }
+  .ordcard{ background:var(--surface); border:1px solid var(--line-2); border-radius:14px; padding:12px 13px; }
+  .ordcard + .ordcard{ margin-top:10px; }
+  .ordcard.tal{ border-color:var(--warn); }
+  .ordcard .oh{ display:flex; gap:9px; align-items:flex-start; }
+  .ordcard .oh input{ width:20px; height:20px; margin-top:3px; flex:none; }
+  .ordcard .ot{ flex:1 1 auto; min-width:0; }
+  .ordcard .ot b{ display:block; font-size:1rem; overflow-wrap:anywhere; }
+  .ordcard .ot small{ display:block; font-family:"Heebo",sans-serif; font-size:.74rem; color:var(--ink-3); margin-top:2px; overflow-wrap:anywhere; }
+  .ordcard .oamt{ flex:none; font-family:"Heebo",sans-serif; font-weight:700; font-size:.9rem; white-space:nowrap; }
+  .ordcard .otags{ display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px; }
+  .ordcard .osup{ border-top:1px dashed var(--line); margin-top:8px; padding-top:7px; }
+  .ordcard .osup h4{ font-size:.86rem; display:flex; gap:8px; justify-content:space-between; flex-wrap:wrap; }
+  .ordcard .osup h4 span{ font-family:"Heebo",sans-serif; font-weight:500; color:var(--ink-3); font-size:.76rem; }
+  .ordcard ul{ margin:4px 0 0; padding:0 18px 0 0; font-size:.84rem; line-height:1.55; }
+  .ordcard li{ overflow-wrap:anywhere; }
+  .ordcard .onote{ font-family:"Heebo",sans-serif; font-size:.78rem; background:var(--surface-2); border-radius:8px; padding:6px 9px; margin-top:8px; overflow-wrap:anywhere; }
+  .pushbox{ display:flex; gap:9px; align-items:center; flex-wrap:wrap; background:var(--surface-2); border:1px solid var(--line-2); border-radius:12px; padding:9px 11px; margin:0 0 12px; font-family:"Heebo",sans-serif; font-size:.8rem; }
+  .pushbox > span{ flex:1 1 180px; min-width:0; }
+  .pushbox .btn{ flex:none; }
+  @media (max-width:560px){ .ordhead .btn, .ordbar .btn, .pushbox .btn{ padding:8px 10px; font-size:.8rem; } }
+  .ordprint{ display:none; }
+  @media print{
+    body.printing #root{ display:none !important; }
+    body.printing .ordprint{ display:block; color:#000; background:#fff; font-family:"Heebo",Arial,sans-serif; direction:rtl; }
+    @page{ size:A4; margin:12mm; }
+    .ordprint .pg{ page-break-after:always; break-after:page; }
+    .ordprint .pg:last-child{ page-break-after:auto; break-after:auto; }
+    .ordprint .blk{ break-inside:avoid; page-break-inside:avoid; margin-bottom:14px; }
+    .ordprint h1{ font-size:17pt; margin:0 0 2mm; }
+    .ordprint .meta{ font-size:10pt; line-height:1.6; margin-bottom:3mm; }
+    .ordprint .st{ display:inline-block; border:1.5px solid #000; border-radius:4px; padding:1px 7px; font-weight:700; font-size:10pt; }
+    .ordprint table{ width:100%; border-collapse:collapse; font-size:10pt; margin:2mm 0 3mm; }
+    .ordprint th, .ordprint td{ border:1px solid #777; padding:3px 6px; text-align:right; vertical-align:top; }
+    .ordprint th{ background:#eee; }
+    .ordprint td.q{ width:18mm; text-align:center; white-space:nowrap; }
+    .ordprint .sup{ font-weight:700; font-size:11.5pt; margin-top:3mm; }
+    .ordprint .sig{ display:flex; gap:10mm; margin-top:7mm; font-size:10pt; }
+    .ordprint .sig div{ flex:1; border-top:1px solid #000; padding-top:1mm; }
+    .ordprint .foot{ font-size:8.5pt; color:#444; margin-top:4mm; }
+    .ordprint .lst h2{ font-size:12pt; margin:0 0 1mm; }
+  }
 </style>
 
 <div id="root"></div>
@@ -1407,6 +1453,44 @@
     j.orders.forEach(o => { const sid = proj[itemKey(o.project)]; if(sid && siteIds.has(sid)) (out[sid] = out[sid] || []).push(o); });
     return out;
   }
+  /* ───── הזמנות פתוחות (משרד): כל ההזמנות שעוד לא הועברו לספק — כולל ממתינות לאישור טל ─────
+     המקור: גיליון "הזמנות" דרך סקריפט הרכש (action=queue, רק משתמש משרד). קריאה בלבד — הבקרה לא כותבת לגיליון כאן */
+  const VAPID_PUBLIC = "BIIkC5BwF7jbE7svnBMijOe2mqIo_rXXO9iYNiWtMt_fazPpnhDYFO5gSy6n0rhXJor3OBDd81-MgjEuYNLDqIQ";
+  const ORD_ST = { tal:["⏳", "ממתינה לאישור טל", "warn"], ok:["✅", "אושרה ע״י טל — לטיפול שרון", "ok"], sharon:["🆕", "לטיפול שרון", "ok"] };
+  function ordStage(o){ return o.needAp && (o.ap === "ממתין" || o.ap === "נשלחה בקשה לטל") ? "tal" : o.needAp && o.ap === "אושר" ? "ok" : "sharon"; }
+  function ordLines(items){
+    return String(items || "").split("\n").map(l => l.trim()).filter(l => l && l.charAt(0) === "•").map(l => {
+      const m = l.match(/^•\s*(.*?)(?:\s*\|\s*מק״ט\s*(\S+))?\s+—\s+(\d+(?:\.\d+)?)\s*(.*)$/);
+      return m ? { n:m[1].trim(), sku:m[2] || "", q:m[3], u:(m[4] || "").trim() } : { n:l.replace(/^•\s*/, ""), sku:"", q:"", u:"" };
+    });
+  }
+  function groupOrders(rows){
+    const m = new Map();
+    (rows || []).forEach(r => {
+      const oid = String(r.id).replace(/-\d+$/, "");
+      if(!m.has(oid)) m.set(oid, { oid, created:r.created, project:r.project, user:r.user, phone:r.phone, total:r.total, needAp:r.needAp, ap:r.ap, apAt:r.apAt,
+        urgent:r.urgent, needBy:r.needBy, note:r.note, rows:[] });
+      const o = m.get(oid);
+      o.rows.push(r);
+      if(r.urgent) o.urgent = true;
+    });
+    return [...m.values()].map(o => ({ ...o, stage:ordStage(o), rows:o.rows.sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric:true })) }))
+      .sort((a, b) => b.created - a.created);
+  }
+  async function fetchOrderQueue(){
+    if(!Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) throw new Error("צריך להתחבר עם מספר הטלפון");
+    const token = await firebase.auth().currentUser.getIdToken();
+    const j = await (await fetch(RAKESH_URL + "?action=queue&token=" + encodeURIComponent(token))).json();
+    if(!j || !Array.isArray(j.rows)) throw new Error(j && j.error === "unauthorized" ? "אין הרשאה — רק משתמש משרד" : "תשובה לא תקינה מהרכש");
+    return groupOrders(j.rows);
+  }
+  const ordMoney = n => "₪" + Math.round(Number(n) || 0).toLocaleString("he-IL");
+  const ordWhen = ts => { if(!ts) return ""; const d = new Date(ts); return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1) + " " + hhmm(ts); };
+  const ordNeedBy = v => { if(!v) return ""; if(typeof v === "number"){ const d = new Date(v); return pad2(d.getDate()) + "/" + pad2(d.getMonth() + 1); }
+    const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + "/" + m[2] : String(v); };
+  const ordLinks = r => String(r.links || "").split(/\s+/).filter(u => /^https:\/\//.test(u));
+  const ordPhone = p => String(p || "").replace(/^(\d{3})(\d{7})$/, "$1-$2");
+
   async function syncReceipts(siteIds, who){
     if(!Cloud.on || typeof firebase === "undefined" || !firebase.auth().currentUser) return 0;
     const token = await firebase.auth().currentUser.getIdToken();
@@ -6008,6 +6092,153 @@ ${l}`
     </div>`;
   }
 
+  /* ───── התראות לטלפון: הרשמה של המכשיר (Web Push). המנוי נשמר ב-push/{טלפון}, וסקריפט הרכש מפעיל את השליחה ───── */
+  function urlB64(s){ const p = "=".repeat((4 - s.length % 4) % 4); const b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+  function pushKey(ep){ let h = 0; for(let i = 0; i < ep.length; i++) h = (h * 31 + ep.charCodeAt(i)) >>> 0; return "k" + h.toString(36) + ep.length.toString(36); }
+  async function swReg(){
+    if(!("serviceWorker" in navigator)) return null;
+    return (await navigator.serviceWorker.getRegistration()) || null;
+  }
+  function PushToggle({ phone, name, notify }){
+    const can = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const [on, setOn] = useState(null), [busy, setBusy] = useState(false);
+    useEffect(()=>{
+      if(!can) return;
+      swReg().then(r => r ? r.pushManager.getSubscription() : null).then(sub => setOn(!!sub && Notification.permission === "granted")).catch(()=>setOn(false));
+    }, []);
+    const ref = () => firebase.firestore().collection("push").doc(phone);
+    async function enable(){
+      setBusy(true);
+      try{
+        const perm = await Notification.requestPermission();
+        if(perm !== "granted"){ notify("ההתראות חסומות — צריך לאפשר התראות לבקרה בהגדרות הטלפון או הדפדפן"); return; }
+        const reg = await swReg();
+        if(!reg){ notify("רענן את הבקרה ונסה שוב"); return; }
+        let sub = await reg.pushManager.getSubscription();
+        if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64(VAPID_PUBLIC) });
+        const j = sub.toJSON();
+        await ref().set({ name, orders:true, subs:{ [pushKey(j.endpoint)]: { endpoint:j.endpoint, keys:j.keys, ua:navigator.userAgent.slice(0, 120), at:firebase.firestore.FieldValue.serverTimestamp() } } }, { merge:true });
+        setOn(true); notify("🔔 התראות על הזמנות חדשות הופעלו במכשיר הזה");
+      }catch(e){ notify("לא הצלחתי להפעיל התראות: " + (e.message || e)); }
+      finally{ setBusy(false); }
+    }
+    async function disable(){
+      setBusy(true);
+      try{
+        const reg = await swReg(), sub = reg && await reg.pushManager.getSubscription();
+        if(sub){ const k = pushKey(sub.endpoint); await sub.unsubscribe().catch(()=>{}); await ref().update({ ["subs." + k]: firebase.firestore.FieldValue.delete() }).catch(()=>{}); }
+        setOn(false); notify("ההתראות כובו במכשיר הזה");
+      }catch(e){ notify("לא הצלחתי לכבות: " + (e.message || e)); }
+      finally{ setBusy(false); }
+    }
+    if(!can) return html`<div class="pushbox"><span>🔕 ${ios ? "באייפון ההתראות עובדות רק כשהבקרה מותקנת: בספארי לחץ שתף ← \"הוסף למסך הבית\", פתח את הבקרה מהאייקון, ואז הפעל כאן התראות" : "המכשיר או הדפדפן הזה לא תומך בהתראות"}</span></div>`;
+    return html`<div class="pushbox">
+      <span>${on ? "🔔 התראה על כל הזמנה חדשה פעילה במכשיר הזה" : "🔕 רוצה לקבל התראה בטלפון כשנכנסת הזמנה חדשה?"}</span>
+      ${on === null ? null : on
+        ? html`<button class="btn" disabled=${busy} onClick=${disable}>כבה התראות</button>`
+        : html`<button class="btn pri" disabled=${busy} onClick=${enable}>🔔 הפעל התראות</button>`}
+    </div>`;
+  }
+
+  /* תצוגת הדפסה: נבנית מחוץ לאפליקציה (portal) ומוצגת רק בהדפסה. mode: "page" — עמוד לכל הזמנה, "list" — רשימה מרוכזת */
+  function OrdersPrint({ list, mode, who, onDone }){
+    useEffect(()=>{
+      document.body.classList.add("printing");
+      const done = () => onDone();
+      window.addEventListener("afterprint", done);
+      const t = setTimeout(()=>{ try{ window.print(); }catch(e){ done(); } }, 120);
+      return ()=>{ clearTimeout(t); window.removeEventListener("afterprint", done); document.body.classList.remove("printing"); };
+    }, []);
+    const stTxt = o => o.stage === "tal" ? "ממתינה לאישור טל" : o.stage === "ok" ? "אושרה ע״י טל" : "לא נדרש אישור טל";
+    const printed = "הודפס " + ordWhen(Date.now()) + (who ? " ע״י " + who : "");
+    const one = o => html`
+      <div class="blk">
+        <h1>${mode === "page" ? "הזמנת רכש — " : ""}${o.project}</h1>
+        <div class="meta">
+          <span class="st">${stTxt(o)}</span>${o.urgent ? html` <span class="st">⚡ דחוף</span>` : null}<br/>
+          מספר: ${o.oid} · נוצרה: ${ordWhen(o.created)} · הזמין: ${o.user}${o.phone ? " (" + ordPhone(o.phone) + ")" : ""}
+          ${o.needBy ? html`<br/>נדרש עד: ${ordNeedBy(o.needBy)}` : null}${o.note ? html`<br/>הערת המזמין: ${o.note}` : null}
+          <br/>סכום ההזמנה: ${ordMoney(o.total)} כולל מע״מ
+        </div>
+        ${o.rows.map(r => { const ls = ordLines(r.items); return html`<div key=${r.id}>
+          <div class="sup">${r.supplier}${r.real && r.real !== r.supplier ? " ← ספק בפועל: " + r.real : ""}${r.sub > 0 ? " · " + ordMoney(r.sub) + " לפני מע״מ" : ""} <span style=${{fontWeight:400, fontSize:"9pt"}}>(${r.id})</span></div>
+          <table><thead><tr><th>פריט</th><th>כמות</th><th>יחידה</th></tr></thead><tbody>
+            ${ls.length ? ls.map((l, i) => html`<tr key=${i}><td>${l.n}${l.sku ? " · מק״ט " + l.sku : ""}</td><td class="q">${l.q}</td><td class="q">${l.u}</td></tr>`)
+              : html`<tr><td colspan="3">${r.items || "—"}</td></tr>`}
+          </tbody></table>
+          ${r.req ? html`<div class="meta">בקשת שינוי: ${r.req}</div>` : null}
+          ${ordLinks(r).length ? html`<div class="meta">📷 ${ordLinks(r).length === 1 ? "תמונה מצורפת" : ordLinks(r).length + " תמונות מצורפות"} — לצפייה בבקרה או בגיליון</div>` : null}
+        </div>`; })}
+        ${mode === "page" && html`<div class="sig">
+          ${o.needAp && html`<div>אישור טל (חתימה ותאריך)</div>`}
+          <div>טופל ע״י שרון · הועבר לספק (תאריך)</div>
+        </div>`}
+        ${mode === "page" && html`<div class="foot">ט.ש. מי-רון · ${printed}</div>`}
+      </div>`;
+    return ReactDOM.createPortal(html`<div class="ordprint">
+      ${mode === "page"
+        ? list.map(o => html`<div class="pg" key=${o.oid}>${one(o)}</div>`)
+        : html`<div class="lst"><h1>הזמנות פתוחות — ${list.length} הזמנות</h1><div class="meta">ט.ש. מי-רון · ${printed}</div>${list.map(o => html`<div key=${o.oid}>${one(o)}</div>`)}</div>`}
+    </div>`, document.body);
+  }
+
+  /* מסך "הזמנות פתוחות" (משרד): כל ההזמנות שעוד לא הועברו לספק, עם הדפסה. שרון מרכזת ומדפיסה, טל רואה מה ממתין לו */
+  function OrdersQueue({ q, reload, who, phone, notify }){
+    const [f, setF] = useState("all"), [sel, setSel] = useState({}), [qs, setQs] = useState(""), [job, setJob] = useState(null);
+    useEffect(()=>{ reload(); }, []);
+    const all = q.list || [];
+    const ql = qs.trim().toLowerCase();
+    const shown = all.filter(o => (f === "all" || (f === "tal" ? o.stage === "tal" : o.stage !== "tal"))
+      && (!ql || [o.project, o.user, o.oid, ...o.rows.map(r => r.supplier + " " + r.items)].join(" ").toLowerCase().includes(ql)));
+    const selList = shown.filter(o => sel[o.oid]);
+    const nTal = all.filter(o => o.stage === "tal").length;
+    const print = mode => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, list:l, k:Date.now() }); };
+    return html`<div class="screen">
+      <div class="shead ordhead"><div class="ordttl"><h2>🛒 הזמנות פתוחות</h2>
+        <span class="sub">${q.list ? all.length + " הזמנות שעוד לא הועברו לספק" + (q.at ? " · עודכן " + hhmm(q.at) : "") : "טוען…"}</span></div>
+        <button class="btn" disabled=${q.busy} onClick=${reload}>${q.busy ? "⏳" : "🔄"} רענון</button>
+      </div>
+      <${PushToggle} phone=${phone} name=${who} notify=${notify} />
+      ${q.err && html`<div class="alert crit" style=${{marginBottom:10}}><span class="b"></span>לא הצלחתי לטעון את ההזמנות: ${q.err}</div>`}
+      <div class="chips" style=${{margin:"4px 0 12px"}}>
+        ${[["all", "הכול", all.length], ["tal", "ממתינות לטל", nTal], ["sharon", "לטיפול שרון", all.length - nTal]].map(([k, n, c]) =>
+          html`<button key=${k} class=${"chip " + (f === k ? "on" : "")} onClick=${()=>{ setF(k); setSel({}); }}>${n} (${c})</button>`)}
+      </div>
+      <input class="tin" style=${{fontFamily:"inherit", marginBottom:10}} placeholder="🔍 חיפוש — פרויקט, מזמין, ספק, פריט" value=${qs} onInput=${e=>setQs(e.target.value)} />
+      ${shown.length > 0 && html`<div class="ordbar">
+        <label class="acheck" style=${{margin:0}}><input type="checkbox" checked=${selList.length === shown.length} onChange=${e=>{ const o = {}; if(e.target.checked) shown.forEach(x => { o[x.oid] = true; }); setSel(o); }} />סמן הכול</label>
+        <span style=${{flex:1}}></span>
+        <button class="btn pri" onClick=${()=>print("page")}>🖨 ${selList.length ? "הדפס נבחרות (" + selList.length + ")" : "הדפס הכול"}</button>
+        <button class="btn" onClick=${()=>print("list")}>📋 רשימה מרוכזת</button>
+      </div>`}
+      <div>
+        ${shown.map(o => { const [ic, lb, tone] = ORD_ST[o.stage]; return html`<div key=${o.oid} class=${"ordcard" + (o.stage === "tal" ? " tal" : "")}>
+          <div class="oh">
+            <input type="checkbox" aria-label=${"בחר להדפסה: " + o.project} checked=${!!sel[o.oid]} onChange=${()=>setSel(s => ({ ...s, [o.oid]:!s[o.oid] }))} />
+            <div class="ot"><b>${o.project}</b><small>${o.user}${o.phone ? " · " + ordPhone(o.phone) : ""} · ${ordWhen(o.created)} · ${o.rows.length === 1 ? "ספק אחד" : o.rows.length + " ספקים"}</small></div>
+            <span class="oamt">${ordMoney(o.total)}</span>
+          </div>
+          <div class="otags">
+            <span class=${"pill " + tone}>${ic} ${lb}</span>
+            ${o.urgent && html`<span class="pill crit">⚡ דחוף</span>`}
+            ${o.needBy && html`<span class="pill inactive">נדרש עד ${ordNeedBy(o.needBy)}</span>`}
+            ${o.rows.some(r => r.req) && html`<span class="pill warn">✎ בקשת שינוי</span>`}
+          </div>
+          ${o.note && html`<div class="onote">💬 ${o.note}</div>`}
+          ${o.rows.map(r => { const ls = ordLines(r.items); return html`<div key=${r.id} class="osup">
+            <h4>${r.supplier}${r.real && r.real !== r.supplier ? " ← " + r.real : ""}${r.sub > 0 && html`<span>${ordMoney(r.sub)} לפני מע״מ</span>`}</h4>
+            <ul>${ls.length ? ls.map((l, i) => html`<li key=${i}>${l.n} — <b>${l.q}</b> ${l.u}</li>`) : html`<li>${r.items || "—"}</li>`}</ul>
+            ${ordLinks(r).length > 0 && html`<div class="sub2" style=${{margin:"4px 0 0"}}>${ordLinks(r).map((u, i) => html`<a key=${i} href=${u} target="_blank" rel="noopener" style=${{marginInlineEnd:10}}>📷 תמונה ${i + 1}</a>`)}</div>`}
+            ${r.req && html`<div class="onote">✎ ${r.req}</div>`}
+          </div>`; })}
+        </div>`; })}
+      </div>
+      ${q.list && !shown.length && html`<div class="empty">${ql ? "לא נמצאו הזמנות" : f === "tal" ? "אין הזמנות שממתינות לאישור טל 👍" : "אין הזמנות פתוחות 👍"}</div>`}
+      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} onDone=${()=>setJob(null)} />`}
+    </div>`;
+  }
+
   function App(){
     const cloudCode = useState(readTeamCode)[0];
     // אין קוד צוות במכשיר (אייקון במסך הבית, דפדפן אחר, קישור בלי קוד) → כניסה בטלפון, והקוד נמשך מרשומת המשתמש
@@ -6127,6 +6358,29 @@ ${l}`
     }, [signedIn]);
     const invWait = (invMineL || []).filter(f => f.status === "pm").length;
     const invOn = signedIn && (auth.staff.role === "office" || (auth.staff.role === "mgr" && (invMineL || []).length > 0));
+    // הזמנות פתוחות (משרד בלבד): נמשכות מסקריפט הרכש בכניסה, כל 2 דקות כשהמסך פתוח, ובכל פתיחה של המסך
+    const ordOn = signedIn && auth.staff.role === "office";
+    const [ordQ, setOrdQ] = useState({ list:null, err:"", at:0, busy:false });
+    const ordBusy = useRef(false);
+    const loadOrders = useCallback(async ()=>{
+      if(ordBusy.current) return;
+      ordBusy.current = true; setOrdQ(q => ({ ...q, busy:true }));
+      try{ const list = await fetchOrderQueue(); setOrdQ({ list, err:"", at:Date.now(), busy:false }); }
+      catch(e){
+        setOrdQ(q => ({ ...q, err:String(e.message || e), busy:false }));
+        if(!loadOrders._retry){ loadOrders._retry = true; setTimeout(()=>{ ordBusy.current = false; loadOrders(); }, 5000); }   // בכניסה הראשונה האימות עוד לא מוכן — ניסיון אחד נוסף
+      }
+      finally{ ordBusy.current = false; }
+    }, []);
+    useEffect(()=>{
+      if(!ordOn) return;
+      loadOrders();
+      const t = setInterval(()=>{ if(!document.hidden) loadOrders(); }, 120000);
+      const vis = () => { if(!document.hidden) loadOrders(); };
+      document.addEventListener("visibilitychange", vis);
+      return ()=>{ clearInterval(t); document.removeEventListener("visibilitychange", vis); };
+    }, [ordOn]);
+    const ordN = (ordQ.list || []).length;
 
     useEffect(()=>{ if(cloudCode) return; if(!persist(st)) notify("האחסון במכשיר מלא — מחק תמונות ישנות כדי לשמור חדשות"); }, [st]);
     const notify = useCallback((m)=>{ setToast(m); clearTimeout(notify._t); notify._t = setTimeout(()=>setToast(null), 2600); }, []);
@@ -6196,8 +6450,22 @@ ${l}`
         update(d => { d.requests = []; d.transfers = []; return d; });
     }, [cloud.ready, cloud.server, cloud.empty, (st.requests || []).length, (st.transfers || []).length]);
 
-    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : "stock.home";
+    const homeOf = r => r === "ctl" ? "ctl.home" : r === "field" ? "field.home" : r === "docs" ? "docs.mine" : r === "docsadm" ? "docs.admin" : r === "inv" ? "inv.home" : r === "orders" ? "orders.home" : "stock.home";
     function switchRole(r){ setRole(r); setNav({ screen: homeOf(r) }); }
+    // לחיצה על התראת הזמנה: ?go=orders בפתיחה, או הודעה מה-service worker כשהבקרה כבר פתוחה
+    const goBack = useRef(false);
+    useEffect(()=>{
+      if(!ordOn) return;
+      if(!goBack.current && new URLSearchParams(location.search).get("go") === "orders"){
+        goBack.current = true;
+        try{ history.replaceState(null, "", location.pathname); }catch(e){}
+        switchRole("orders");
+      }
+      if(!("serviceWorker" in navigator)) return;
+      const onMsg = e => { if(e.data && e.data.go === "orders"){ switchRole("orders"); loadOrders(); } };
+      navigator.serviceWorker.addEventListener("message", onMsg);
+      return ()=>navigator.serviceWorker.removeEventListener("message", onMsg);
+    }, [ordOn]);
     // חזרה מדף ההתחברות של מיקרוסופט (?mail=ok / ?mail=err&m=…) — פותחים את לשונית החשבוניות
     const mailBack = useRef(false);
     useEffect(()=>{
@@ -6548,6 +6816,10 @@ ${l}`
         : nav.screen === "docs.admin" && auth.staff.role === "office"
         ? html`<${DocsAdmin} who=${who} myPhone=${auth.phone} notify=${notify} onMine=${()=>switchRole("docs")} />`
         : html`<${MyDocs} phone=${auth.phone} name=${auth.staff.name} files=${myFiles} notify=${notify} onAll=${auth.staff.role === "office" ? ()=>switchRole("docsadm") : null} />`;
+    else if(nav.screen === "orders.home")
+      body = !ordOn
+        ? html`<div class="screen narrow"><div class="empty">הזמנות פתוחות זמינות רק למשתמשי משרד</div></div>`
+        : html`<${OrdersQueue} q=${ordQ} reload=${loadOrders} who=${who} phone=${auth.phone} notify=${notify} />`;
     else if(nav.screen === "inv.home")
       body = !invOn
         ? html`<div class="screen narrow"><div class="empty">אין חשבוניות להצגה</div></div>`
@@ -6618,6 +6890,7 @@ ${l}`
           ${k === "att" && attOn && attTabs.map(([a, al]) => SI((ctlV.av || "day") === a, al, ()=>goCtl("att", a), "deep"))}`)}
         ${SI(role === "field", "📍 שטח", ()=>goRole("field"))}
         ${SI(role === "stock", "📦 מלאי", ()=>goRole("stock"))}
+        ${ordOn && SI(role === "orders", "🛒 הזמנות פתוחות", ()=>goRole("orders"), "", ordN)}
         ${signedIn && SI(role === "docs", "📁 המסמכים שלי", ()=>goRole("docs"), "", pdNew)}
         ${signedIn && auth.staff.role === "office" && SI(role === "docsadm", "🗂 מסמכים אישיים", ()=>goRole("docsadm"))}
         ${invOn && SI(role === "inv", auth.staff.role === "office" ? "🧾 חשבוניות ספקים" : "🧾 חשבוניות לאישורך", ()=>goRole("inv"), "", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait)}
@@ -6662,6 +6935,7 @@ ${l}`
         ${body}
         ${inApp && !deskOn && html`<nav class="bnav" aria-label="ניווט">
           ${[["ctl", "📊", "בקרה", 0], ["field", "📍", "שטח", 0], ["stock", "📦", "מלאי", 0],
+             ...(ordOn ? [["orders", "🛒", "הזמנות", ordN]] : []),
              ...(invOn ? [["inv", "🧾", "חשבוניות", auth.staff.role === "office" ? invCnt.n + invCnt.tal : invWait]] : []),
              ...(signedIn ? [[auth.staff.role === "office" ? "docsadm" : "docs", "📁", "מסמכים", pdNew]] : [])
             ].map(([r, ic, lb, n]) => html`<button key=${r} class=${(role === r || (r === "docsadm" && role === "docs")) ? "on" : ""} aria-current=${role === r ? "page" : null} onClick=${()=>{ switchRole(r); try{ window.scrollTo(0, 0); }catch(e){} }}>
@@ -6692,6 +6966,7 @@ ${l}`
                 <div class="who">${auth.staff.name} · ${isViewer ? "צופה — רואה הכול, קריאה בלבד" : isOffice ? "משרד — רואה הכול" : "מנהל פרויקט — רואה רק את האתרים שלו (" + sites.length + ")"} · <span dir="ltr">${fmtPhone(auth.phone)}</span></div>
                 <button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("docs"); }}><span class="e">📁</span>המסמכים שלי — תלושים, הפרשות, טפסים${pdNew ? " (" + pdNew + " חדשים)" : ""}</button>
                 ${auth.staff.role === "office" && html`<button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("docsadm"); }}><span class="e">🗂</span>מסמכים אישיים של כולם — העלאה וניהול</button>`}
+                ${ordOn && html`<button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("orders"); }}><span class="e">🛒</span>הזמנות פתוחות — הדפסה והתראות${ordN ? " (" + ordN + ")" : ""}</button>`}
                 ${invOn && html`<button class="opt" onClick=${()=>{ setIdSheet(false); switchRole("inv"); }}><span class="e">🧾</span>${auth.staff.role === "office" ? "חשבוניות ספקים" + (invCnt.n + invCnt.tal ? " (" + (invCnt.n + invCnt.tal) + ")" : "") : "חשבוניות לאישורך" + (invWait ? " (" + invWait + ")" : "")}</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setStaffSheet(true); }}><span class="e">👥</span>משתמשים והרשאות</button>`}
                 ${isOffice && html`<button class="opt" onClick=${()=>{ setIdSheet(false); setTeamSheet(true); }}><span class="e">🔑</span>קוד צוות · שיתוף קישור</button>`}

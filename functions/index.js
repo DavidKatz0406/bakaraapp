@@ -288,3 +288,62 @@ async function fetchPdf(u){
     return { bytes, name: nm ? decodeURIComponent(nm) : "חשבונית.pdf" };
   }catch(e){ return null; }
 }
+
+/* ───── התראות לטלפון: הזמנת רכש חדשה (טל, שרון, דוד) ─────
+ *  • משתמש משרד לוחץ בבקרה במסך "הזמנות פתוחות" על "🔔 הפעל התראות". הטלפון נרשם להתראות (Web Push),
+ *    והמנוי נשמר ב-push/{טלפון}.subs (רק המשתמש עצמו כותב, לפי חוקי Firestore).
+ *  • סקריפט הרכש (Google Apps Script) קורא ל-notifyOrder כשנרשמת הזמנה חדשה, עם סוד משותף בכותרת X-Notify-Secret.
+ *  • נשלחת התראה לכל משתמש משרד פעיל שהפעיל התראות. מנוי שפג תוקפו (404/410) נמחק.
+ * סודות (Secret Manager): NOTIFY_SECRET (משותף עם הסקריפט), VAPID_PUBLIC, VAPID_PRIVATE.
+ */
+const webpush = require("web-push");
+const NOTIFY_SECRET = defineSecret("NOTIFY_SECRET");
+const VAPID_PUBLIC = defineSecret("VAPID_PUBLIC");
+const VAPID_PRIVATE = defineSecret("VAPID_PRIVATE");
+const money = n => "₪" + Math.round(Number(n) || 0).toLocaleString("he-IL");
+const sameSecret = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+
+/** הטקסט של ההתראה (מיוצא לבדיקות) */
+function orderMessage(o){
+  const tags = [o.needsApproval ? "ממתינה לאישור טל" : "", o.urgent ? "⚡ דחוף" : ""].filter(Boolean);
+  return {
+    title: "🛒 הזמנה חדשה — " + String(o.project || "ללא פרויקט").slice(0, 60),
+    body: [String(o.user || "").slice(0, 40), o.total ? money(o.total) + " כולל מע״מ" : "", ...tags].filter(Boolean).join(" · "),
+    tag: "order-" + String(o.oid || "").slice(0, 40),
+    url: APP + "?go=orders"
+  };
+}
+exports.orderMessage = orderMessage;
+
+/** שולח לכל המנויים של משתמשי משרד פעילים. מחזיר {sent, failed, removed} */
+async function pushToOffice(msg){
+  const snap = await db.collection("push").get();
+  let sent = 0, failed = 0, removed = 0;
+  for(const d of snap.docs){
+    const s = await db.doc("staff/" + d.id).get();
+    const st = s.exists ? s.data() : null;
+    if(!st || st.active === false || st.role !== "office") continue;
+    const subs = d.data().subs || {};
+    for(const [k, sub] of Object.entries(subs)){
+      try{
+        await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, JSON.stringify(msg), { TTL: 86400, urgency: "high" });
+        sent++;
+      }catch(e){
+        if(e.statusCode === 404 || e.statusCode === 410){ await d.ref.update({ ["subs." + k]: FV.delete() }).catch(() => {}); removed++; }
+        else { failed++; logger.warn("push", d.id, e.statusCode, errText(e)); }
+      }
+    }
+  }
+  return { sent, failed, removed };
+}
+
+exports.notifyOrder = onRequest({ region: REGION, secrets: [NOTIFY_SECRET, VAPID_PUBLIC, VAPID_PRIVATE], memory: "256MiB", timeoutSeconds: 60 }, async (req, res) => {
+  if(req.method !== "POST" || !sameSecret(req.get("X-Notify-Secret") || "", NOTIFY_SECRET.value())) { res.status(403).json({ error: "forbidden" }); return; }
+  try{
+    webpush.setVapidDetails("https://davidkatz0406.github.io/bakaraapp/", VAPID_PUBLIC.value(), VAPID_PRIVATE.value());
+    const o = req.body || {};
+    const r = await pushToOffice(orderMessage(o));
+    logger.info("notifyOrder", o.oid, r);
+    res.json({ ok: true, ...r });
+  }catch(e){ logger.error("notifyOrder", e); res.status(500).json({ error: errText(e) }); }
+});
