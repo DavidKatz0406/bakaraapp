@@ -281,6 +281,13 @@
   .sheet .who{ font-family:"Heebo",sans-serif; font-size:.8rem; color:var(--ink-2); margin-bottom:14px; }
   .sheet .opt{ display:flex; align-items:center; gap:12px; width:100%; background:var(--surface-2); border:1px solid var(--line-2); border-radius:12px; padding:13px 14px; margin-bottom:8px; font-weight:600; font-size:.92rem; color:var(--ink); }
   .sheet .opt .e{ font-size:1.1rem; }
+  .wnew{ max-height:88vh; overflow-y:auto; }
+  .wnew .wn{ display:flex; gap:11px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--line-2); font-family:"Heebo",sans-serif; font-size:.88rem; line-height:1.5; color:var(--ink); }
+  .wnew .wn:first-of-type{ border-top:0; }
+  .wnew .wn .n{ flex:0 0 26px; height:26px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.82rem; }
+  .wnew .wn b{ display:block; font-size:.92rem; }
+  .wnew .bud{ display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .wnew .bud span{ border-radius:8px; padding:3px 8px; font-size:.76rem; font-weight:700; }
 
   .toast{ position:fixed; inset-inline:0; bottom:22px; z-index:80; display:flex; justify-content:center; pointer-events:none; }
   .toast div{ background:var(--ink); color:var(--paper); font-family:"Heebo",sans-serif; font-size:.84rem; font-weight:500; padding:11px 18px; border-radius:12px; box-shadow:var(--shadow-lg); max-width:90%; text-align:center; }
@@ -6302,6 +6309,34 @@ ${l}`
     if(!("serviceWorker" in navigator)) return null;
     return (await navigator.serviceWorker.getRegistration()) || null;
   }
+  // "מה חדש" — מוצג פעם אחת לכל משתמש במכשיר, אחרי המעבר של הזמנות החומר לבקרה (26.11.2026)
+  const WNEW_KEY = "bakara_wnew_rk1";
+  function WhatsNew({ office, phone, who, notify, onBuy, onClose }){
+    const done = () => { try{ localStorage.setItem(WNEW_KEY, "1"); }catch(e){} onClose(); };
+    const Row = (n, t, d) => html`<div class="wn"><span class="n">${n}</span><div><b>${t}</b>${d}</div></div>`;
+    return html`<div class="scrim" onClick=${done}><div class="sheet wnew" onClick=${e=>e.stopPropagation()}>
+      ${office ? html`
+        <h3>🆕 הזמנות החומר עוברות דרך הבקרה</h3>
+        <div class="who">מיום ראשון 29.11 המנהלים מזמינים רק מהבקרה — בלי וואטסאפ.</div>
+        ${Row(1, "🔔 נכנסה הזמנה — מגיעה התראה", html`נכנסים ל: <b style=${{display:"inline"}}>📦 מלאי ורכש ← 📋 הזמנות פתוחות</b>.`)}
+        ${Row(2, "🖨 מדפיסים ומעבירים לספק", html`<b style=${{display:"inline"}}>🖨 לספק</b> — בלי מחירים ובלי שמות ספקים, אפשר לשלוח לכל ספק (<b style=${{display:"inline"}}>🖨 פנימי</b> — עם מחירים). אחרי השליחה — <b style=${{display:"inline"}}>📦 הועבר לספק</b> עם הספק בפועל.`)}
+        ${Row(3, "✓ מעל ₪10,000 — טל מאשר", "טל מקבל התראה ומאשר או דוחה בכפתור בתור. עד שאישר — לא מעבירים לספק.")}
+        ${Row(4, "🧾 חשבונית ← 🔗 התאמה להזמנה", html`המערכת משווה הזמנה, תעודה וחשבונית. אם יש פער — <b style=${{display:"inline"}}>↩ זיכויים</b>.`)}
+        ${Row(5, "📊 לפי פרויקט — תקציב חודשי", "קובעים תקציב לכל פרויקט, והמנהל רואה פס ירוק / צהוב / אדום.")}
+        <div style=${{marginTop:8}}><${PushToggle} phone=${phone} name=${who} notify=${notify} /></div>
+        <div class="btnrow"><button class="btn pri wide" onClick=${done}>הבנתי</button></div>
+      ` : html`
+        <h3>🆕 הזמנת חומר — מעכשיו רק בבקרה</h3>
+        <div class="who">שלושה דברים, וזה הכול:</div>
+        ${Row(1, "🛒 מזמינים כאן", html`בסרגל למטה: <b style=${{display:"inline"}}>📦 מלאי ורכש ← 🛒 הזמנת חומר</b>.<br/><b style=${{display:"inline",color:"var(--crit)"}}>מיום ראשון 29.11 לא שולחים הזמנות בוואטסאפ.</b>`)}
+        ${Row(2, "✅ שלחת — שרון מטפלת", "שרון מעבירה לספק. מעל ₪10,000 טל מאשר קודם. לא צריך לרדוף אחרי אף אחד.")}
+        ${Row(3, "📊 פס התקציב של הפרויקט", html`מופיע מעל ההזמנה ומראה כמה הוזמן החודש:
+          <div class="bud"><span style=${{background:"var(--paper)",color:"var(--ok)",border:"1px solid var(--line-2)"}}>ירוק — בתוך המסגרת</span><span style=${{background:"#FFF6DC",color:"#C98A00"}}>צהוב — מתקרב לסוף</span><span style=${{background:"#FBE9E7",color:"var(--crit)"}}>אדום — חריגה</span></div>`)}
+        <div class="btnrow" style=${{marginTop:12}}><button class="btn" onClick=${done}>הבנתי</button><button class="btn pri" onClick=${()=>{ done(); onBuy(); }}>🛒 להזמנת חומר</button></div>
+      `}
+    </div></div>`;
+  }
+
   function PushToggle({ phone, name, notify }){
     const can = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
     const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -6346,19 +6381,41 @@ ${l}`
 
   /* תצוגת הדפסה: נבנית מחוץ לאפליקציה (portal) ומוצגת רק בהדפסה. mode: "page" — עמוד לכל הזמנה, "list" — רשימה מרוכזת.
      ההדפסה עצמה נפתחת ישירות מהלחיצה (באייפון ספארי חוסם הדפסה שלא נפתחת מתוך הלחיצה עצמה) — ראו print ב-OrdersQueue */
-  function OrdersPrint({ list, mode, who, onClose }){
+  function OrdersPrint({ list, mode, sup, who, onClose }){
     useLayoutEffect(()=>{ document.body.classList.add("printing"); return ()=>document.body.classList.remove("printing"); }, []);
     // הדפסה בדף נפרד ונקי (בלי העיצוב של הבקרה): במחשב לשונית חדשה, באייפון ספארי — מאפליקציה במסך הבית אפל לא מאפשרת להדפיס.
     // הדף נמצא באתר הרכש (מחוץ לתחום של אפליקציית הבקרה), והנתונים עוברים בכתובת אחרי # — לא נשלחים לשום שרת
     const doPrint = () => {
-      const data = { mode, who, orders: list.map(o => ({ oid:o.oid, project:o.project, user:o.user, phone:o.phone, created:o.created, needBy:o.needBy, urgent:o.urgent, note:o.note,
+      const data = { mode, sup:!!sup, who, orders: list.map(o => ({ oid:o.oid, project:o.project, user:o.user, phone:o.phone, created:o.created, needBy:o.needBy, urgent:o.urgent, note:o.note,
         total:o.total, stage:o.stage, needAp:o.needAp, rows:o.rows.map(r => ({ id:r.id, supplier:r.supplier, real:r.real, sub:r.sub, items:r.items, req:r.req, photos:ordLinks(r).length })) })) };
+      // לספק: גם הכתובת עצמה בלי מחירים, ספקים ומק״ט — שלא ידלפו אם משתפים את הקישור
+      if(sup) data.orders = data.orders.map(o => ({ oid:o.oid, project:o.project, user:o.user, phone:o.phone, created:o.created, needBy:o.needBy, urgent:o.urgent, note:o.note,
+        rows:o.rows.map(r => ({ items:String(r.items || "").replace(/\s*\|\s*מק״ט\s*\S+/g, ""), req:r.req })) }));
       const w = window.open(RAKESH_APP + "print.html#" + encodeURIComponent(JSON.stringify(data)), "_blank");
       if(!w) alert("הדפדפן חסם את פתיחת דף ההדפסה — אפשר חלונות קופצים לבקרה ונסה שוב");
     };
     const stTxt = o => o.stage === "tal" ? "ממתינה לאישור טל" : o.stage === "ok" ? "אושרה ע״י טל" : "לא נדרש אישור טל";
     const printed = "הודפס " + ordWhen(Date.now()) + (who ? " ע״י " + who : "");
-    const one = o => html`
+    // עותק לספק: פרויקט, פריטים וכמויות, נדרש עד, הערה ואיש קשר. כמה ספקים בהזמנה → "חלק 1 / חלק 2" במקום שם הספק
+    const oneSup = o => html`
+      <div class="blk">
+        <h1>הזמנת חומר — ${o.project}</h1>
+        <div class="meta">
+          ${o.urgent ? html`<span class="st">⚡ דחוף</span><br/>` : null}
+          מספר הזמנה: ${o.oid} · תאריך: ${ordWhen(o.created)}<br/>איש קשר באתר: ${o.user}${o.phone ? " · " + ordPhone(o.phone) : ""}
+          ${o.needBy ? html`<br/>נדרש עד: ${ordNeedBy(o.needBy)}` : null}${o.note ? html`<br/>הערות: ${o.note}` : null}
+        </div>
+        ${o.rows.map((r, ri) => { const ls = ordLines(r.items); return html`<div key=${r.id}>
+          ${o.rows.length > 1 ? html`<div class="sup">חלק ${ri + 1}</div>` : null}
+          <table><thead><tr><th>פריט</th><th>כמות</th><th>יחידה</th></tr></thead><tbody>
+            ${ls.length ? ls.map((l, i) => html`<tr key=${i}><td>${l.n}</td><td class="q">${l.q}</td><td class="q">${l.u}</td></tr>`)
+              : html`<tr><td colspan="3">${r.items || "—"}</td></tr>`}
+          </tbody></table>
+          ${r.req ? html`<div class="meta">עדכון: ${r.req}</div>` : null}
+        </div>`; })}
+        <div class="foot">ט.ש. מי-רון</div>
+      </div>`;
+    const one = o => sup ? oneSup(o) : html`
       <div class="blk">
         <h1>${mode === "page" ? "הזמנת רכש — " : ""}${o.project}</h1>
         <div class="meta">
@@ -6383,7 +6440,7 @@ ${l}`
         ${mode === "page" && html`<div class="foot">ט.ש. מי-רון · ${printed}</div>`}
       </div>`;
     return ReactDOM.createPortal(html`<div class="ordprint">
-      <div class="pbar"><b>${mode === "page" ? "🖨 " + list.length + (list.length === 1 ? " הזמנה" : " הזמנות") + " — עמוד לכל הזמנה" : "📋 רשימה מרוכזת — " + list.length + " הזמנות"}</b>
+      <div class="pbar"><b>${sup ? "🖨 לספק — " + list.length + (list.length === 1 ? " הזמנה" : " הזמנות") + " · בלי מחירים וספקים" : mode === "page" ? "🖨 פנימי — " + list.length + (list.length === 1 ? " הזמנה" : " הזמנות") + " — עמוד לכל הזמנה" : "📋 רשימה מרוכזת — " + list.length + " הזמנות"}</b>
         <button class="go" onClick=${doPrint}>🖨 הדפס</button><button onClick=${onClose}>סגור</button></div>
       ${mode === "page"
         ? list.map(o => html`<div class="pg" key=${o.oid}>${one(o)}</div>`)
@@ -6511,7 +6568,8 @@ ${l}`
     const selList = shown.filter(o => sel[o.oid]);
     const nTal = all.filter(o => o.stage === "tal").length;
     // פותח תצוגה מקדימה על המסך; ההדפסה עצמה — מכפתור "הדפס" שבה (באייפון ההדפסה חייבת לצאת ישר מלחיצה, על תוכן שכבר מוצג)
-    const print = mode => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, list:l, k:Date.now() }); };
+    // sup = עותק לספק: בלי מחירים, בלי שמות ספקים, בלי מק״ט ובלי סטטוס פנימי — כדי שאפשר יהיה לשלוח לכל ספק
+    const print = (mode, sup) => { const l = selList.length ? selList : shown; if(!l.length){ notify("אין הזמנות להדפסה"); return; } setJob({ mode, sup:!!sup, list:l, k:Date.now() }); };
     const me = q.me || {};
     const [acting, setActing] = useState("");
     async function decide(o, ok){
@@ -6544,7 +6602,8 @@ ${l}`
       ${shown.length > 0 && html`<div class="ordbar">
         <label class="acheck" style=${{margin:0}}><input type="checkbox" checked=${selList.length === shown.length} onChange=${e=>{ const o = {}; if(e.target.checked) shown.forEach(x => { o[x.oid] = true; }); setSel(o); }} />סמן הכול</label>
         <span style=${{flex:1}}></span>
-        <button class="btn pri" onClick=${()=>print("page")}>🖨 ${selList.length ? "הדפס נבחרות (" + selList.length + ")" : "הדפס הכול"}</button>
+        <button class="btn pri" title="בלי מחירים ובלי שמות ספקים" onClick=${()=>print("page", true)}>🖨 לספק${selList.length ? " (" + selList.length + ")" : ""}</button>
+        <button class="btn" title="עם מחירים, ספקים ושורת אישור — לשימוש פנימי" onClick=${()=>print("page")}>🖨 פנימי${selList.length ? " (" + selList.length + ")" : ""}</button>
         <button class="btn" onClick=${()=>print("list")}>📋 רשימה מרוכזת</button>
       </div>`}
       <div>
@@ -6577,7 +6636,7 @@ ${l}`
         </div>`; })}
       </div>
       ${q.list && !shown.length && html`<div class="empty">${ql ? "לא נמצאו הזמנות" : f === "tal" ? "אין הזמנות שממתינות לאישור טל 👍" : "אין הזמנות פתוחות 👍"}</div>`}
-      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} who=${who} onClose=${()=>setJob(null)} />`}
+      ${job && html`<${OrdersPrint} key=${job.k} list=${job.list} mode=${job.mode} sup=${job.sup} who=${who} onClose=${()=>setJob(null)} />`}
     </div>`;
   }
 
@@ -6636,6 +6695,7 @@ ${l}`
     // כניסה אישית: מי מחובר ומה התפקיד שלו (משרד / מנהל פרויקט)
     const [auth, setAuth] = useState(()=> ({ s: (cloudCode || needTeam) ? "checking" : "off" }));
     const [staffSheet, setStaffSheet] = useState(false);
+    const [wnew, setWnew] = useState(()=>{ try{ return localStorage.getItem(WNEW_KEY) !== "1"; }catch(e){ return false; } });
     const [rkOpen, setRkOpen] = useState({});
     const [myFiles, setMyFiles] = useState(null);  // המסמכים האישיים שלי (פרטים בלבד, בלי התוכן)      // הזמנות פתוחות מהרכש לפי אתר ("בדרך")
     const signedIn = cloudCode && auth.s === "in";
@@ -7339,6 +7399,7 @@ ${l}`
         <div class="brandfoot"><b>ט.ש. מי רון</b> · אנשים עושים הנדסה</div>
         </div>
         ${toast && html`<div class="toast"><div>${toast}</div></div>`}
+        ${wnew && signedIn && buyOk && html`<${WhatsNew} office=${isOffice} phone=${auth.phone} who=${who} notify=${notify} onBuy=${()=>openBuy()} onClose=${()=>setWnew(false)} />`}
         ${teamSheet && html`
           <div class="scrim" onClick=${()=>setTeamSheet(false)}>
             <div class="sheet" onClick=${e=>e.stopPropagation()}>
