@@ -903,7 +903,8 @@
   const CFG = {
     checkinBy: 8,          // שעה: מכאן אתר בלי דיווח יומי מסומן (נוכחות ודיווח יומי עד 08:00 — החלטת דוד 11/2026)
     checkinEsc: 10,        // שעה: מכאן החריגה עוברת לדרג בעלים (שעתיים אחרי המועד)
-    weeklyBy: 12,          // שעה ביום א׳: עד אז צריך להגיש את הדוח השבועי
+    weeklyDay: 4,          // יום התכנון השבועי: ה׳ (0=א׳). מהיום הזה הדוח שייך לשבוע הבא — החלטת דוד 11/2026
+    weeklyBy: 14,          // שעה ביום ה׳: עד אז צריך להגיש את הדוח השבועי (תכנון השבוע הבא)
     matPct: 27,            // תקציב חומר = 27% מההכנסה הצפויה של החודש (יעד הכמויות של המשרד × מחירי החשבון) — החלטת דוד 11/2026
     stockDays: 3,          // ימים: מלאי שלא עודכן מעבר לזה נחשב לא מעודכן
     workerDrop: 0.6,       // ירידת כ"א: ביחס לשבוע שעבר מתחת ל-60% = חריג
@@ -971,17 +972,24 @@
   function weekStart(ts){ const d = new Date(ts); d.setHours(0,0,0,0); d.setDate(d.getDate() - d.getDay()); return d.getTime(); }
   const weekKey = ts => dstr(weekStart(ts));
   const weekLabel = ts => dmy(weekStart(ts)) + "–" + dmy(weekStart(ts) + 4 * DAY);
-  const curWeekly = (s, now) => (s.weekly && s.weekly.week === weekKey(now)) ? s.weekly : null;
+  /* שבוע הדוח: בחמישי (יום התכנון) מתכננים את השבוע שמתחיל בראשון הבא, ולכן מיום ה׳ הדוח שייך לשבוע הבא */
+  function rptStart(ts){ const d = new Date(weekStart(ts)); if(new Date(ts).getDay() >= CFG.weeklyDay) d.setDate(d.getDate() + 7); return d.getTime(); }
+  const rptKey = ts => dstr(rptStart(ts));
+  const rptLabel = ts => weekLabel(rptStart(ts));
+  // דוח שהוגש בחמישי–שבת לפני המעבר (נרשם לשבוע של אותו חמישי) שייך בפועל לשבוע הבא
+  const effWeek = w => { if(!w || !w.week) return ""; const k = w.at ? rptKey(w.at) : ""; return k > w.week ? k : w.week; };
+  const curWeekly = (s, now) => (s.weekly && effWeek(s.weekly) === rptKey(now)) ? s.weekly : null;
   const pctOf = (r, k) => { const v = r && r.tracks ? r.tracks[k] : null; return v == null ? null : (typeof v === "object" ? v.pct : v); };
+  const goalOf = (r, k) => { const v = r && r.tracks ? r.tracks[k] : null; return v && typeof v === "object" && v.goal != null ? v.goal : null; };
   /* דוחות של שבועות קודמים, מהישן לחדש */
   function weekHistory(s, now){
     const h = (s.weeklyHist || []).slice();
-    if(s.weekly && s.weekly.week !== weekKey(now)) h.push(s.weekly);
+    if(s.weekly && effWeek(s.weekly) !== rptKey(now)) h.push(s.weekly);
     return h;
   }
   function compactWeekly(w){
     const tracks = {};
-    TRACKS.forEach(t => { tracks[t.k] = pctOf(w, t.k); });
+    TRACKS.forEach(t => { const p = pctOf(w, t.k), g = goalOf(w, t.k); tracks[t.k] = p == null ? null : g == null ? p : { pct:p, goal:g }; });
     return { week: w.week, at: w.at || null, tracks, workers: w.workers == null ? null : w.workers, txt: w.txt || null, bq: w.bq || null };
   }
 
@@ -1191,13 +1199,14 @@
     const prev = hist.length ? pctOf(hist[hist.length - 1], k) : null;
     let streak = 1;
     for(let i = hist.length - 1; i >= 0 && pctOf(hist[i], k) === v.pct; i--) streak++;
-    const d = new Date(now), late = d.getDay() > 4 || (d.getDay() === 4 && d.getHours() >= 12);
+    // היעד שנקבע בתכנון הקודם לשבוע שעבר — מולו נמדד הפער בדוח הנוכחי
+    const pg = hist.length ? goalOf(hist[hist.length - 1], k) : null;
     return {
-      pct: v.pct, goal: v.goal == null ? null : v.goal, prev,
+      pct: v.pct, goal: v.goal == null ? null : v.goal, prev, pgoal: pg,
       delta: prev == null ? null : v.pct - prev,
       stalled: v.pct < 100 && prev != null && v.pct <= prev,
       streak: prev != null && v.pct === prev ? streak : 1,
-      gap: (v.goal != null && v.pct < v.goal && late) ? v.goal - v.pct : 0
+      gap: (pg != null && v.pct < pg) ? pg - v.pct : 0
     };
   }
 
@@ -1208,7 +1217,7 @@
   /* חריגים מחושבים מהמצב עצמו (לא נשמרים), ו"מאז מתי" נשמר ב-st.since */
   function deriveExceptions(st, now, rk){
     const out = [];
-    const today = dstr(now), hour = new Date(now).getHours(), wk = weekKey(now);
+    const today = dstr(now), hour = new Date(now).getHours(), wk = rptKey(now);
     const since = st.since || {};
     const add = (e)=>{
       e.sinceTs = e.fixedTs || since[e.key] || now;
@@ -1240,7 +1249,7 @@
         if(!ts || ts.pct >= 100 || !(ts.stalled || ts.gap)) return;
         const parts = [];
         if(ts.stalled) parts.push(ts.streak >= 2 ? "ללא שינוי " + ts.streak + " דוחות רצופים" : "כמו בשבוע שעבר (" + ts.prev + "%)");
-        if(ts.gap) parts.push("פער של " + ts.gap + " נק׳ מיעד השבוע (" + ts.goal + "%)");
+        if(ts.gap) parts.push("פער של " + ts.gap + " נק׳ מהיעד שתוכנן לשבוע שעבר (" + ts.pgoal + "%)");
         add({ ...base, key: s.id + ":track:" + t.k, kind: "track", sub: ts.stalled ? "stalled" : "gap",
           sev: (ts.streak >= 3 || ts.gap >= 30) ? "crit" : "warn",
           title: t.label + (ts.stalled ? " לא התקדם" : " מתחת ליעד") + " — " + ts.pct + "%",
@@ -1321,8 +1330,10 @@
           detail: names(arr), waitingOn: "דיווח יומי מהשטח", fixedTs: deadline.getTime() }));
     }
 
-    /* דוח שבועי חסר: מיום א׳ 12:00 ועד ההגשה */
-    const weeklyDue = new Date(weekStart(now)); weeklyDue.setHours(CFG.weeklyBy, 0, 0, 0);
+    /* דוח שבועי חסר: מיום ה׳ 14:00 (תכנון השבוע הבא) ועד ההגשה */
+    const weeklyDue = new Date(rptStart(now)); weeklyDue.setDate(weeklyDue.getDate() - 7 + CFG.weeklyDay); weeklyDue.setHours(CFG.weeklyBy, 0, 0, 0);
+    // שבוע המעבר (29.11.2026): המנהלים עוד לא ידעו על חמישי — מועד ההגשה נשאר א׳ 12:00 כמו קודם
+    if(wk === "2026-11-29"){ weeklyDue.setTime(rptStart(now)); weeklyDue.setHours(12, 0, 0, 0); }
     if(isWorkday(now) && now >= weeklyDue.getTime()){
       grouped(s => !curWeekly(s, now), (name, arr)=>
         add({ key: "mgr:" + name + ":weekly:" + wk, kind: "weekly", sev: "warn",
@@ -1419,7 +1430,7 @@
     const pilotSites = active.filter(s => inPilot(ownerName(s)));
     const subm = pilotSites.filter(s => curWeekly(s, now)).length;
     lines.push("📋 דוח בקרה — ט.ש. מי רון");
-    lines.push(dmy(now) + "/" + new Date(now).getFullYear() + " · " + hhmm(now) + " · שבוע " + weekLabel(now));
+    lines.push(dmy(now) + "/" + new Date(now).getFullYear() + " · " + hhmm(now) + " · שבוע " + rptLabel(now));
     lines.push("");
     lines.push("אתרים פעילים: " + active.length + " · דוח שבועי הוגש: " + subm + "/" + pilotSites.length + (PILOT.length ? " (פיילוט: " + PILOT.join(", ") + ")" : ""));
     lines.push("חריגים פתוחים: " + exceptions.length + " (אדומים: " + crit + ") · בדרג בעלים: " + l3);
@@ -7134,7 +7145,7 @@ ${l}`
     function submitWeekly(siteId, data){
       update(d=>{
         const s = d.sites.find(x=>x.id===siteId); if(!s) return d;
-        const ts = Date.now(), wk = weekKey(ts), same = s.weekly && s.weekly.week === wk;
+        const ts = Date.now(), wk = rptKey(ts), same = s.weekly && effWeek(s.weekly) === wk;
         if(s.weekly && !same){
           s.weeklyHist = s.weeklyHist || [];
           s.weeklyHist.push(compactWeekly(s.weekly));
@@ -7526,7 +7537,7 @@ ${l}`
     return html`
       <div class="screen">
         <div class="shead rowbet">
-          <div><h2>מרכז בקרה</h2><span class="sub">${active.length} אתרים פעילים · שבוע ${weekLabel(now)} · עדכון ${hhmm(now)}</span></div>
+          <div><h2>מרכז בקרה</h2><span class="sub">${active.length} אתרים פעילים · שבוע ${rptLabel(now)} · עדכון ${hhmm(now)}</span></div>
           <button class="btn" style=${{flex:"none", padding:"8px 14px"}} onClick=${()=>setRep(buildReport(st, exceptions, cards, now))}>📋 דוח</button>
         </div>
 
@@ -7684,7 +7695,7 @@ ${l}`
           </tbody>
         </table>
       </div>
-      <div class="legend"><span class="lg bad"></span>תקוע / כ״א 0 <span class="lg warn"></span>מתחת ליעד השבוע <span class="lg done"></span>100% · — לא רלוונטי · · טרם הוגש דוח השבוע · ▲▼ שינוי מהדוח הקודם</div>
+      <div class="legend"><span class="lg bad"></span>תקוע / כ״א 0 <span class="lg warn"></span>מתחת ליעד שתוכנן <span class="lg done"></span>100% · — לא רלוונטי · · טרם הוגש דוח השבוע · ▲▼ שינוי מהדוח הקודם</div>
 
       ${withText.length > 0 && html`
         <div class="lbl" style=${{marginTop:18}}>הערות / חריגים ובטיחות מהדוחות</div>
@@ -7751,7 +7762,7 @@ ${l}`
         </div>
 
         <div class="card" style=${{marginTop:14}}>
-          <div class="lbl">תוכנית שבועית · ${weekLabel(now)}</div>
+          <div class="lbl">תוכנית שבועית · ${rptLabel(now)}</div>
           ${cur ? html`
             <div class="sub2">הוגש ${dmy(cur.at)} ${hhmm(cur.at)} · ${cur.by}${cur.foreman ? " · מנהל עבודה: " + cur.foreman : ""}${cur.lead ? " · ראש צוות: " + cur.lead : ""}</div>
             ${TRACKS.map(t => {
@@ -8211,11 +8222,12 @@ ${l}`
         </select>
 
         <div class="card ci" style=${{marginBottom:12}}>
-          <div class="lbl">דוח תוכנית עבודה שבועית · ${weekLabel(now)}</div>
+          <div class="lbl">דוח תוכנית עבודה שבועית · ${rptLabel(now)}</div>
           ${wk
             ? html`<div class="val">✓ הוגש ${dmy(wk.at)} ${hhmm(wk.at)} · ${wk.by}</div>
                 <div class="sub2">${TRACKS.filter(t => wk.tracks && wk.tracks[t.k]).map(t => t.label + " " + wk.tracks[t.k].pct + "%").join(" · ") || "אין מסלולים רלוונטיים"} · כ״א ${wk.workers == null ? "—" : wk.workers}</div>`
-            : html`<div class="val" style=${{color:"var(--warn)"}}>טרם הוגש דוח שבועי לאתר הזה</div>`}
+            : html`<div class="val" style=${{color:"var(--warn)"}}>טרם הוגש דוח שבועי לאתר הזה</div>
+                <div class="sub2">📅 בחמישי מתכננים את השבוע הבא — להגיש עד יום ה׳ ב-${CFG.weeklyBy}:00</div>`}
           <div class="btnrow" style=${{marginTop:10}}>
             <button class="btn pri" onClick=${()=>onWeekly(site.id)}>${wk ? "עדכן דוח שבועי" : "📅 מלא דוח שבועי"}</button>
           </div>
@@ -8441,7 +8453,7 @@ ${l}`
     const goals = [];
     for(let g = 5; g <= 100; g += 5) goals.push(g);
     // סעיפי החשבון: מה בוצע עד השבוע הזה (בלי הדוח הנוכחי), ויעד החודש של המשרד
-    const bill = useBill(site.id), wk = weekKey(now);
+    const bill = useBill(site.id), wk = cur ? cur.week : rptKey(now);
     const sums = bill ? billSums(bill, site, null, wk) : null;
     const plan = bill ? ((bill.plan || {})[monthKey(now)] || {}) : {};
     const setTxt = (k, v) => setD(x => ({ ...x, txt: { ...x.txt, [k || "other"]: v } }));
@@ -8492,8 +8504,9 @@ ${l}`
       <form class="screen narrow" onSubmit=${submit}>
         <div class="shead">
           <button type="button" class="back" onClick=${onBack} aria-label="חזרה">→</button>
-          <div><h2 style=${{fontSize:"1.25rem"}}>דוח שבועי · ${site.name}</h2><span class="sub">${site.contractor} · שבוע ${weekLabel(now)} · מנהל פרויקט: ${site.owner.name}</span></div>
+          <div><h2 style=${{fontSize:"1.25rem"}}>דוח שבועי · ${site.name}</h2><span class="sub">${site.contractor} · שבוע ${rptLabel(now)} · מנהל פרויקט: ${site.owner.name}</span></div>
         </div>
+        <div class="sub2" style=${{margin:"0 0 10px"}}>📅 תכנון לשבוע ${rptLabel(now)}: מעדכנים כמה בוצע עד היום, וקובעים יעד לסוף השבוע.${!cur && prev ? " האחוזים מולאו מהדוח הקודם." : ""}</div>
 
         ${TRACKS.map(t => {
           const v = d.tracks[t.k], p = prev ? pctOf(prev, t.k) : null;
@@ -8509,7 +8522,7 @@ ${l}`
                   <b class="pv">${v.pct}%</b>
                 </div>
                 <div class="grow">
-                  <span>יעד לסוף השבוע</span>
+                  <span>יעד עד ${dmy(rptStart(now) + 4 * DAY + 12 * HOUR)}</span>
                   <select value=${v.goal == null ? "" : v.goal} onChange=${e => setTrack(t.k, { ...v, goal: e.target.value === "" ? null : Number(e.target.value) })}>
                     <option value="">ללא יעד</option>
                     ${goals.map(g => html`<option key=${g} value=${g}>${g}%</option>`)}
